@@ -6,7 +6,8 @@ export default function VehicleCalendar() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/roster')
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    fetch(`${API_URL}/api/roster`)
       .then(r => r.json())
       .then(data => {
         setRoster(data);
