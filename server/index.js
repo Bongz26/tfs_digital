@@ -4,15 +4,14 @@ const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
+// CREATE APP FIRST
+const app = express();
+
+// CORS - ALLOW YOUR FRONTEND
 app.use(cors({
-  origin: 'https://admintfs.onrender.com'  // YOUR FRONTEND URL
+  origin: 'https://admintfs.onrender.com'  // YOUR FRONTEND
 }));
 
-
-// Health check endpoint
-
-const app = express();
-app.use(cors());
 app.use(express.json());
 
 // SUPABASE CLIENT
@@ -25,7 +24,7 @@ const supabase = createClient(
 async function testSupabase() {
   const { data, error, count } = await supabase
     .from('cases')
-    .select('*', { count: 'exact', head: true }); // head: true = only count
+    .select('*', { count: 'exact', head: true });
 
   if (error) {
     console.error('Supabase connection failed:', error.message);
@@ -37,7 +36,7 @@ testSupabase();
 
 app.locals.supabase = supabase;
 
-// Health check endpoint
+// Health check
 app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
@@ -47,34 +46,14 @@ app.get('/api/health', (req, res) => {
 });
 
 // API Routes
-try {
-  app.use('/api/cases', require('./routes/cases'));
-  console.log('✅ Cases route registered');
-} catch (err) {
-  console.error('❌ Error loading cases route:', err);
-}
+app.use('/api/cases', require('./routes/cases'));
+app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/roster', require('./routes/roster'));
 
-try {
-  app.use('/api/dashboard', require('./routes/dashboard'));
-  console.log('✅ Dashboard route registered');
-} catch (err) {
-  console.error('❌ Error loading dashboard route:', err);
-}
-
-try {
-  app.use('/api/roster', require('./routes/roster'));
-  console.log('✅ Roster route registered');
-} catch (err) {
-  console.error('❌ Error loading roster route:', err);
-}
-
-// Error handling middleware
+// Error handling
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
-  res.status(500).json({ 
-    error: 'Internal server error',
-    message: err.message 
-  });
+  res.status(500).json({ error: 'Internal server error', message: err.message });
 });
 
 const PORT = process.env.PORT || 5000;
