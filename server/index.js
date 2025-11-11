@@ -4,6 +4,13 @@ const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
+app.use(cors({
+  origin: 'https://admintfs.onrender.com'  // YOUR FRONTEND URL
+}));
+
+
+// Health check endpoint
+
 const app = express();
 app.use(cors());
 app.use(express.json());
