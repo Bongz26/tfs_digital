@@ -6,20 +6,25 @@ require('dotenv').config();
 
 const app = express();
 
-// CORS — Allow frontend (Render + local)
+// --- CORS CONFIG ---
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://admintfs.onrender.com'  // YOUR STATIC SITE
+  'https://admintfs.onrender.com',  // ✅ your actual frontend
+  'https://tfs-frontend.onrender.com' // optional fallback if you had an older domain
 ];
 
 app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
+  origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
     } else {
-      callback(new Error('CORS blocked'));
+      console.log('❌ Blocked by CORS:', origin);
+      return callback(new Error('Not allowed by CORS'));
     }
-  }
+  },
+  credentials: true,
 }));
 
 app.use(express.json());
