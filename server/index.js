@@ -1,17 +1,15 @@
-// server/index.js
+// server/index.js — API ONLY (NO FRONTEND)
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
-// 1. CREATE APP FIRST
 const app = express();
 
-// 2. DYNAMIC CORS (LOCAL + RENDER)
+// CORS — Allow frontend (Render + local)
 const allowedOrigins = [
-  'http://localhost:3000',           // Local dev
-  'https://admintfs.onrender.com',   // Render frontend
-  'https://tfs-digital.onrender.com' // Your current frontend
+  'http://localhost:3000',
+  'https://tfs-frontend.onrender.com'  // YOUR STATIC SITE
 ];
 
 app.use(cors({
@@ -19,46 +17,47 @@ app.use(cors({
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error('CORS blocked'));
     }
   }
 }));
 
 app.use(express.json());
 
-// 3. SUPABASE
+// SUPABASE
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
 
-// Test connection
-async function testSupabase() {
+// Test DB
+async function testDB() {
   const { count, error } = await supabase
     .from('cases')
     .select('*', { count: 'exact', head: true });
-  if (error) console.error('Supabase failed:', error.message);
-  else console.log(`TFS DB CONNECTED — ${count} cases`);
+  if (error) console.error('DB ERROR:', error.message);
+  else console.log(`DB CONNECTED — ${count} cases`);
 }
-testSupabase();
+testDB();
 
 app.locals.supabase = supabase;
 
-// Health check
+// Health
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({ status: 'OK', time: new Date().toISOString() });
 });
 
-// Routes
+// API ROUTES ONLY
 app.use('/api/cases', require('./routes/cases'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/roster', require('./routes/roster'));
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error('Server error:', err);
-  res.status(500).json({ error: 'Server error', message: err.message });
-});
+// NO FRONTEND SERVING
+// DELETE THESE LINES:
+// app.use(express.static(...))
+// app.get('*', ...)
+
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 TFS API LIVE on port ${PORT}`);

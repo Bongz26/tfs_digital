@@ -6,34 +6,25 @@ router.get('/', async (req, res) => {
   try {
     const { supabase } = req.app.locals;
 
-    // 1. Upcoming funerals
     const { count: upcoming } = await supabase
       .from('cases')
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'confirmed')
-      .gte('funeral_date', new Date().toISOString().split('T')[0]);
+      .in('status', ['confirmed', 'in_progress']);
 
-    // 2. Vehicles needed
-    const { data: roster } = await supabase
-      .from('roster')
-      .select('vehicle_id')
-      .eq('status', 'scheduled');
+    const { data: roster } = await supabase.from('roster').select('vehicle_id');
     const vehiclesNeeded = roster ? roster.length : 0;
 
-    // 3. Available vehicles
     const { count: available } = await supabase
       .from('vehicles')
       .select('*', { count: 'exact', head: true })
       .eq('available', true);
 
-    // 4. Low stock
     const { data: lowStock } = await supabase
       .from('inventory')
       .select('name')
       .lt('stock_quantity', supabase.raw('low_stock_threshold'));
 
-    // 5. Cows assigned
-    const { count: cowsAssigned } = await supabase
+    const { count: cows } = await supabase
       .from('livestock')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'assigned');
@@ -44,7 +35,7 @@ router.get('/', async (req, res) => {
       vehiclesAvailable: available || 0,
       conflicts: vehiclesNeeded > (available || 0),
       lowStock: lowStock ? lowStock.map(i => i.name) : [],
-      cowsAssigned: cowsAssigned || 0
+      cowsAssigned: cows || 0
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
