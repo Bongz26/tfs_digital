@@ -9,7 +9,7 @@ const app = express();
 // CORS — Allow frontend (Render + local)
 const allowedOrigins = [
   'http://localhost:3000',
-  'https://tfs-frontend.onrender.com'  // YOUR STATIC SITE
+  'https://admintfs.onrender.com'  // YOUR STATIC SITE
 ];
 
 app.use(cors({
