@@ -1,69 +1,107 @@
-// server/index.js — API ONLY (NO FRONTEND)
-const express = require('express');
-const cors = require('cors');
-const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config();
+// server/index.js — API ONLY (NO FRONTEND SERVING)
 
+// ---------------------
+// 1️⃣ Import dependencies
+// ---------------------
+const express = require("express");
+const cors = require("cors");
+const { createClient } = require("@supabase/supabase-js");
+require("dotenv").config(); // Loads .env variables into process.env
+
+// ---------------------
+// 2️⃣ Initialize Express
+// ---------------------
 const app = express();
 
-// --- CORS CONFIG ---
+// ---------------------
+// 3️⃣ CORS CONFIGURATION
+// ---------------------
+// Allow only trusted domains to access the API.
+// These are your frontend URLs that should be allowed to call the backend.
 const allowedOrigins = [
-  'http://localhost:3000',
-  'https://admintfs.onrender.com',  // ✅ your actual frontend
-  'https://tfs-frontend.onrender.com' // optional fallback if you had an older domain
+  "http://localhost:3000", // For local development
+  "https://admintfs.onrender.com", // ✅ Your admin frontend (main site)
+  "https://tfs-frontend.onrender.com", // Optional fallback if you had another frontend domain
 ];
 
-app.use(cors({
-  origin: function (origin, callback) {
-    // allow requests with no origin (like mobile apps or curl)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    } else {
-      console.log('❌ Blocked by CORS:', origin);
-      return callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-}));
+// The middleware checks each request’s origin and decides if it’s allowed.
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Some requests (like from Postman or mobile apps) have no origin — allow them
+      if (!origin) return callback(null, true);
 
+      if (allowedOrigins.includes(origin)) {
+        // ✅ Allowed
+        return callback(null, true);
+      } else {
+        // ❌ Blocked — will show in your Render logs
+        console.warn("❌ Blocked by CORS:", origin);
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true, // Allow cookies or authorization headers if used
+  })
+);
+
+// Parse JSON bodies
 app.use(express.json());
 
-// SUPABASE
+// ---------------------
+// 4️⃣ CONNECT TO SUPABASE
+// ---------------------
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
 
-// Test DB
+// Quick test to confirm DB connectivity on startup
 async function testDB() {
-  const { count, error } = await supabase
-    .from('cases')
-    .select('*', { count: 'exact', head: true });
-  if (error) console.error('DB ERROR:', error.message);
-  else console.log(`DB CONNECTED — ${count} cases`);
+  try {
+    const { count, error } = await supabase
+      .from("cases")
+      .select("*", { count: "exact", head: true });
+    if (error) {
+      console.error("⚠️ DB ERROR:", error.message);
+    } else {
+      console.log(`✅ DB CONNECTED — ${count} cases`);
+    }
+  } catch (err) {
+    console.error("❌ Supabase Connection Failed:", err.message);
+  }
 }
 testDB();
 
+// Store supabase client in app.locals for route access
 app.locals.supabase = supabase;
 
-// Health
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', time: new Date().toISOString() });
+// ---------------------
+// 5️⃣ BASIC HEALTH CHECK ROUTE
+// ---------------------
+// Quick endpoint to check server status from Render or frontend
+app.get("/api/health", (req, res) => {
+  res.json({ status: "OK", time: new Date().toISOString() });
 });
 
-// API ROUTES ONLY
-app.use('/api/cases', require('./routes/cases'));
-app.use('/api/dashboard', require('./routes/dashboard'));
-app.use('/api/roster', require('./routes/roster'));
+// ---------------------
+// 6️⃣ IMPORT AND USE ROUTES
+// ---------------------
+// Make sure you have these files inside "server/routes/"
+app.use("/api/cases", require("./routes/cases"));
+app.use("/api/dashboard", require("./routes/dashboard"));
+app.use("/api/roster", require("./routes/roster"));
 
-// NO FRONTEND SERVING
-// DELETE THESE LINES:
-// app.use(express.static(...))
-// app.get('*', ...)
+// ---------------------
+// 7️⃣ DO NOT SERVE FRONTEND FILES HERE
+// ---------------------
+// ❌ Remove or comment out any "express.static" or "app.get('*')" lines
+// This Render service is backend only, so your React app must be hosted separately.
 
-
+// ---------------------
+// 8️⃣ START SERVER
+// ---------------------
 const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => {
   console.log(`🚀 TFS API LIVE on port ${PORT}`);
   console.log(`📍 API endpoints: http://localhost:${PORT}/api`);
