@@ -1,54 +1,81 @@
-// server/routes/cases.js
+// server/index.js
 const express = require('express');
-const router = express.Router();
-const db = require('../db');
+const cors = require('cors');
+const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config();
 
-// POST /api/cases - Create new funeral case
-router.post('/', async (req, res) => {
-  const {
-    deceased_name, deceased_id, nok_name, nok_contact,
-    category, plan, members, age, funeral_date, funeral_time,
-    venue_name, venue_address, requires_cow, stock_needed
-  } = req.body;
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-  try {
-    // 1. Generate case number
-    const year = new Date().getFullYear();
-    const count = await db('cases').where('case_number', 'like', `THS-${year}-%`).count();
-    const case_number = `THS-${year}-${String(count[0].count + 1).padStart(3, '0')}`;
+// SUPABASE CLIENT
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
 
-    // 2. Geocode address
-    const geo = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(venue_address)}&key=${process.env.GOOGLE_KEY}`).then(r => r.json());
-    const { lat, lng } = geo.results[0]?.geometry.location || {};
+// TEST CONNECTION
+async function testSupabase() {
+  const { data, error, count } = await supabase
+    .from('cases')
+    .select('*', { count: 'exact', head: true }); // head: true = only count
 
-    // 3. Create case
-    const [caseId] = await db('cases').insert({
-      case_number, deceased_name, deceased_id, nok_name, nok_contact,
-      plan_category: category, plan_name: plan, plan_members: members,
-      plan_age_bracket: age, funeral_date, funeral_time,
-      venue_name, venue_address, venue_lat: lat, venue_lng: lng,
-      requires_cow, intake_day: new Date().toISOString().split('T')[0]
-    }).returning('id');
-
-    // 4. Reserve stock
-    for (const [item, qty] of Object.entries(stock_needed)) {
-      const inv = await db('inventory').where({ name: item }).first();
-      if (inv && inv.stock_quantity >= qty) {
-        await db('reservations').insert({ case_id: caseId, inventory_id: inv.id, quantity: qty });
-        await db('inventory').where({ id: inv.id }).decrement('stock_quantity', qty).increment('reserved_quantity', qty);
-      }
-    }
-
-    // 5. Auto-assign cow if needed
-    if (requires_cow) {
-      const cow = await db('livestock').where({ status: 'available' }).first();
-      if (cow) await db('livestock').where({ id: cow.id }).update({ status: 'assigned', assigned_case_id: caseId });
-    }
-
-    res.json({ success: true, case_number, caseId });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  if (error) {
+    console.error('Supabase connection failed:', error.message);
+  } else {
+    console.log(`TFS DATABASE CONNECTED — ${count} cases found`);
   }
+}
+testSupabase();
+
+app.locals.supabase = supabase;
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'TFS API is running',
+    timestamp: new Date().toISOString()
+  });
 });
 
-module.exports = router;
+// API Routes
+try {
+  app.use('/api/cases', require('./routes/cases'));
+  console.log('✅ Cases route registered');
+} catch (err) {
+  console.error('❌ Error loading cases route:', err);
+}
+
+try {
+  app.use('/api/dashboard', require('./routes/dashboard'));
+  console.log('✅ Dashboard route registered');
+} catch (err) {
+  console.error('❌ Error loading dashboard route:', err);
+}
+
+try {
+  app.use('/api/roster', require('./routes/roster'));
+  console.log('✅ Roster route registered');
+} catch (err) {
+  console.error('❌ Error loading roster route:', err);
+}
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: err.message 
+  });
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`🚀 TFS API LIVE on port ${PORT}`);
+  console.log(`📍 API endpoints: http://localhost:${PORT}/api`);
+  console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`📋 Roster: http://localhost:${PORT}/api/roster`);
+  console.log(`📊 Dashboard: http://localhost:${PORT}/api/dashboard`);
+  console.log(`\n✅ All routes registered. Server ready!\n`);
+});

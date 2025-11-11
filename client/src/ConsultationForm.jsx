@@ -78,7 +78,9 @@ export default function ConsultationForm({ onSubmit }) {
 
   return (
     <form onSubmit={handleSubmit} className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow">
-      <h2 className="text-2xl font-bold mb-6">Wednesday Family Consultation</h2>
+      <h2 className="text-2xl font-bold text-center text-tfs-red mb-6">
+        Wednesday Family Consultation
+      </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <input placeholder="Deceased Name" required className="input" 
@@ -128,8 +130,8 @@ export default function ConsultationForm({ onSubmit }) {
         <label><input type="checkbox" onChange={e => setForm({...form, requires_cow: e.target.checked})} /> Requires Cow (Kgomo)</label>
       </div>
 
-      <button type="submit" className="mt-6 w-full bg-green-600 text-white py-3 rounded hover:bg-green-700">
-        Reserve Stock & Add to Planner
+      <button type="submit" className="mt-6 w-full btn-red text-lg">
+           Reserve Stock & Add to Planner
       </button>
     </form>
   );

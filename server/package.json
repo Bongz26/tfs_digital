@@ -1,5 +1,17 @@
 {
+  "name": "tfs-server",
+  "version": "1.0.0",
+  "description": "TFS Digital Server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "init-db": "node database/init.js",
+    "insert-vehicles": "node database/insert-vehicles.js",
+    "insert-test-data": "node database/insert-test-data.js"
+  },
   "dependencies": {
+    "@supabase/supabase-js": "^2.81.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
