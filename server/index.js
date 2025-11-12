@@ -97,18 +97,6 @@ app.use("/api/roster", require("./routes/roster"));
 // ❌ Remove or comment out any "express.static" or "app.get('*')" lines
 // This Render service is backend only, so your React app must be hosted separately.
 
-
-// ---------------------
-//  💤 KEEP SERVER AWAKE (PING ITSELF EVERY 14 MINUTES)
-// ---------------------
-const SELF_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
-
-setInterval(() => {
-  fetch(`${SELF_URL}/api/health`)
-    .then(res => res.ok && console.log('💓 Keep-alive ping OK'))
-    .catch(err => console.warn('⚠️ Keep-alive failed:', err.message));
-}, 14 * 60 * 1000); // every 14 minutes
-
 // ---------------------
 // 8️⃣ START SERVER
 // ---------------------
@@ -122,3 +110,16 @@ app.listen(PORT, () => {
   console.log(`📊 Dashboard: http://localhost:${PORT}/api/dashboard`);
   console.log(`\n✅ All routes registered. Server ready!\n`);
 });
+
+// ---------------------
+//  💤 KEEP SERVER AWAKE (PING ITSELF EVERY 14 MINUTES)
+// ---------------------
+// Only run keep-alive if RENDER_EXTERNAL_URL is set (production)
+if (process.env.RENDER_EXTERNAL_URL) {
+  const SELF_URL = process.env.RENDER_EXTERNAL_URL;
+  setInterval(() => {
+    fetch(`${SELF_URL}/api/health`)
+      .then(res => res.ok && console.log('💓 Keep-alive ping OK'))
+      .catch(err => console.warn('⚠️ Keep-alive failed:', err.message));
+  }, 14 * 60 * 1000); // every 14 minutes
+}
