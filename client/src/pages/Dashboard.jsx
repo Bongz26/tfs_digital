@@ -1,5 +1,6 @@
 // client/src/pages/Dashboard.jsx
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import VehicleCalendar from '../components/VehicleCalendar';
 
 export default function Dashboard() {
@@ -11,28 +12,52 @@ export default function Dashboard() {
     lowStock: [],
     cowsAssigned: 0
   });
+  const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-    fetch(`${API_URL}/api/dashboard`)
-      .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
-      .then(data => {
-        // ✅ Ensure all expected fields exist (in case backend changes)
-        setStats({
-          upcoming: data.upcoming ?? 0,
-          vehiclesNeeded: data.vehiclesNeeded ?? 0,
-          vehiclesAvailable: data.vehiclesAvailable ?? 0,
-          conflicts: !!data.conflicts,
-          lowStock: Array.isArray(data.lowStock) ? data.lowStock : [], // ✅
-          cowsAssigned: data.cowsAssigned ?? 0
-        });
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error('Dashboard error:', err);
-        setLoading(false);
+    
+    // Fetch dashboard stats and cases
+    Promise.all([
+      fetch(`${API_URL}/api/dashboard`)
+        .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
+        .catch(err => {
+          console.error('Dashboard error:', err);
+          return {
+            upcoming: 0,
+            vehiclesNeeded: 0,
+            vehiclesAvailable: 0,
+            conflicts: false,
+            lowStock: [],
+            cowsAssigned: 0
+          };
+        }),
+      fetch(`${API_URL}/api/cases`)
+        .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
+        .then(data => data.cases || [])
+        .catch(err => {
+          console.error('Cases error:', err);
+          return [];
+        })
+    ])
+    .then(([dashboardData, casesData]) => {
+      // ✅ Ensure all expected fields exist (in case backend changes)
+      setStats({
+        upcoming: dashboardData.upcoming ?? 0,
+        vehiclesNeeded: dashboardData.vehiclesNeeded ?? 0,
+        vehiclesAvailable: dashboardData.vehiclesAvailable ?? 0,
+        conflicts: !!dashboardData.conflicts,
+        lowStock: Array.isArray(dashboardData.lowStock) ? dashboardData.lowStock : [],
+        cowsAssigned: dashboardData.cowsAssigned ?? 0
       });
+      setCases(Array.isArray(casesData) ? casesData : []);
+      setLoading(false);
+    })
+    .catch(err => {
+      console.error('Dashboard error:', err);
+      setLoading(false);
+    });
   }, []);
 
   if (loading) {
@@ -86,6 +111,82 @@ export default function Dashboard() {
         <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-green-600">
           <h3 className="text-lg font-semibold text-gray-700">Cows Assigned</h3>
           <p className="text-5xl font-bold text-green-600 mt-2">{stats.cowsAssigned}/8</p>
+        </div>
+      </div>
+
+      {/* CASES TABLE SECTION */}
+      <div className="bg-white p-8 rounded-xl shadow-lg border-t-4 border-red-600 mb-6">
+        <h2 className="text-2xl font-bold text-red-800 mb-6 text-center">
+          Recent Cases
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-gray-100 border-b">
+                <th className="p-3 text-left font-semibold text-gray-700">Case Number</th>
+                <th className="p-3 text-left font-semibold text-gray-700">Deceased Name</th>
+                <th className="p-3 text-left font-semibold text-gray-700">Next of Kin</th>
+                <th className="p-3 text-left font-semibold text-gray-700">Funeral Date</th>
+                <th className="p-3 text-left font-semibold text-gray-700">Status</th>
+                <th className="p-3 text-left font-semibold text-gray-700">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cases.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="p-4 text-center text-gray-500">
+                    No cases found
+                  </td>
+                </tr>
+              ) : (
+                cases.slice(0, 10).map((caseItem) => (
+                  <tr key={caseItem.id} className="border-b hover:bg-gray-50">
+                    <td className="p-3">
+                      <div className="font-semibold text-gray-800">{caseItem.case_number || 'N/A'}</div>
+                    </td>
+                    <td className="p-3">
+                      <div className="text-gray-800">{caseItem.deceased_name || 'N/A'}</div>
+                      {caseItem.deceased_id && (
+                        <div className="text-sm text-gray-600">ID: {caseItem.deceased_id}</div>
+                      )}
+                    </td>
+                    <td className="p-3">
+                      <div className="text-gray-800">{caseItem.nok_name || 'N/A'}</div>
+                      {caseItem.nok_contact && (
+                        <div className="text-sm text-gray-600">{caseItem.nok_contact}</div>
+                      )}
+                    </td>
+                    <td className="p-3">
+                      <div className="text-gray-800">
+                        {caseItem.funeral_date ? new Date(caseItem.funeral_date).toLocaleDateString() : 'N/A'}
+                      </div>
+                      {caseItem.funeral_time && (
+                        <div className="text-sm text-gray-600">{caseItem.funeral_time}</div>
+                      )}
+                    </td>
+                    <td className="p-3">
+                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                        caseItem.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        caseItem.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                        caseItem.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {caseItem.status || 'intake'}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <Link 
+                        to={`/cases/${caseItem.id}`} 
+                        className="text-blue-600 hover:text-blue-800 underline font-medium"
+                      >
+                        View Details
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

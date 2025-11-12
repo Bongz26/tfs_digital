@@ -2,7 +2,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import ConsultationForm from './ConsultationForm';
-import Dashboard from './pages/Dashboard';  // Matches file name
+import Dashboard from './pages/Dashboard';
+import CaseDetails from './pages/CaseDetails';
 import './index.css';
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
       <Routes>
         <Route path="/" element={<ConsultationForm onSubmit={console.log} />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/cases/:id" element={<CaseDetails />} />
       </Routes>
     </Router>
   );
