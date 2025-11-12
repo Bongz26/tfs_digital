@@ -92,6 +92,13 @@ router.post("/", async (req, res) => {
       }
     }
 
+    // 🆕 NEW: Handle service type and total price
+    const service_type = body.service_type || "book"; // 'book' or 'private'
+    const total_price =
+      service_type === "book"
+        ? body.total_price || 0 // Auto-calculated on frontend
+        : body.total_price || 0; // Manually entered by admin
+
     // Insert into DB
     const { data, error } = await supabase
       .from("cases")
@@ -117,6 +124,10 @@ router.post("/", async (req, res) => {
           requires_tombstone: body.requires_tombstone || false,
           status: body.status || "intake",
           intake_day: body.intake_day || null,
+
+          // 🆕 NEW FIELDS
+          service_type,
+          total_price,
         },
       ])
       .select("*")
