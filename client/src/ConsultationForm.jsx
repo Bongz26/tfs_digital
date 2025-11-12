@@ -1,5 +1,5 @@
 // src/components/ConsultationForm.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 const PLAN_DATA = {
   motjha: {
@@ -37,7 +37,7 @@ const COLOUR_GRADE = {
   Ivory: { casket: "Tombstone", tent: 1, chairs: 200, grocery: 100 }
 };
 
-export default function ConsultationForm({ onSubmit }) {
+export default function ConsultationForm() {
   const [form, setForm] = useState({
     category: 'motjha',
     plan: 'Green',
@@ -54,6 +54,12 @@ export default function ConsultationForm({ onSubmit }) {
     requires_cow: false
   });
 
+  // 🆕 Feedback and submitting state
+  const [message, setMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
   const getPrice = () => {
     if (form.category === 'colour_grade') return 0;
     const plan = PLAN_DATA[form.category][form.plan];
@@ -61,10 +67,13 @@ export default function ConsultationForm({ onSubmit }) {
     return plan?.[key] || 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitting(true);
+    setMessage('');
+
     const grade = COLOUR_GRADE[form.plan];
-    onSubmit({
+    const data = {
       ...form,
       total_price: getPrice(),
       stock_needed: {
@@ -73,7 +82,39 @@ export default function ConsultationForm({ onSubmit }) {
         chairs: grade.chairs,
         grocery_value: grade.grocery
       }
-    });
+    };
+
+    try {
+      const res = await fetch(`${API_URL}/api/cases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      setMessage('✅ Consultation data submitted successfully.');
+      setForm({
+        category: 'motjha',
+        plan: 'Green',
+        members: 6,
+        age: '18-65',
+        deceased_name: '',
+        deceased_id: '',
+        nok_name: '',
+        nok_contact: '',
+        funeral_date: '',
+        funeral_time: '',
+        venue_name: '',
+        venue_address: '',
+        requires_cow: false
+      });
+    } catch (err) {
+      console.error('Submit error:', err);
+      setMessage('❌ Failed to submit data. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -83,35 +124,45 @@ export default function ConsultationForm({ onSubmit }) {
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <input placeholder="Deceased Name" required className="input" 
-          onChange={e => setForm({...form, deceased_name: e.target.value})} />
-        <input placeholder="ID Number" className="input" 
-          onChange={e => setForm({...form, deceased_id: e.target.value})} />
-        <input placeholder="Next of Kin" required className="input" 
-          onChange={e => setForm({...form, nok_name: e.target.value})} />
-        <input placeholder="Contact" required className="input" 
-          onChange={e => setForm({...form, nok_contact: e.target.value})} />
+        <input placeholder="Deceased Name" required className="input"
+          value={form.deceased_name}
+          onChange={e => setForm({ ...form, deceased_name: e.target.value })} />
+        <input placeholder="ID Number" className="input"
+          value={form.deceased_id}
+          onChange={e => setForm({ ...form, deceased_id: e.target.value })} />
+        <input placeholder="Next of Kin" required className="input"
+          value={form.nok_name}
+          onChange={e => setForm({ ...form, nok_name: e.target.value })} />
+        <input placeholder="Contact" required className="input"
+          value={form.nok_contact}
+          onChange={e => setForm({ ...form, nok_contact: e.target.value })} />
       </div>
 
       <div className="mt-6 grid grid-cols-3 gap-4">
-        <select className="input" onChange={e => setForm({...form, category: e.target.value, plan: 'Green'})}>
+        <select className="input" value={form.category}
+          onChange={e => setForm({ ...form, category: e.target.value, plan: 'Green' })}>
           <option value="motjha">Motjha O Tlhele</option>
           <option value="single">Single</option>
           <option value="family">Family</option>
           <option value="colour_grade">Colour Grade</option>
         </select>
 
-        <select className="input" onChange={e => setForm({...form, plan: e.target.value})}>
-          {Object.keys(form.category === 'colour_grade' ? COLOUR_GRADE : PLAN_DATA[form.category]).map(p => 
-            <option key={p} value={p}>{p}</option>
-          )}
+        <select className="input" value={form.plan}
+          onChange={e => setForm({ ...form, plan: e.target.value })}>
+          {Object.keys(form.category === 'colour_grade' ? COLOUR_GRADE : PLAN_DATA[form.category])
+            .map(p => <option key={p} value={p}>{p}</option>)}
         </select>
 
         {form.category !== 'colour_grade' && (
-          <select className="input" onChange={e => setForm({...form, [form.category === 'motjha' ? 'members' : 'age']: e.target.value})}>
-            {form.category === 'motjha' 
-              ? [6,10,14].map(n => <option key={n} value={n}>{n} Members</option>)
-              : ['18-65','66-85','86-100'].map(a => <option key={a} value={a}>{a}</option>)
+          <select className="input"
+            value={form.category === 'motjha' ? form.members : form.age}
+            onChange={e => setForm({
+              ...form,
+              [form.category === 'motjha' ? 'members' : 'age']: e.target.value
+            })}>
+            {form.category === 'motjha'
+              ? [6, 10, 14].map(n => <option key={n} value={n}>{n} Members</option>)
+              : ['18-65', '66-85', '86-100'].map(a => <option key={a} value={a}>{a}</option>)
             }
           </select>
         )}
@@ -120,19 +171,37 @@ export default function ConsultationForm({ onSubmit }) {
       <div className="mt-4 text-right font-bold">Total: R{getPrice()}</div>
 
       <div className="mt-6 grid grid-cols-2 gap-4">
-        <input type="date" required className="input" onChange={e => setForm({...form, funeral_date: e.target.value})} />
-        <input type="time" required className="input" onChange={e => setForm({...form, funeral_time: e.target.value})} />
-        <input placeholder="Venue Name" className="input" onChange={e => setForm({...form, venue_name: e.target.value})} />
-        <input placeholder="Full Address (GPS)" required className="input" onChange={e => setForm({...form, venue_address: e.target.value})} />
+        <input type="date" required className="input" value={form.funeral_date}
+          onChange={e => setForm({ ...form, funeral_date: e.target.value })} />
+        <input type="time" required className="input" value={form.funeral_time}
+          onChange={e => setForm({ ...form, funeral_time: e.target.value })} />
+        <input placeholder="Venue Name" className="input" value={form.venue_name}
+          onChange={e => setForm({ ...form, venue_name: e.target.value })} />
+        <input placeholder="Full Address (GPS)" required className="input"
+          value={form.venue_address}
+          onChange={e => setForm({ ...form, venue_address: e.target.value })} />
       </div>
 
       <div className="mt-4">
-        <label><input type="checkbox" onChange={e => setForm({...form, requires_cow: e.target.checked})} /> Requires Cow (Kgomo)</label>
+        <label>
+          <input type="checkbox"
+            checked={form.requires_cow}
+            onChange={e => setForm({ ...form, requires_cow: e.target.checked })} /> Requires Cow (Kgomo)
+        </label>
       </div>
 
-      <button type="submit" className="mt-6 w-full btn-red text-lg">
-           Reserve Stock & Add to Planner
+      <button type="submit" disabled={submitting}
+        className="mt-6 w-full btn-red text-lg">
+        {submitting ? 'Submitting...' : 'Reserve Stock & Add to Planner'}
       </button>
+
+      {message && (
+        <p className={`mt-4 text-center font-semibold ${
+          message.startsWith('✅') ? 'text-green-600' : 'text-red-600'
+        }`}>
+          {message}
+        </p>
+      )}
     </form>
   );
 }
