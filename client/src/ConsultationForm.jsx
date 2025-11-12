@@ -39,31 +39,33 @@ const COLOUR_GRADE = {
 
 export default function ConsultationForm() {
   const [form, setForm] = useState({
-    category: 'motjha',
-    plan: 'Green',
-    members: 6,
-    age: '18-65',
+    plan_category: 'motjha',
+    plan_name: 'Green',
+    plan_members: 6,
+    plan_age_bracket: '18-65',
     deceased_name: '',
     deceased_id: '',
     nok_name: '',
     nok_contact: '',
+    nok_relation: '',
     funeral_date: '',
     funeral_time: '',
     venue_name: '',
     venue_address: '',
-    requires_cow: false
+    requires_cow: false,
+    requires_tombstone: false,
+    intake_day: ''
   });
 
-  // 🆕 Feedback and submitting state
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
   const getPrice = () => {
-    if (form.category === 'colour_grade') return 0;
-    const plan = PLAN_DATA[form.category][form.plan];
-    const key = form.category === 'motjha' ? form.members : form.age;
+    if (form.plan_category === 'colour_grade') return 0;
+    const plan = PLAN_DATA[form.plan_category][form.plan_name];
+    const key = form.plan_category === 'motjha' ? form.plan_members : form.plan_age_bracket;
     return plan?.[key] || 0;
   };
 
@@ -72,16 +74,13 @@ export default function ConsultationForm() {
     setSubmitting(true);
     setMessage('');
 
-    const grade = COLOUR_GRADE[form.plan];
+    const grade = COLOUR_GRADE[form.plan_name];
+
     const data = {
       ...form,
-      total_price: getPrice(),
-      stock_needed: {
-        coffin: grade.casket,
-        tent: grade.tent,
-        chairs: grade.chairs,
-        grocery_value: grade.grocery
-      }
+      venue_lat: null,
+      venue_lng: null,
+      status: 'intake'
     };
 
     try {
@@ -93,21 +92,24 @@ export default function ConsultationForm() {
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-      setMessage('✅ Consultation data submitted successfully.');
+      setMessage('✅ Case submitted successfully.');
       setForm({
-        category: 'motjha',
-        plan: 'Green',
-        members: 6,
-        age: '18-65',
+        plan_category: 'motjha',
+        plan_name: 'Green',
+        plan_members: 6,
+        plan_age_bracket: '18-65',
         deceased_name: '',
         deceased_id: '',
         nok_name: '',
         nok_contact: '',
+        nok_relation: '',
         funeral_date: '',
         funeral_time: '',
         venue_name: '',
         venue_address: '',
-        requires_cow: false
+        requires_cow: false,
+        requires_tombstone: false,
+        intake_day: ''
       });
     } catch (err) {
       console.error('Submit error:', err);
@@ -136,31 +138,34 @@ export default function ConsultationForm() {
         <input placeholder="Contact" required className="input"
           value={form.nok_contact}
           onChange={e => setForm({ ...form, nok_contact: e.target.value })} />
+        <input placeholder="Relation to Deceased" className="input"
+          value={form.nok_relation}
+          onChange={e => setForm({ ...form, nok_relation: e.target.value })} />
       </div>
 
       <div className="mt-6 grid grid-cols-3 gap-4">
-        <select className="input" value={form.category}
-          onChange={e => setForm({ ...form, category: e.target.value, plan: 'Green' })}>
+        <select className="input" value={form.plan_category}
+          onChange={e => setForm({ ...form, plan_category: e.target.value, plan_name: 'Green' })}>
           <option value="motjha">Motjha O Tlhele</option>
           <option value="single">Single</option>
           <option value="family">Family</option>
           <option value="colour_grade">Colour Grade</option>
         </select>
 
-        <select className="input" value={form.plan}
-          onChange={e => setForm({ ...form, plan: e.target.value })}>
-          {Object.keys(form.category === 'colour_grade' ? COLOUR_GRADE : PLAN_DATA[form.category])
+        <select className="input" value={form.plan_name}
+          onChange={e => setForm({ ...form, plan_name: e.target.value })}>
+          {Object.keys(form.plan_category === 'colour_grade' ? COLOUR_GRADE : PLAN_DATA[form.plan_category])
             .map(p => <option key={p} value={p}>{p}</option>)}
         </select>
 
-        {form.category !== 'colour_grade' && (
+        {form.plan_category !== 'colour_grade' && (
           <select className="input"
-            value={form.category === 'motjha' ? form.members : form.age}
+            value={form.plan_category === 'motjha' ? form.plan_members : form.plan_age_bracket}
             onChange={e => setForm({
               ...form,
-              [form.category === 'motjha' ? 'members' : 'age']: e.target.value
+              [form.plan_category === 'motjha' ? 'plan_members' : 'plan_age_bracket']: e.target.value
             })}>
-            {form.category === 'motjha'
+            {form.plan_category === 'motjha'
               ? [6, 10, 14].map(n => <option key={n} value={n}>{n} Members</option>)
               : ['18-65', '66-85', '86-100'].map(a => <option key={a} value={a}>{a}</option>)
             }
@@ -182,11 +187,22 @@ export default function ConsultationForm() {
           onChange={e => setForm({ ...form, venue_address: e.target.value })} />
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 flex flex-col gap-2">
         <label>
           <input type="checkbox"
             checked={form.requires_cow}
             onChange={e => setForm({ ...form, requires_cow: e.target.checked })} /> Requires Cow (Kgomo)
+        </label>
+        <label>
+          <input type="checkbox"
+            checked={form.requires_tombstone}
+            onChange={e => setForm({ ...form, requires_tombstone: e.target.checked })} /> Requires Tombstone
+        </label>
+        <label>
+          Intake Day:
+          <input type="date" className="input mt-1"
+            value={form.intake_day}
+            onChange={e => setForm({ ...form, intake_day: e.target.value })} />
         </label>
       </div>
 
@@ -196,9 +212,7 @@ export default function ConsultationForm() {
       </button>
 
       {message && (
-        <p className={`mt-4 text-center font-semibold ${
-          message.startsWith('✅') ? 'text-green-600' : 'text-red-600'
-        }`}>
+        <p className={`mt-4 text-center font-semibold ${message.startsWith('✅') ? 'text-green-600' : 'text-red-600'}`}>
           {message}
         </p>
       )}
