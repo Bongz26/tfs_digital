@@ -1,18 +1,16 @@
 // server/routes/cases.js
 // --------------------------------------------------
-// TFS Digital | Case Management Routes
-// Connected directly to Supabase (PostgreSQL backend)
+// TFS Digital | Case Management Routes (Supabase)
 // --------------------------------------------------
 
 const express = require("express");
 const router = express.Router();
 
-// 🔹 Utility: Generate case number like "THS-2025-001"
+// 🔹 Generate unique case number (THS-YYYY-XXX)
 const generateCaseNumber = async (supabase) => {
   const year = new Date().getFullYear();
   const prefix = `THS-${year}-`;
 
-  // Get highest case number for this year
   const { data: cases, error } = await supabase
     .from("cases")
     .select("case_number")
@@ -78,12 +76,11 @@ router.post("/", async (req, res) => {
     const supabase = req.app.locals.supabase;
     const body = req.body;
 
-    // Generate unique case number
-    const case_number = await generateCaseNumber(supabase);
+    console.log("Incoming case data:", JSON.stringify(body, null, 2));
 
-    // Intake day validation (must be Wednesday)
+    // Validate intake day (must be Wednesday)
     if (body.intake_day) {
-      const dow = new Date(body.intake_day).getDay(); // Sunday=0, Monday=1, ..., Wednesday=3
+      const dow = new Date(body.intake_day).getDay();
       if (dow !== 3) {
         return res.status(400).json({
           success: false,
@@ -92,14 +89,17 @@ router.post("/", async (req, res) => {
       }
     }
 
-    // 🆕 NEW: Handle service type and total price
-    const service_type = body.service_type || "book"; // 'book' or 'private'
-    const total_price =
-      service_type === "book"
-        ? body.total_price || 0 // Auto-calculated on frontend
-        : body.total_price || 0; // Manually entered by admin
+    // Generate case number
+    const case_number = await generateCaseNumber(supabase);
 
-    // Insert into DB
+    // Ensure correct types
+    const plan_members = body.plan_members ? parseInt(body.plan_members) : null;
+    const total_price =
+      body.service_type === "book"
+        ? parseFloat(body.total_price || 0)
+        : parseFloat(body.total_price || 0);
+
+    // Insert into Supabase
     const { data, error } = await supabase
       .from("cases")
       .insert([
@@ -109,25 +109,23 @@ router.post("/", async (req, res) => {
           deceased_id: body.deceased_id || null,
           nok_name: body.nok_name,
           nok_contact: body.nok_contact,
-          nok_relation: body.nok_relation,
+          nok_relation: body.nok_relation || null,
           plan_category: body.plan_category,
           plan_name: body.plan_name,
-          plan_members: body.plan_members || 1,
+          plan_members,
           plan_age_bracket: body.plan_age_bracket,
           funeral_date: body.funeral_date,
           funeral_time: body.funeral_time || null,
-          venue_name: body.venue_name,
-          venue_address: body.venue_address,
+          venue_name: body.venue_name || null,
+          venue_address: body.venue_address || null,
           venue_lat: body.venue_lat || null,
           venue_lng: body.venue_lng || null,
           requires_cow: body.requires_cow || false,
           requires_tombstone: body.requires_tombstone || false,
-          status: body.status || "intake",
           intake_day: body.intake_day || null,
-
-          // 🆕 NEW FIELDS
-          service_type,
-          total_price,
+          service_type: body.service_type || "book",
+          total_price: total_price,
+          status: body.status || "intake",
         },
       ])
       .select("*")
@@ -138,10 +136,7 @@ router.post("/", async (req, res) => {
     res.status(201).json({ success: true, case: data });
   } catch (err) {
     console.error("❌ Error creating case:", err.message);
-    res.status(500).json({
-      success: false,
-      error: err.message || "Failed to create case",
-    });
+    res.status(500).json({ success: false, error: err.message || "Failed to create case" });
   }
 });
 
@@ -153,12 +148,12 @@ router.put("/:id", async (req, res) => {
     const supabase = req.app.locals.supabase;
     const updates = req.body;
 
+    if (updates.plan_members) updates.plan_members = parseInt(updates.plan_members);
+    if (updates.total_price) updates.total_price = parseFloat(updates.total_price);
+
     const { data, error } = await supabase
       .from("cases")
-      .update({
-        ...updates,
-        updated_at: new Date().toISOString(),
-      })
+      .update({ ...updates, updated_at: new Date().toISOString() })
       .eq("id", req.params.id)
       .select("*")
       .single();
@@ -168,10 +163,7 @@ router.put("/:id", async (req, res) => {
     res.json({ success: true, case: data });
   } catch (err) {
     console.error("❌ Error updating case:", err.message);
-    res.status(500).json({
-      success: false,
-      error: err.message || "Failed to update case",
-    });
+    res.status(500).json({ success: false, error: err.message || "Failed to update case" });
   }
 });
 
@@ -181,10 +173,7 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const supabase = req.app.locals.supabase;
-    const { error } = await supabase
-      .from("cases")
-      .delete()
-      .eq("id", req.params.id);
+    const { error } = await supabase.from("cases").delete().eq("id", req.params.id);
 
     if (error) throw error;
 
