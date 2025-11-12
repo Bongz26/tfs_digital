@@ -1,182 +1,186 @@
 // server/routes/cases.js
-const express = require('express');
-const router = express.Router();
-const { query } = require('../config/db');
+// --------------------------------------------------
+// TFS Digital | Case Management Routes
+// Connected directly to Supabase (PostgreSQL backend)
+// --------------------------------------------------
 
-// Generate case number (THS-YYYY-XXX format, e.g., THS-2025-001)
-const generateCaseNumber = async () => {
+const express = require("express");
+const router = express.Router();
+
+// 🔹 Utility: Generate case number like "THS-2025-001"
+const generateCaseNumber = async (supabase) => {
   const year = new Date().getFullYear();
   const prefix = `THS-${year}-`;
-  
-  // Get the highest case number for this year
-  const result = await query(
-    `SELECT case_number FROM cases 
-     WHERE case_number LIKE $1 
-     ORDER BY case_number DESC 
-     LIMIT 1`,
-    [`${prefix}%`]
-  );
-  
-  if (result.rows.length === 0) {
-    return `${prefix}001`;
-  }
-  
-  // Extract the number from the last case number (e.g., "001" from "THS-2025-001")
-  const lastCaseNumber = result.rows[0].case_number;
-  const lastNumber = parseInt(lastCaseNumber.split('-')[2]);
-  const nextNumber = (lastNumber + 1).toString().padStart(3, '0');
-  
+
+  // Get highest case number for this year
+  const { data: cases, error } = await supabase
+    .from("cases")
+    .select("case_number")
+    .like("case_number", `${prefix}%`)
+    .order("case_number", { ascending: false })
+    .limit(1);
+
+  if (error) throw new Error(error.message);
+
+  if (!cases || cases.length === 0) return `${prefix}001`;
+
+  const lastNumber = parseInt(cases[0].case_number.split("-")[2]);
+  const nextNumber = (lastNumber + 1).toString().padStart(3, "0");
   return `${prefix}${nextNumber}`;
 };
 
-// Get all cases
-router.get('/', async (req, res) => {
+// --------------------------------------------------
+// 🟢 GET all cases
+// --------------------------------------------------
+router.get("/", async (req, res) => {
   try {
-    const result = await query(
-      `SELECT * FROM cases ORDER BY created_at DESC`
-    );
-    res.json({ success: true, cases: result.rows });
-  } catch (error) {
-    console.error('Error fetching cases:', error);
-    res.status(500).json({ success: false, error: error.message });
+    const supabase = req.app.locals.supabase;
+    const { data, error } = await supabase
+      .from("cases")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    res.json({ success: true, cases: data });
+  } catch (err) {
+    console.error("❌ Error fetching cases:", err.message);
+    res.status(500).json({ success: false, error: "Failed to fetch cases" });
   }
 });
 
-// Get single case by ID
-router.get('/:id', async (req, res) => {
+// --------------------------------------------------
+// 🟢 GET single case by ID
+// --------------------------------------------------
+router.get("/:id", async (req, res) => {
   try {
-    const result = await query(
-      `SELECT * FROM cases WHERE id = $1`,
-      [req.params.id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Case not found' });
-    }
-    res.json({ success: true, case: result.rows[0] });
-  } catch (error) {
-    console.error('Error fetching case:', error);
-    res.status(500).json({ success: false, error: error.message });
+    const supabase = req.app.locals.supabase;
+    const { data, error } = await supabase
+      .from("cases")
+      .select("*")
+      .eq("id", req.params.id)
+      .single();
+
+    if (error) throw error;
+
+    res.json({ success: true, case: data });
+  } catch (err) {
+    console.error("❌ Error fetching case:", err.message);
+    res.status(404).json({ success: false, error: "Case not found" });
   }
 });
 
-// Create case
-router.post('/', async (req, res) => {
+// --------------------------------------------------
+// 🟢 POST create new case
+// --------------------------------------------------
+router.post("/", async (req, res) => {
   try {
-    const {
-      deceased_name,
-      deceased_id,
-      nok_name,
-      nok_contact,
-      nok_relation,
-      plan_category,
-      plan_name,
-      plan_members,
-      plan_age_bracket,
-      funeral_date,
-      funeral_time,
-      venue_name,
-      venue_address,
-      venue_lat,
-      venue_lng,
-      requires_cow,
-      requires_tombstone,
-      status = 'intake',
-      intake_day
-    } = req.body;
+    const supabase = req.app.locals.supabase;
+    const body = req.body;
 
-    // Generate case number
-    const case_number = await generateCaseNumber();
+    // Generate unique case number
+    const case_number = await generateCaseNumber(supabase);
 
-    // Validate intake_day is Wednesday
-    if (intake_day) {
-      const dayOfWeek = new Date(intake_day).getDay();
-      if (dayOfWeek !== 3) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Intake day must be a Wednesday' 
+    // Intake day validation (must be Wednesday)
+    if (body.intake_day) {
+      const dow = new Date(body.intake_day).getDay(); // Sunday=0, Monday=1, ..., Wednesday=3
+      if (dow !== 3) {
+        return res.status(400).json({
+          success: false,
+          error: "Intake day must be a Wednesday",
         });
       }
     }
 
-    const result = await query(
-      `INSERT INTO cases (
-        case_number, deceased_name, deceased_id, nok_name, nok_contact, 
-        nok_relation, plan_category, plan_name, plan_members, plan_age_bracket,
-        funeral_date, funeral_time, venue_name, venue_address, venue_lat, 
-        venue_lng, requires_cow, requires_tombstone, status, intake_day
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-      RETURNING *`,
-      [
-        case_number, deceased_name, deceased_id, nok_name, nok_contact,
-        nok_relation, plan_category, plan_name, plan_members, plan_age_bracket,
-        funeral_date, funeral_time, venue_name, venue_address, venue_lat,
-        venue_lng, requires_cow || false, requires_tombstone || false, status, intake_day
-      ]
-    );
+    // Insert into DB
+    const { data, error } = await supabase
+      .from("cases")
+      .insert([
+        {
+          case_number,
+          deceased_name: body.deceased_name,
+          deceased_id: body.deceased_id || null,
+          nok_name: body.nok_name,
+          nok_contact: body.nok_contact,
+          nok_relation: body.nok_relation,
+          plan_category: body.plan_category,
+          plan_name: body.plan_name,
+          plan_members: body.plan_members || 1,
+          plan_age_bracket: body.plan_age_bracket,
+          funeral_date: body.funeral_date,
+          funeral_time: body.funeral_time || null,
+          venue_name: body.venue_name,
+          venue_address: body.venue_address,
+          venue_lat: body.venue_lat || null,
+          venue_lng: body.venue_lng || null,
+          requires_cow: body.requires_cow || false,
+          requires_tombstone: body.requires_tombstone || false,
+          status: body.status || "intake",
+          intake_day: body.intake_day || null,
+        },
+      ])
+      .select("*")
+      .single();
 
-    res.status(201).json({ success: true, case: result.rows[0] });
-  } catch (error) {
-    console.error('Error creating case:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+    if (error) throw error;
 
-// Update case
-router.put('/:id', async (req, res) => {
-  try {
-    const updates = req.body;
-    const caseId = req.params.id;
-
-    // Build dynamic update query
-    const setClause = [];
-    const values = [];
-    let paramCount = 1;
-
-    Object.keys(updates).forEach((key) => {
-      if (key !== 'id' && key !== 'case_number' && key !== 'created_at') {
-        setClause.push(`${key} = $${paramCount}`);
-        values.push(updates[key]);
-        paramCount++;
-      }
+    res.status(201).json({ success: true, case: data });
+  } catch (err) {
+    console.error("❌ Error creating case:", err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message || "Failed to create case",
     });
-
-    if (setClause.length === 0) {
-      return res.status(400).json({ success: false, error: 'No fields to update' });
-    }
-
-    setClause.push(`updated_at = NOW()`);
-    values.push(caseId);
-
-    const result = await query(
-      `UPDATE cases SET ${setClause.join(', ')} WHERE id = $${paramCount} RETURNING *`,
-      values
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Case not found' });
-    }
-
-    res.json({ success: true, case: result.rows[0] });
-  } catch (error) {
-    console.error('Error updating case:', error);
-    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Delete case
-router.delete('/:id', async (req, res) => {
+// --------------------------------------------------
+// 🟢 PUT update existing case
+// --------------------------------------------------
+router.put("/:id", async (req, res) => {
   try {
-    const result = await query(
-      `DELETE FROM cases WHERE id = $1 RETURNING *`,
-      [req.params.id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Case not found' });
-    }
-    res.json({ success: true, message: 'Case deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting case:', error);
-    res.status(500).json({ success: false, error: error.message });
+    const supabase = req.app.locals.supabase;
+    const updates = req.body;
+
+    const { data, error } = await supabase
+      .from("cases")
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", req.params.id)
+      .select("*")
+      .single();
+
+    if (error) throw error;
+
+    res.json({ success: true, case: data });
+  } catch (err) {
+    console.error("❌ Error updating case:", err.message);
+    res.status(500).json({
+      success: false,
+      error: err.message || "Failed to update case",
+    });
+  }
+});
+
+// --------------------------------------------------
+// 🟢 DELETE case
+// --------------------------------------------------
+router.delete("/:id", async (req, res) => {
+  try {
+    const supabase = req.app.locals.supabase;
+    const { error } = await supabase
+      .from("cases")
+      .delete()
+      .eq("id", req.params.id);
+
+    if (error) throw error;
+
+    res.json({ success: true, message: "Case deleted successfully" });
+  } catch (err) {
+    console.error("❌ Error deleting case:", err.message);
+    res.status(500).json({ success: false, error: "Failed to delete case" });
   }
 });
 
