@@ -1,9 +1,9 @@
-// client/src/pages/CaseDetails.jsx
+// src/pages/CaseDetails.jsx
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 
 export default function CaseDetails() {
-  const { id } = useParams();
+  const { id } = useParams(); // get case id from route
   const [caseData, setCaseData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -14,66 +14,89 @@ export default function CaseDetails() {
     const fetchCase = async () => {
       try {
         const res = await fetch(`${API_URL}/api/cases/${id}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const result = await res.json();
-        if (!result.success) throw new Error(result.error || 'Failed to load case');
-        setCaseData(result.case);
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`HTTP ${res.status}: ${text}`);
+        }
+        const json = await res.json();
+        setCaseData(json.case);
       } catch (err) {
         console.error('Error fetching case:', err);
-        setError(err.message);
+        setError('Failed to load case details.');
       } finally {
         setLoading(false);
       }
     };
 
     fetchCase();
-  }, [id, API_URL]);
+  }, [id]);
 
-  if (loading) return <p className="p-6 text-center">Loading case details...</p>;
-  if (error) return <p className="p-6 text-center text-red-600">{error}</p>;
-  if (!caseData) return <p className="p-6 text-center">Case not found.</p>;
+  if (loading) return <div className="p-8 text-center text-red-600">Loading case details...</div>;
+  if (error) return <div className="p-8 text-center text-red-600">{error}</div>;
+  if (!caseData) return <div className="p-8 text-center text-gray-600">Case not found</div>;
 
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow">
-      <h2 className="text-3xl font-bold text-center text-red-600 mb-6">
-        Case Details: {caseData.case_number}
-      </h2>
+    <div className="p-8 max-w-5xl mx-auto bg-gray-50 min-h-screen">
+      <Link to="/dashboard" className="text-blue-600 hover:underline mb-6 inline-block">← Back to Dashboard</Link>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><strong>Deceased Name:</strong> {caseData.deceased_name}</div>
-        <div><strong>ID Number:</strong> {caseData.deceased_id || 'N/A'}</div>
-        <div><strong>Next of Kin:</strong> {caseData.nok_name}</div>
-        <div><strong>Contact:</strong> {caseData.nok_contact}</div>
-        <div><strong>Relation:</strong> {caseData.nok_relation || 'N/A'}</div>
-        <div><strong>Plan Category:</strong> {caseData.plan_category}</div>
-        <div><strong>Plan Name:</strong> {caseData.plan_name}</div>
-        {caseData.plan_category !== 'colour_grade' && (
-          <div>
-            <strong>
-              {caseData.plan_category === 'motjha' ? 'Members' : 'Age Bracket'}:
-            </strong>{' '}
-            {caseData.plan_category === 'motjha'
-              ? caseData.plan_members
-              : caseData.plan_age_bracket}
-          </div>
-        )}
-        <div><strong>Funeral Date:</strong> {caseData.funeral_date}</div>
-        <div><strong>Funeral Time:</strong> {caseData.funeral_time || 'N/A'}</div>
-        <div><strong>Venue:</strong> {caseData.venue_name || 'N/A'}</div>
-        <div><strong>Address:</strong> {caseData.venue_address}</div>
-        <div><strong>Requires Cow:</strong> {caseData.requires_cow ? 'Yes' : 'No'}</div>
-        <div><strong>Requires Tombstone:</strong> {caseData.requires_tombstone ? 'Yes' : 'No'}</div>
-        <div><strong>Status:</strong> {caseData.status}</div>
-        <div><strong>Intake Day:</strong> {caseData.intake_day || 'N/A'}</div>
+      <h1 className="text-3xl font-bold text-center text-red-800 mb-6">
+        Case Details: {caseData.case_number}
+      </h1>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div>
+          <h2 className="font-semibold text-lg mb-2">Deceased Info</h2>
+          <p><span className="font-semibold">Name:</span> {caseData.deceased_name}</p>
+          <p><span className="font-semibold">ID:</span> {caseData.deceased_id || '-'}</p>
+        </div>
+        <div>
+          <h2 className="font-semibold text-lg mb-2">Next of Kin</h2>
+          <p><span className="font-semibold">Name:</span> {caseData.nok_name}</p>
+          <p><span className="font-semibold">Contact:</span> {caseData.nok_contact}</p>
+          <p><span className="font-semibold">Relation:</span> {caseData.nok_relation || '-'}</p>
+        </div>
       </div>
 
-      <div className="mt-6 text-center">
-        <Link
-          to="/dashboard"
-          className="btn-red px-6 py-2 rounded text-white font-semibold"
-        >
-          Back to Dashboard
-        </Link>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div>
+          <h2 className="font-semibold text-lg mb-2">Plan Details</h2>
+          <p><span className="font-semibold">Category:</span> {caseData.plan_category}</p>
+          <p><span className="font-semibold">Name:</span> {caseData.plan_name}</p>
+          {caseData.plan_category === 'motjha'
+            ? <p><span className="font-semibold">Members:</span> {caseData.plan_members}</p>
+            : <p><span className="font-semibold">Age Bracket:</span> {caseData.plan_age_bracket}</p>}
+          <p><span className="font-semibold">Service Type:</span> {caseData.service_type || 'book'}</p>
+          <p><span className="font-semibold">Total Price:</span> R{caseData.total_price}</p>
+        </div>
+        <div>
+          <h2 className="font-semibold text-lg mb-2">Casket & Delivery</h2>
+          <p><span className="font-semibold">Casket Type:</span> {caseData.casket_type || '-'}</p>
+          <p><span className="font-semibold">Casket Colour:</span> {caseData.casket_colour || '-'}</p>
+          <p><span className="font-semibold">Delivery Date:</span> {caseData.delivery_date || '-'}</p>
+          <p><span className="font-semibold">Delivery Time:</span> {caseData.delivery_time || '-'}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <div>
+          <h2 className="font-semibold text-lg mb-2">Funeral Info</h2>
+          <p><span className="font-semibold">Date:</span> {caseData.funeral_date}</p>
+          <p><span className="font-semibold">Time:</span> {caseData.funeral_time}</p>
+          <p><span className="font-semibold">Venue:</span> {caseData.venue_name}</p>
+          <p><span className="font-semibold">Address:</span> {caseData.venue_address}</p>
+        </div>
+        <div>
+          <h2 className="font-semibold text-lg mb-2">Options</h2>
+          <p><span className="font-semibold">Requires Cow:</span> {caseData.requires_cow ? 'Yes' : 'No'}</p>
+          <p><span className="font-semibold">Requires Tombstone:</span> {caseData.requires_tombstone ? 'Yes' : 'No'}</p>
+          <p><span className="font-semibold">Intake Day:</span> {caseData.intake_day || '-'}</p>
+          <p><span className="font-semibold">Status:</span> {caseData.status}</p>
+        </div>
+      </div>
+
+      <div className="mt-8 text-center text-sm text-gray-500">
+        <p>Created at: {new Date(caseData.created_at).toLocaleString()}</p>
+        <p>Last updated: {new Date(caseData.updated_at).toLocaleString()}</p>
       </div>
     </div>
   );

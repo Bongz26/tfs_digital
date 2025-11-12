@@ -76,7 +76,7 @@ export default function Dashboard() {
           THUSANANG FUNERAL SERVICES
         </h1>
         <p className="text-yellow-600 text-xl font-semibold">
-          Live from QwaQwa • Re tšotella lechaba la rona
+          Live from QwaQwa • Re tšotella sechaba sa rona
         </p>
       </div>
 
