@@ -24,6 +24,8 @@ const allowedOrigins = [
   "https://tfs-frontend.onrender.com", // Optional fallback if you had another frontend domain
 ];
 
+app.use('/api/ping', require('./routes/ping'));
+
 // The middleware checks each request’s origin and decides if it’s allowed.
 app.use(
   cors({
