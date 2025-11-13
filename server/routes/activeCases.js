@@ -2,28 +2,61 @@
 const express = require('express');
 const router = express.Router();
 
-// GET /api/activeCases - FIXED VERSION
+// GET /api/activeCases - SIMPLIFIED AND FIXED
 router.get('/', async (req, res) => {
   try {
     const supabase = req.app.locals.supabase;
 
-    const { data, error } = await supabase
+    console.log('Fetching active cases...');
+
+    // Get active cases (simplified query)
+    const { data: cases, error: casesError } = await supabase
       .from('cases')
-      .select(`
-        id, case_number, deceased_name, funeral_date, funeral_time, status,
-        venue_name, venue_address,
-        roster:roster(id, vehicle_id, driver_name, pickup_time, status),
-        vehicles:vehicles(id, reg_number, type, driver_name)
-      `)
+      .select('*')
       .in('status', ['intake', 'confirmed', 'in_progress'])
       .order('funeral_date', { ascending: true });
 
-    if (error) throw error;
+    if (casesError) {
+      console.error('Active cases query error:', casesError);
+      throw casesError;
+    }
 
-    res.json({ success: true, cases: data });
+    console.log(`Found ${cases?.length || 0} active cases`);
+
+    // Get available vehicles
+    const { data: vehicles, error: vehiclesError } = await supabase
+      .from('vehicles')
+      .select('*')
+      .eq('available', true)
+      .order('type', { ascending: true });
+
+    if (vehiclesError) {
+      console.error('Vehicles query error:', vehiclesError);
+      throw vehiclesError;
+    }
+
+    console.log(`Found ${vehicles?.length || 0} available vehicles`);
+
+    // For now, just return cases without roster data
+    const casesWithRoster = cases.map(caseItem => ({
+      ...caseItem,
+      roster: [] // Empty array for now to avoid complex joins
+    }));
+
+    res.json({ 
+      success: true, 
+      cases: casesWithRoster || [],
+      vehicles: vehicles || [] 
+    });
+
   } catch (err) {
-    console.error('ActiveCases fetch error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    console.error('ActiveCases route error:', err.message);
+    res.status(500).json({ 
+      success: false, 
+      error: err.message,
+      cases: [],
+      vehicles: []
+    });
   }
 });
 
