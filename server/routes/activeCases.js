@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
         roster:roster(id, vehicle_id, driver_name, pickup_time, status),
         vehicles:vehicles(id, reg_number, type, driver_name)
       `)
-      .in('status', ['intake', 'confirmed', 'in_progress'])  // ✅ FIXED: Use correct status values
+      .in('status', ['intake', 'confirmed', 'in_progress'])
       .order('funeral_date', { ascending: true });
 
     if (error) throw error;

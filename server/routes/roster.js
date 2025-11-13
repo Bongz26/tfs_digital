@@ -1,7 +1,7 @@
+// server/routes/roster.js
 const express = require('express');
 const router = express.Router();
 
-// GET /api/roster - Fixed version
 router.get('/', async (req, res) => {
   try {
     const supabase = req.app.locals.supabase;

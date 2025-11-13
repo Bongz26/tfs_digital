@@ -1,16 +1,16 @@
+// server/routes/vehicles.js
 const express = require('express');
 const router = express.Router();
 
-// GET /api/vehicles/available - FIXED VERSION
+// GET /api/vehicles/available
 router.get('/available', async (req, res) => {
   try {
     const supabase = req.app.locals.supabase;
 
-    // Use the boolean 'available' field since you have actual data in it
     const { data, error } = await supabase
       .from('vehicles')
       .select('*')
-      .eq('available', true)  // ✅ Use the boolean field that has your data
+      .eq('available', true)
       .order('type', { ascending: true });
 
     if (error) throw error;
@@ -21,3 +21,5 @@ router.get('/available', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+module.exports = router;

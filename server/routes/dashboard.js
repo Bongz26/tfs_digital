@@ -1,3 +1,4 @@
+// server/routes/dashboard.js
 const express = require('express');
 const router = express.Router();
 
@@ -6,7 +7,7 @@ router.get('/', async (req, res) => {
     const supabase = req.app.locals.supabase;
     const today = new Date().toISOString().split('T')[0];
 
-    // 1. Upcoming Funerals (from today)
+    // 1️⃣ Upcoming Funerals
     const { count: funeralsCount, error: casesError } = await supabase
       .from('cases')
       .select('*', { count: 'exact', head: true })
@@ -14,15 +15,15 @@ router.get('/', async (req, res) => {
 
     if (casesError) throw casesError;
 
-    // 2. Vehicles Available (use boolean field)
+    // 2️⃣ Vehicles Available
     const { count: vehiclesAvailable, error: vehiclesError } = await supabase
       .from('vehicles')
       .select('*', { count: 'exact', head: true })
-      .eq('available', true);  // ✅ Use boolean field
+      .eq('available', true);
 
     if (vehiclesError) throw vehiclesError;
 
-    // 3. Low Stock Items
+    // 3️⃣ Low Stock Items
     const { data: lowStock, error: inventoryError } = await supabase
       .from('inventory')
       .select('*')
@@ -30,7 +31,7 @@ router.get('/', async (req, res) => {
 
     if (inventoryError) throw inventoryError;
 
-    // 4. Cows Assigned
+    // 4️⃣ Cows Assigned
     const { count: cowsAssigned, error: cowError } = await supabase
       .from('livestock')
       .select('*', { count: 'exact', head: true })
@@ -38,7 +39,7 @@ router.get('/', async (req, res) => {
 
     if (cowError) throw cowError;
 
-    // 5. RECENT CASES (last 5 created) - ✅ ADD THIS BACK
+    // 5️⃣ RECENT CASES (last 5 created)
     const { data: recentCases, error: recentError } = await supabase
       .from('cases')
       .select('*')
@@ -47,7 +48,6 @@ router.get('/', async (req, res) => {
 
     if (recentError) throw recentError;
 
-    // ✅ Response WITH recent cases
     res.json({
       upcoming: funeralsCount || 0,
       vehiclesNeeded: funeralsCount || 0,
@@ -55,7 +55,7 @@ router.get('/', async (req, res) => {
       conflicts: (vehiclesAvailable || 0) < (funeralsCount || 0),
       lowStock: Array.isArray(lowStock) ? lowStock : [],
       cowsAssigned: cowsAssigned || 0,
-      recentCases: recentCases || []  // ✅ This fixes your dashboard
+      recentCases: recentCases || []
     });
 
   } catch (error) {
@@ -68,7 +68,9 @@ router.get('/', async (req, res) => {
       conflicts: false,
       lowStock: [],
       cowsAssigned: 0,
-      recentCases: []  // ✅ Return empty array on error
+      recentCases: []
     });
   }
 });
+
+module.exports = router;

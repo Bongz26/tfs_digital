@@ -6,7 +6,7 @@
 const express = require("express");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
-require("dotenv").config(); // Loads .env variables into process.env
+require("dotenv").config();
 
 // ---------------------
 // 2️⃣ Initialize Express
@@ -16,33 +16,24 @@ const app = express();
 // ---------------------
 // 3️⃣ CORS CONFIGURATION
 // ---------------------
-// Allow only trusted domains to access the API.
-// These are your frontend URLs that should be allowed to call the backend.
 const allowedOrigins = [
-  "http://localhost:3000", // For local development
-  "https://admintfs.onrender.com", // ✅ Your admin frontend (main site)
-  "https://tfs-frontend.onrender.com", // Optional fallback if you had another frontend domain
+  "http://localhost:3000",
+  "https://admintfs.onrender.com",
+  "https://tfs-frontend.onrender.com",
 ];
 
-app.use('/api/ping', require('./routes/ping'));
-
-// The middleware checks each request’s origin and decides if it’s allowed.
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Some requests (like from Postman or mobile apps) have no origin — allow them
       if (!origin) return callback(null, true);
-
       if (allowedOrigins.includes(origin)) {
-        // ✅ Allowed
         return callback(null, true);
       } else {
-        // ❌ Blocked — will show in your Render logs
         console.warn("❌ Blocked by CORS:", origin);
         return callback(new Error("Not allowed by CORS"));
       }
     },
-    credentials: true, // Allow cookies or authorization headers if used
+    credentials: true,
   })
 );
 
@@ -59,14 +50,6 @@ const supabase = createClient(
 
 console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
 console.log('SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? 'OK' : 'MISSING');
-
-//
-const casesRouter = require('./routes/cases');
-app.use('/api/cases', casesRouter);
-
-// mounting vehicles
-const vehiclesRouter = require('./routes/vehicles');
-app.use('/api/vehicles', vehiclesRouter);
 
 // Quick test to confirm DB connectivity on startup
 async function testDB() {
@@ -91,38 +74,47 @@ app.locals.supabase = supabase;
 // ---------------------
 // 5️⃣ BASIC HEALTH CHECK ROUTE
 // ---------------------
-// Quick endpoint to check server status from Render or frontend
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", time: new Date().toISOString() });
 });
 
-
-const activeCasesRouter = require('./routes/activeCases');
-app.use('/api/activeCases', activeCasesRouter);
-const rosterRouter = require('./routes/roster');
-app.use('/api/roster', rosterRouter);
-
-
 // ---------------------
 // 6️⃣ IMPORT AND USE ROUTES
 // ---------------------
-// Make sure you have these files inside "server/routes/"
-app.use("/api/cases", require("./routes/cases"));
-app.use("/api/dashboard", require("./routes/dashboard"));
-app.use("/api/roster", require("./routes/roster"));
-app.use("/api/activeCases", require("./routes/activeCases"));
-app.use("/api/vehicles", require("./routes/vehicles"));
 
+// Load routes with error handling
+function loadRoute(routePath, routeName) {
+  try {
+    const route = require(routePath);
+    if (typeof route === 'function') {
+      console.log(`✅ Loaded route: ${routeName}`);
+      return route;
+    } else {
+      console.error(`❌ Route ${routeName} is not a function:`, typeof route);
+      return null;
+    }
+  } catch (error) {
+    console.error(`❌ Failed to load route ${routeName}:`, error.message);
+    return null;
+  }
+}
 
+// Load all routes
+const casesRoute = loadRoute('./routes/cases', 'cases');
+const dashboardRoute = loadRoute('./routes/dashboard', 'dashboard');
+const rosterRoute = loadRoute('./routes/roster', 'roster');
+const activeCasesRoute = loadRoute('./routes/activeCases', 'activeCases');
+const vehiclesRoute = loadRoute('./routes/vehicles', 'vehicles');
+
+// Register routes that loaded successfully
+if (casesRoute) app.use("/api/cases", casesRoute);
+if (dashboardRoute) app.use("/api/dashboard", dashboardRoute);
+if (rosterRoute) app.use("/api/roster", rosterRoute);
+if (activeCasesRoute) app.use("/api/activeCases", activeCasesRoute);
+if (vehiclesRoute) app.use("/api/vehicles", vehiclesRoute);
 
 // ---------------------
-// 7️⃣ DO NOT SERVE FRONTEND FILES HERE
-// ---------------------
-// ❌ Remove or comment out any "express.static" or "app.get('*')" lines
-// This Render service is backend only, so your React app must be hosted separately.
-
-// ---------------------
-// 8️⃣ START SERVER
+// 7️⃣ START SERVER
 // ---------------------
 const PORT = process.env.PORT || 5000;
 
@@ -130,20 +122,16 @@ app.listen(PORT, () => {
   console.log(`🚀 TFS API LIVE on port ${PORT}`);
   console.log(`📍 API endpoints: http://localhost:${PORT}/api`);
   console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
-  console.log(`📋 Roster: http://localhost:${PORT}/api/roster`);
-  console.log(`📊 Dashboard: http://localhost:${PORT}/api/dashboard`);
-  console.log(`\n✅ All routes registered. Server ready!\n`);
 });
 
 // ---------------------
-//  💤 KEEP SERVER AWAKE (PING ITSELF EVERY 14 MINUTES)
+//  💤 KEEP SERVER AWAKE
 // ---------------------
-// Only run keep-alive if RENDER_EXTERNAL_URL is set (production)
 if (process.env.RENDER_EXTERNAL_URL) {
   const SELF_URL = process.env.RENDER_EXTERNAL_URL;
   setInterval(() => {
     fetch(`${SELF_URL}/api/health`)
       .then(res => res.ok && console.log('💓 Keep-alive ping OK'))
       .catch(err => console.warn('⚠️ Keep-alive failed:', err.message));
-  }, 14 * 60 * 1000); // every 14 minutes
+  }, 14 * 60 * 1000);
 }
