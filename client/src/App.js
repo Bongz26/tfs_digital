@@ -1,10 +1,13 @@
 // src/App.js
 import React from 'react';
+import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import ConsultationForm from './ConsultationForm';
 import Dashboard from './pages/Dashboard';
 import CaseDetails from './pages/CaseDetails';
 import './index.css';
+
+
 
 function App() {
   return (
