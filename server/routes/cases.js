@@ -140,6 +140,29 @@ router.post("/", async (req, res) => {
   }
 });
 
+// Assign driver and vehicle to a case
+router.put('/assign/:id', async (req, res) => {
+  try {
+    const { driver_name, vehicle_type, reg_number, pickup_time } = req.body;
+    const caseId = req.params.id;
+
+    const [result] = await db.query(
+      `UPDATE cases
+       SET driver_name = ?, vehicle_type = ?, reg_number = ?, pickup_time = ?, status = 'scheduled'
+       WHERE id = ?`,
+      [driver_name, vehicle_type, reg_number, pickup_time, caseId]
+    );
+
+    if (result.affectedRows === 0)
+      return res.status(404).json({ message: 'Case not found' });
+
+    res.json({ message: 'Driver assigned successfully' });
+  } catch (err) {
+    console.error('Assign driver error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 // --------------------------------------------------
 // 🟢 PUT update existing case
 // --------------------------------------------------
