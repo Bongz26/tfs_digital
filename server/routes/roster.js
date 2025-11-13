@@ -1,53 +1,49 @@
-// server/routes/roster.js
 const express = require('express');
 const router = express.Router();
 
+// GET /api/roster - Fixed version
 router.get('/', async (req, res) => {
-  const supabase = req.app.locals.supabase;
-
   try {
+    const supabase = req.app.locals.supabase;
+
     const { data, error } = await supabase
       .from('roster')
       .select(`
         id,
-        date,
-        time,
         case_id,
         vehicle_id,
-        driver,
-        destination,
+        driver_name,
+        pickup_time,
+        status,
         cases:case_id (
           case_number,
           deceased_name,
           funeral_date,
-          funeral_time
+          funeral_time,
+          venue_name
         ),
         vehicles:vehicle_id (
           id,
-          plate_number,
-          registration,
-          model,
-          available
+          reg_number,
+          type,
+          driver_name
         )
       `)
-      .order('date', { ascending: true })
-      .order('time', { ascending: true });
+      .order('pickup_time', { ascending: true });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Roster query error:', error);
+      throw error;
+    }
 
-    // ✅ Normalize vehicle data so we don’t depend on a single column name
-    const cleaned = (data || []).map(item => ({
-      ...item,
-      vehicle: item.vehicles ? {
-        ...item.vehicles,
-        display_name: item.vehicles.registration || item.vehicles.plate_number || item.vehicles.model || 'Unknown'
-      } : null
-    }));
-
-    res.json({ success: true, roster: cleaned });
+    res.json({ success: true, roster: data || [] });
   } catch (err) {
-    console.error('❌ /api/roster route error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
+    console.error('Roster route error:', err.message);
+    res.status(500).json({ 
+      success: false, 
+      error: err.message,
+      roster: [] 
+    });
   }
 });
 

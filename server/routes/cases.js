@@ -1,14 +1,32 @@
 const express = require('express');
 const router = express.Router();
 
-// POST /api/cases/assign/:caseId
+// GET /api/cases - Get all cases
+router.get('/', async (req, res) => {
+  try {
+    const supabase = req.app.locals.supabase;
+
+    const { data, error } = await supabase
+      .from('cases')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    res.json({ success: true, cases: data });
+  } catch (err) {
+    console.error('Cases fetch error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/cases/assign/:caseId - Assign vehicle to case
 router.post('/assign/:caseId', async (req, res) => {
   try {
     const supabase = req.app.locals.supabase;
     const { caseId } = req.params;
     const { vehicle_id, driver_name, pickup_time } = req.body;
 
-    // Insert into roster table
     const { data, error } = await supabase
       .from('roster')
       .insert([
@@ -17,7 +35,7 @@ router.post('/assign/:caseId', async (req, res) => {
           vehicle_id: vehicle_id,
           driver_name: driver_name,
           pickup_time: pickup_time,
-          status: 'assigned'
+          status: 'scheduled'
         }
       ])
       .select();

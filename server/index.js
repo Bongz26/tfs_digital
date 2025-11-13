@@ -109,7 +109,9 @@ app.use('/api/roster', rosterRouter);
 // Make sure you have these files inside "server/routes/"
 app.use("/api/cases", require("./routes/cases"));
 app.use("/api/dashboard", require("./routes/dashboard"));
-
+app.use("/api/roster", require("./routes/roster"));
+app.use("/api/activeCases", require("./routes/activeCases"));
+app.use("/api/vehicles", require("./routes/vehicles"));
 
 
 
