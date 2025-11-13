@@ -6,10 +6,19 @@ export default function ActiveCases() {
   const [vehicles, setVehicles] = useState([]);
   const [selectedVehicle, setSelectedVehicle] = useState({});
 
+  // Use your actual API base URL here
+  const API_BASE =
+    process.env.NODE_ENV === 'production'
+      ? 'https://admintfs-api.onrender.com' // your backend URL
+      : 'http://localhost:5000';
+
   // Fetch active cases
   useEffect(() => {
-    fetch('/api/activeCases')
-      .then(res => res.json())
+    fetch(`${API_BASE}/api/activeCases`)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then(data => {
         if (data.success) setCases(data.cases);
         else console.error(data.error);
@@ -19,8 +28,11 @@ export default function ActiveCases() {
 
   // Fetch available vehicles
   useEffect(() => {
-    fetch('/api/vehicles/available')
-      .then(res => res.json())
+    fetch(`${API_BASE}/api/vehicles/available`)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then(data => {
         if (data.success) setVehicles(data.vehicles);
         else console.error(data.error);
@@ -33,14 +45,14 @@ export default function ActiveCases() {
     const vehicle = selectedVehicle[caseId];
 
     try {
-      const res = await fetch(`/api/cases/assign/${caseId}`, {
+      const res = await fetch(`${API_BASE}/api/cases/assign/${caseId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           vehicle_id: vehicle.id,
           driver_name: vehicle.driver_name || 'TBD',
-          pickup_time: new Date().toISOString()
-        })
+          pickup_time: new Date().toISOString(),
+        }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
@@ -70,10 +82,14 @@ export default function ActiveCases() {
             <tr key={c.id} className="text-center">
               <td className="border px-4 py-2">{c.case_number}</td>
               <td className="border px-4 py-2">{c.deceased_name}</td>
-              <td className="border px-4 py-2">{new Date(c.funeral_date).toLocaleDateString()}</td>
+              <td className="border px-4 py-2">
+                {new Date(c.funeral_date).toLocaleDateString()}
+              </td>
               <td className="border px-4 py-2">
                 {c.roster?.length > 0
-                  ? c.roster[0].driver_name + ' / Vehicle ' + c.roster[0].vehicle_id
+                  ? c.roster[0].driver_name +
+                    ' / Vehicle ' +
+                    c.roster[0].vehicle_id
                   : 'Not Assigned'}
               </td>
               <td className="border px-4 py-2">
@@ -84,14 +100,17 @@ export default function ActiveCases() {
                       onChange={e =>
                         setSelectedVehicle({
                           ...selectedVehicle,
-                          [c.id]: vehicles.find(v => v.id === Number(e.target.value))
+                          [c.id]: vehicles.find(
+                            v => v.id === Number(e.target.value)
+                          ),
                         })
                       }
                     >
                       <option value="">Select Vehicle</option>
                       {vehicles.map(v => (
                         <option key={v.id} value={v.id}>
-                          {v.type} - {v.reg_number} ({v.driver_name || 'TBD'})
+                          {v.type} - {v.reg_number} (
+                          {v.driver_name || 'TBD'})
                         </option>
                       ))}
                     </select>
