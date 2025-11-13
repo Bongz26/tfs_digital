@@ -1,128 +1,121 @@
 import React, { useEffect, useState } from 'react';
 
 export default function ActiveCases() {
-  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
   const [cases, setCases] = useState([]);
-  const [assigning, setAssigning] = useState(null);
-  const [form, setForm] = useState({
-    driver_name: '',
-    vehicle_type: '',
-    reg_number: '',
-    pickup_time: '',
-  });
+  const [vehicles, setVehicles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [assignData, setAssignData] = useState({});
 
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+  // Fetch active cases and available vehicles
   useEffect(() => {
-    fetch(`${API_URL}/api/cases`)
-      .then(res => res.json())
-      .then(data => setCases(data.cases || []));
+    Promise.all([
+      fetch(`${API_URL}/api/activeCases`).then(r => r.json()),
+      fetch(`${API_URL}/api/vehicles`).then(r => r.json()) // assumes /api/vehicles returns all vehicles
+    ]).then(([casesData, vehiclesData]) => {
+      setCases(casesData.cases || []);
+      setVehicles(vehiclesData || []);
+      setLoading(false);
+    }).catch(err => console.error(err));
   }, []);
 
-  const handleAssign = async (id) => {
+  const handleAssign = async (caseId) => {
+    const vehicle_id = assignData[caseId]?.vehicle_id;
+    const driver_name = assignData[caseId]?.driver_name;
+    const pickup_time = assignData[caseId]?.pickup_time;
+
+    if (!vehicle_id || !driver_name || !pickup_time) return alert('Fill all fields');
+
     try {
-      const res = await fetch(`${API_URL}/api/cases/assign/${id}`, {
-        method: 'PUT',
+      const res = await fetch(`${API_URL}/api/activeCases/assign`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ case_id: caseId, vehicle_id, driver_name, pickup_time })
       });
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      alert('Driver assigned successfully ✅');
-      setAssigning(null);
-      setForm({ driver_name: '', vehicle_type: '', reg_number: '', pickup_time: '' });
-
-      // refresh
-      const newCases = await fetch(`${API_URL}/api/cases`).then(r => r.json());
-      setCases(newCases.cases || []);
+      const data = await res.json();
+      if (data.success) {
+        alert('Vehicle assigned!');
+        window.location.reload(); // simple way to refresh list
+      } else {
+        alert(data.error);
+      }
     } catch (err) {
-      console.error('Assign error:', err);
-      alert('Error assigning driver');
+      console.error(err);
+      alert('Failed to assign vehicle');
     }
   };
 
+  if (loading) return <div className="p-8 text-center text-red-600">Loading...</div>;
+
   return (
-    <div className="p-6">
-      <h2 className="text-xl font-bold text-red-700 mb-4">Active Cases</h2>
-      <table className="w-full border-collapse border">
-        <thead className="bg-red-50">
+    <div className="p-8 max-w-7xl mx-auto bg-gray-50 min-h-screen">
+      <h1 className="text-3xl font-bold text-red-800 mb-6">Active Cases</h1>
+      <table className="w-full border-collapse bg-white shadow rounded-lg overflow-hidden">
+        <thead className="bg-red-100">
           <tr>
-            <th className="border p-2">Case No</th>
-            <th className="border p-2">Deceased</th>
-            <th className="border p-2">Funeral Date</th>
-            <th className="border p-2">Action</th>
+            <th className="p-3 text-left">Case Number</th>
+            <th className="p-3 text-left">Deceased Name</th>
+            <th className="p-3 text-left">Funeral Date</th>
+            <th className="p-3 text-left">Vehicle</th>
+            <th className="p-3 text-left">Driver</th>
+            <th className="p-3 text-left">Pickup Time</th>
+            <th className="p-3 text-left">Action</th>
           </tr>
         </thead>
         <tbody>
           {cases.map(c => (
-            <tr key={c.id}>
-              <td className="border p-2">{c.case_number}</td>
-              <td className="border p-2">{c.deceased_name}</td>
-              <td className="border p-2">{c.funeral_date}</td>
-              <td className="border p-2">
-                <button
-                  onClick={() => setAssigning(c.id)}
-                  className="px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600"
-                >
-                  Assign Driver
-                </button>
+            <tr key={c.id} className="border-b hover:bg-gray-50">
+              <td className="p-3">{c.case_number}</td>
+              <td className="p-3">{c.deceased_name}</td>
+              <td className="p-3">{c.funeral_date}</td>
+              <td className="p-3">
+                {c.vehicle_assigned ? c.vehicle_id : (
+                  <select
+                    className="border p-1"
+                    onChange={e => setAssignData({...assignData, [c.id]: {...assignData[c.id], vehicle_id: e.target.value}})}
+                  >
+                    <option value="">Select Vehicle</option>
+                    {vehicles.filter(v => v.available).map(v => (
+                      <option key={v.id} value={v.id}>{v.reg_number} ({v.type})</option>
+                    ))}
+                  </select>
+                )}
+              </td>
+              <td className="p-3">
+                {c.vehicle_assigned ? c.driver_name : (
+                  <input
+                    type="text"
+                    placeholder="Driver Name"
+                    className="border p-1 w-full"
+                    onChange={e => setAssignData({...assignData, [c.id]: {...assignData[c.id], driver_name: e.target.value}})}
+                  />
+                )}
+              </td>
+              <td className="p-3">
+                {c.vehicle_assigned ? c.pickup_time : (
+                  <input
+                    type="time"
+                    className="border p-1 w-full"
+                    onChange={e => setAssignData({...assignData, [c.id]: {...assignData[c.id], pickup_time: e.target.value}})}
+                  />
+                )}
+              </td>
+              <td className="p-3">
+                {!c.vehicle_assigned && (
+                  <button
+                    className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-800"
+                    onClick={() => handleAssign(c.id)}
+                  >
+                    Assign
+                  </button>
+                )}
+                {c.vehicle_assigned && <span className="text-green-700 font-semibold">Assigned</span>}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-
-      {/* Assignment Modal */}
-      {assigning && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40">
-          <div className="bg-white p-6 rounded-xl w-96 shadow-lg">
-            <h3 className="text-lg font-semibold text-red-700 mb-4">
-              Assign Driver to Case #{assigning}
-            </h3>
-
-            <input
-              type="text"
-              placeholder="Driver Name"
-              value={form.driver_name}
-              onChange={(e) => setForm({ ...form, driver_name: e.target.value })}
-              className="border p-2 w-full mb-2 rounded"
-            />
-            <input
-              type="text"
-              placeholder="Vehicle Type"
-              value={form.vehicle_type}
-              onChange={(e) => setForm({ ...form, vehicle_type: e.target.value })}
-              className="border p-2 w-full mb-2 rounded"
-            />
-            <input
-              type="text"
-              placeholder="Reg Number"
-              value={form.reg_number}
-              onChange={(e) => setForm({ ...form, reg_number: e.target.value })}
-              className="border p-2 w-full mb-2 rounded"
-            />
-            <input
-              type="datetime-local"
-              value={form.pickup_time}
-              onChange={(e) => setForm({ ...form, pickup_time: e.target.value })}
-              className="border p-2 w-full mb-4 rounded"
-            />
-
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setAssigning(null)}
-                className="px-3 py-1 bg-gray-300 rounded hover:bg-gray-400"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleAssign(assigning)}
-                className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
