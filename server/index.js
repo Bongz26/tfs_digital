@@ -61,6 +61,9 @@ console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
 console.log('SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? 'OK' : 'MISSING');
 
 //
+const casesRouter = require('./routes/cases');
+app.use('/api/cases', casesRouter);
+
 // mounting vehicles
 const vehiclesRouter = require('./routes/vehicles');
 app.use('/api/vehicles', vehiclesRouter);
@@ -96,6 +99,9 @@ app.get("/api/health", (req, res) => {
 
 const activeCasesRouter = require('./routes/activeCases');
 app.use('/api/activeCases', activeCasesRouter);
+const rosterRouter = require('./routes/roster');
+app.use('/api/roster', rosterRouter);
+
 
 // ---------------------
 // 6️⃣ IMPORT AND USE ROUTES
@@ -103,7 +109,9 @@ app.use('/api/activeCases', activeCasesRouter);
 // Make sure you have these files inside "server/routes/"
 app.use("/api/cases", require("./routes/cases"));
 app.use("/api/dashboard", require("./routes/dashboard"));
-app.use("/api/roster", require("./routes/roster"));
+
+
+
 
 // ---------------------
 // 7️⃣ DO NOT SERVE FRONTEND FILES HERE
