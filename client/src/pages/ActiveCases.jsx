@@ -1,116 +1,108 @@
+// src/pages/ActiveCases.jsx
 import React, { useEffect, useState } from 'react';
 
 export default function ActiveCases() {
   const [cases, setCases] = useState([]);
   const [vehicles, setVehicles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [assignData, setAssignData] = useState({});
+  const [selectedVehicle, setSelectedVehicle] = useState({});
 
-  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-
-  // Fetch active cases and available vehicles
+  // Fetch active cases
   useEffect(() => {
-    Promise.all([
-      fetch(`${API_URL}/api/activeCases`).then(r => r.json()),
-      fetch(`${API_URL}/api/vehicles`).then(r => r.json()) // assumes /api/vehicles returns all vehicles
-    ]).then(([casesData, vehiclesData]) => {
-      setCases(casesData.cases || []);
-      setVehicles(vehiclesData || []);
-      setLoading(false);
-    }).catch(err => console.error(err));
+    fetch('/api/activeCases')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setCases(data.cases);
+        else console.error(data.error);
+      })
+      .catch(err => console.error('ActiveCases fetch error:', err));
   }, []);
 
-  const handleAssign = async (caseId) => {
-    const vehicle_id = assignData[caseId]?.vehicle_id;
-    const driver_name = assignData[caseId]?.driver_name;
-    const pickup_time = assignData[caseId]?.pickup_time;
+  // Fetch available vehicles
+  useEffect(() => {
+    fetch('/api/vehicles/available')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setVehicles(data.vehicles);
+        else console.error(data.error);
+      })
+      .catch(err => console.error('Vehicles fetch error:', err));
+  }, []);
 
-    if (!vehicle_id || !driver_name || !pickup_time) return alert('Fill all fields');
+  const assignVehicle = async (caseId) => {
+    if (!selectedVehicle[caseId]) return alert('Select a vehicle first');
+    const vehicle = selectedVehicle[caseId];
 
     try {
-      const res = await fetch(`${API_URL}/api/activeCases/assign`, {
+      const res = await fetch(`/api/cases/assign/${caseId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ case_id: caseId, vehicle_id, driver_name, pickup_time })
+        body: JSON.stringify({
+          vehicle_id: vehicle.id,
+          driver_name: vehicle.driver_name || 'TBD',
+          pickup_time: new Date().toISOString()
+        })
       });
       const data = await res.json();
-      if (data.success) {
-        alert('Vehicle assigned!');
-        window.location.reload(); // simple way to refresh list
-      } else {
-        alert(data.error);
-      }
+      if (!data.success) throw new Error(data.error);
+      alert('Vehicle assigned successfully!');
+      window.location.reload(); // refresh list
     } catch (err) {
-      console.error(err);
-      alert('Failed to assign vehicle');
+      console.error('Assign error:', err);
+      alert('Failed to assign vehicle.');
     }
   };
 
-  if (loading) return <div className="p-8 text-center text-red-600">Loading...</div>;
-
   return (
-    <div className="p-8 max-w-7xl mx-auto bg-gray-50 min-h-screen">
-      <h1 className="text-3xl font-bold text-red-800 mb-6">Active Cases</h1>
-      <table className="w-full border-collapse bg-white shadow rounded-lg overflow-hidden">
-        <thead className="bg-red-100">
-          <tr>
-            <th className="p-3 text-left">Case Number</th>
-            <th className="p-3 text-left">Deceased Name</th>
-            <th className="p-3 text-left">Funeral Date</th>
-            <th className="p-3 text-left">Vehicle</th>
-            <th className="p-3 text-left">Driver</th>
-            <th className="p-3 text-left">Pickup Time</th>
-            <th className="p-3 text-left">Action</th>
+    <div className="p-6">
+      <h2 className="text-2xl font-bold mb-4">Active Cases</h2>
+      <table className="w-full table-auto border">
+        <thead>
+          <tr className="bg-gray-200">
+            <th className="border px-4 py-2">Case Number</th>
+            <th className="border px-4 py-2">Deceased</th>
+            <th className="border px-4 py-2">Funeral Date</th>
+            <th className="border px-4 py-2">Vehicle Assigned</th>
+            <th className="border px-4 py-2">Action</th>
           </tr>
         </thead>
         <tbody>
           {cases.map(c => (
-            <tr key={c.id} className="border-b hover:bg-gray-50">
-              <td className="p-3">{c.case_number}</td>
-              <td className="p-3">{c.deceased_name}</td>
-              <td className="p-3">{c.funeral_date}</td>
-              <td className="p-3">
-                {c.vehicle_assigned ? c.vehicle_id : (
-                  <select
-                    className="border p-1"
-                    onChange={e => setAssignData({...assignData, [c.id]: {...assignData[c.id], vehicle_id: e.target.value}})}
-                  >
-                    <option value="">Select Vehicle</option>
-                    {vehicles.filter(v => v.available).map(v => (
-                      <option key={v.id} value={v.id}>{v.reg_number} ({v.type})</option>
-                    ))}
-                  </select>
-                )}
+            <tr key={c.id} className="text-center">
+              <td className="border px-4 py-2">{c.case_number}</td>
+              <td className="border px-4 py-2">{c.deceased_name}</td>
+              <td className="border px-4 py-2">{new Date(c.funeral_date).toLocaleDateString()}</td>
+              <td className="border px-4 py-2">
+                {c.roster?.length > 0
+                  ? c.roster[0].driver_name + ' / Vehicle ' + c.roster[0].vehicle_id
+                  : 'Not Assigned'}
               </td>
-              <td className="p-3">
-                {c.vehicle_assigned ? c.driver_name : (
-                  <input
-                    type="text"
-                    placeholder="Driver Name"
-                    className="border p-1 w-full"
-                    onChange={e => setAssignData({...assignData, [c.id]: {...assignData[c.id], driver_name: e.target.value}})}
-                  />
+              <td className="border px-4 py-2">
+                {c.roster?.length === 0 && (
+                  <>
+                    <select
+                      className="border px-2 py-1 mr-2"
+                      onChange={e =>
+                        setSelectedVehicle({
+                          ...selectedVehicle,
+                          [c.id]: vehicles.find(v => v.id === Number(e.target.value))
+                        })
+                      }
+                    >
+                      <option value="">Select Vehicle</option>
+                      {vehicles.map(v => (
+                        <option key={v.id} value={v.id}>
+                          {v.type} - {v.reg_number} ({v.driver_name || 'TBD'})
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="bg-blue-600 text-white px-4 py-1 rounded"
+                      onClick={() => assignVehicle(c.id)}
+                    >
+                      Assign
+                    </button>
+                  </>
                 )}
-              </td>
-              <td className="p-3">
-                {c.vehicle_assigned ? c.pickup_time : (
-                  <input
-                    type="time"
-                    className="border p-1 w-full"
-                    onChange={e => setAssignData({...assignData, [c.id]: {...assignData[c.id], pickup_time: e.target.value}})}
-                  />
-                )}
-              </td>
-              <td className="p-3">
-                {!c.vehicle_assigned && (
-                  <button
-                    className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-800"
-                    onClick={() => handleAssign(c.id)}
-                  >
-                    Assign
-                  </button>
-                )}
-                {c.vehicle_assigned && <span className="text-green-700 font-semibold">Assigned</span>}
               </td>
             </tr>
           ))}
