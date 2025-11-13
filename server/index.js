@@ -57,6 +57,14 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
+console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
+console.log('SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? 'OK' : 'MISSING');
+
+//
+// mounting vehicles
+const vehiclesRouter = require('./routes/vehicles');
+app.use('/api/vehicles', vehiclesRouter);
+
 // Quick test to confirm DB connectivity on startup
 async function testDB() {
   try {
@@ -84,6 +92,10 @@ app.locals.supabase = supabase;
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", time: new Date().toISOString() });
 });
+
+
+const activeCasesRouter = require('./routes/activeCases');
+app.use('/api/activeCases', activeCasesRouter);
 
 // ---------------------
 // 6️⃣ IMPORT AND USE ROUTES
