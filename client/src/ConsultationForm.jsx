@@ -1,5 +1,5 @@
 // src/components/ConsultationForm.jsx
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 
 const PLAN_DATA = {
   motjha: {
@@ -25,7 +25,6 @@ const PLAN_DATA = {
     Pearl: { '18-65': 455 },
     Ivory: { '18-65': 565 }
   },
-  // ✅ ADDED SPECIAL SPRING PLANS
   specials: {
     'Spring A': { 6: 120, 10: 180 },
     'Spring B': { 6: 125, 10: 203 }
@@ -42,7 +41,6 @@ const COLOUR_GRADE = {
   Ivory: { casket: "Tombstone", tent: 1, chairs: 200, grocery: 100 }
 };
 
-// ✅ ADDED SPECIAL PLAN BENEFITS
 const SPECIAL_PLAN_BENEFITS = {
   'Spring A': {
     casket: "3-Tier Coffin",
@@ -70,6 +68,7 @@ const SPECIAL_PLAN_BENEFITS = {
 };
 
 export default function ConsultationForm() {
+  // Initialize form state with all fields
   const [form, setForm] = useState({
     plan_category: 'motjha',
     plan_name: 'Green',
@@ -100,25 +99,42 @@ export default function ConsultationForm() {
 
   const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-  const getAutoPrice = () => {
+  // ✅ FIXED: Use useCallback to prevent unnecessary re-renders
+  const getAutoPrice = useCallback(() => {
     if (form.plan_category === 'colour_grade') return 0;
-    const plan = PLAN_DATA[form.plan_category][form.plan_name];
+    const plan = PLAN_DATA[form.plan_category]?.[form.plan_name];
     const key = form.plan_category === 'motjha' || form.plan_category === 'specials' ? form.plan_members : form.plan_age_bracket;
     return plan?.[key] || 0;
-  };
+  }, [form.plan_category, form.plan_name, form.plan_members, form.plan_age_bracket]);
 
+  // ✅ FIXED: Memoize the displayed price
   const displayedPrice = form.service_type === 'book' ? getAutoPrice() : form.total_price || '';
 
-  // ✅ Get auto casket type based on plan selection
-  const getAutoCasketType = () => {
+  // ✅ FIXED: Stable casket type function
+  const getAutoCasketType = useCallback(() => {
     if (form.plan_category === 'specials') {
       return SPECIAL_PLAN_BENEFITS[form.plan_name]?.casket || '';
     }
     return form.casket_type || COLOUR_GRADE[form.plan_name]?.casket || '';
-  };
+  }, [form.plan_category, form.plan_name, form.casket_type]);
 
-  // ✅ Check if current plan is a special plan
   const isSpecialPlan = form.plan_category === 'specials';
+
+  // ✅ FIXED: Stable input handler
+  const handleInputChange = useCallback((field, value) => {
+    setForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  }, []);
+
+  // ✅ FIXED: Stable select handler
+  const handleSelectChange = useCallback((field, value) => {
+    setForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -147,6 +163,7 @@ export default function ConsultationForm() {
       }
 
       setMessage('✅ Case submitted successfully!');
+      // Reset form
       setForm({
         plan_category: 'motjha',
         plan_name: 'Green',
@@ -179,16 +196,15 @@ export default function ConsultationForm() {
     }
   };
 
-  const InputField = ({ 
+  // ✅ FIXED: Stable InputField component
+  const InputField = React.memo(({ 
     label, 
     type = "text", 
     placeholder, 
     value, 
     onChange, 
     required = false, 
-    className = "", 
-    disabled = false,
-    readOnly = false 
+    className = "" 
   }) => (
     <div className={className}>
       <label className="block text-sm font-semibold text-gray-700 mb-1">
@@ -200,16 +216,13 @@ export default function ConsultationForm() {
         required={required}
         value={value}
         onChange={onChange}
-        disabled={disabled}
-        readOnly={readOnly}
-        className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition ${
-          disabled || readOnly ? 'bg-gray-100 cursor-not-allowed' : ''
-        }`}
+        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
       />
     </div>
-  );
+  ));
 
-  const SelectField = ({ label, value, onChange, children, className = "" }) => (
+  // ✅ FIXED: Stable SelectField component
+  const SelectField = React.memo(({ label, value, onChange, children, className = "" }) => (
     <div className={className}>
       <label className="block text-sm font-semibold text-gray-700 mb-1">{label}</label>
       <select
@@ -220,7 +233,7 @@ export default function ConsultationForm() {
         {children}
       </select>
     </div>
-  );
+  ));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
@@ -253,33 +266,33 @@ export default function ConsultationForm() {
                 placeholder="Enter deceased name"
                 required
                 value={form.deceased_name}
-                onChange={e => setForm({...form, deceased_name: e.target.value})}
+                onChange={(e) => handleInputChange('deceased_name', e.target.value)}
               />
               <InputField
                 label="ID Number"
                 placeholder="Enter ID number"
                 value={form.deceased_id}
-                onChange={e => setForm({...form, deceased_id: e.target.value})}
+                onChange={(e) => handleInputChange('deceased_id', e.target.value)}
               />
               <InputField
                 label="Next of Kin Name"
                 placeholder="Enter next of kin name"
                 required
                 value={form.nok_name}
-                onChange={e => setForm({...form, nok_name: e.target.value})}
+                onChange={(e) => handleInputChange('nok_name', e.target.value)}
               />
               <InputField
                 label="Contact Number"
                 placeholder="Enter contact number"
                 required
                 value={form.nok_contact}
-                onChange={e => setForm({...form, nok_contact: e.target.value})}
+                onChange={(e) => handleInputChange('nok_contact', e.target.value)}
               />
               <InputField
                 label="Relationship to Deceased"
                 placeholder="e.g., Spouse, Child, Sibling"
                 value={form.nok_relation}
-                onChange={e => setForm({...form, nok_relation: e.target.value})}
+                onChange={(e) => handleInputChange('nok_relation', e.target.value)}
               />
             </div>
           </div>
@@ -294,7 +307,15 @@ export default function ConsultationForm() {
               <SelectField
                 label="Plan Category"
                 value={form.plan_category}
-                onChange={e => setForm({...form, plan_category: e.target.value, plan_name: e.target.value === 'specials' ? 'Spring A' : 'Green'})}
+                onChange={(e) => {
+                  const newCategory = e.target.value;
+                  const newName = newCategory === 'specials' ? 'Spring A' : 'Green';
+                  setForm(prev => ({
+                    ...prev,
+                    plan_category: newCategory,
+                    plan_name: newName
+                  }));
+                }}
               >
                 <option value="motjha">Motjha O Tlhele</option>
                 <option value="single">Single Plan</option>
@@ -306,7 +327,7 @@ export default function ConsultationForm() {
               <SelectField
                 label="Plan Name"
                 value={form.plan_name}
-                onChange={e => setForm({...form, plan_name: e.target.value})}
+                onChange={(e) => handleSelectChange('plan_name', e.target.value)}
               >
                 {Object.keys(form.plan_category === 'colour_grade' ? COLOUR_GRADE : PLAN_DATA[form.plan_category]).map(p => (
                   <option key={p} value={p}>{p}</option>
@@ -317,7 +338,7 @@ export default function ConsultationForm() {
                 <SelectField
                   label="Members"
                   value={form.plan_members}
-                  onChange={e => setForm({...form, plan_members: e.target.value})}
+                  onChange={(e) => handleSelectChange('plan_members', parseInt(e.target.value))}
                 >
                   {[6, 10].map(n => <option key={n} value={n}>{n} Members</option>)}
                 </SelectField>
@@ -327,14 +348,14 @@ export default function ConsultationForm() {
                 <SelectField
                   label="Age Bracket"
                   value={form.plan_age_bracket}
-                  onChange={e => setForm({...form, plan_age_bracket: e.target.value})}
+                  onChange={(e) => handleSelectChange('plan_age_bracket', e.target.value)}
                 >
                   {['18-65', '66-85', '86-100'].map(a => <option key={a} value={a}>{a} Years</option>)}
                 </SelectField>
               )}
             </div>
 
-            {/* ✅ SPECIAL PLAN BENEFITS DISPLAY */}
+            {/* SPECIAL PLAN BENEFITS DISPLAY */}
             {isSpecialPlan && (
               <div className="bg-green-50 border border-green-200 rounded-xl p-6 mb-6">
                 <h4 className="font-bold text-green-800 text-lg mb-3">
@@ -370,7 +391,7 @@ export default function ConsultationForm() {
                     name="service_type" 
                     value="book" 
                     checked={form.service_type === 'book'} 
-                    onChange={e => setForm({...form, service_type: e.target.value})}
+                    onChange={(e) => handleInputChange('service_type', e.target.value)}
                     className="w-5 h-5 text-red-600 focus:ring-red-500"
                   />
                   <span className="text-gray-700 font-medium">Book (Plan Price)</span>
@@ -381,7 +402,7 @@ export default function ConsultationForm() {
                     name="service_type" 
                     value="private" 
                     checked={form.service_type === 'private'} 
-                    onChange={e => setForm({...form, service_type: e.target.value})}
+                    onChange={(e) => handleInputChange('service_type', e.target.value)}
                     className="w-5 h-5 text-red-600 focus:ring-red-500"
                   />
                   <span className="text-gray-700 font-medium">Private (Manual Price)</span>
@@ -406,7 +427,7 @@ export default function ConsultationForm() {
                       type="number" 
                       placeholder="0.00" 
                       value={form.total_price} 
-                      onChange={e => setForm({...form, total_price: e.target.value})}
+                      onChange={(e) => handleInputChange('total_price', e.target.value)}
                       className="w-32 px-3 py-2 border border-gray-300 rounded text-right text-lg font-semibold focus:ring-2 focus:ring-red-500"
                     />
                   </div>
@@ -422,37 +443,47 @@ export default function ConsultationForm() {
               Casket & Delivery Details
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <InputField
-                label="Casket / Coffin Type"
-                placeholder="e.g., Bedwood, Crucifix, Princeton Dome"
-                value={getAutoCasketType()}
-                onChange={e => setForm({...form, casket_type: e.target.value})}
-                disabled={isSpecialPlan}
-              />
+              {/* FIXED: Casket Type Field */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Casket / Coffin Type
+                </label>
+                {isSpecialPlan ? (
+                  <div className="w-full px-4 py-3 bg-green-50 border border-green-200 rounded-lg text-green-700 font-medium">
+                    {getAutoCasketType()} (Auto-set for {form.plan_name})
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    placeholder="e.g., Bedwood, Crucifix, Princeton Dome"
+                    value={getAutoCasketType()}
+                    onChange={(e) => handleInputChange('casket_type', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                  />
+                )}
+              </div>
+
               <InputField
                 label="Casket Colour"
                 placeholder="Enter casket colour"
                 value={form.casket_colour}
-                onChange={e => setForm({...form, casket_colour: e.target.value})}
+                onChange={(e) => handleInputChange('casket_colour', e.target.value)}
               />
+              
               <InputField
                 label="Delivery Date"
                 type="date"
                 value={form.delivery_date}
-                onChange={e => setForm({...form, delivery_date: e.target.value})}
+                onChange={(e) => handleInputChange('delivery_date', e.target.value)}
               />
+              
               <InputField
                 label="Delivery Time"
                 type="time"
                 value={form.delivery_time}
-                onChange={e => setForm({...form, delivery_time: e.target.value})}
+                onChange={(e) => handleInputChange('delivery_time', e.target.value)}
               />
             </div>
-            {isSpecialPlan && (
-              <p className="text-sm text-green-600 mt-2">
-                ✅ Casket type automatically set to {SPECIAL_PLAN_BENEFITS[form.plan_name]?.casket} for {form.plan_name}
-              </p>
-            )}
           </div>
 
           {/* FUNERAL DETAILS SECTION */}
@@ -467,27 +498,27 @@ export default function ConsultationForm() {
                 type="date"
                 required
                 value={form.funeral_date}
-                onChange={e => setForm({...form, funeral_date: e.target.value})}
+                onChange={(e) => handleInputChange('funeral_date', e.target.value)}
               />
               <InputField
                 label="Funeral Time"
                 type="time"
                 required
                 value={form.funeral_time}
-                onChange={e => setForm({...form, funeral_time: e.target.value})}
+                onChange={(e) => handleInputChange('funeral_time', e.target.value)}
               />
               <InputField
                 label="Venue Name"
                 placeholder="e.g., Local Church, Community Hall"
                 value={form.venue_name}
-                onChange={e => setForm({...form, venue_name: e.target.value})}
+                onChange={(e) => handleInputChange('venue_name', e.target.value)}
               />
               <InputField
                 label="Full Address (GPS)"
                 placeholder="Enter complete venue address"
                 required
                 value={form.venue_address}
-                onChange={e => setForm({...form, venue_address: e.target.value})}
+                onChange={(e) => handleInputChange('venue_address', e.target.value)}
               />
             </div>
           </div>
@@ -503,7 +534,7 @@ export default function ConsultationForm() {
                 <input 
                   type="checkbox" 
                   checked={form.requires_cow} 
-                  onChange={e => setForm({...form, requires_cow: e.target.checked})}
+                  onChange={(e) => handleInputChange('requires_cow', e.target.checked)}
                   className="w-5 h-5 text-red-600 focus:ring-red-500 rounded"
                 />
                 <span className="text-gray-700 font-medium">Requires Cow (Kgomo)</span>
@@ -512,7 +543,7 @@ export default function ConsultationForm() {
                 <input 
                   type="checkbox" 
                   checked={form.requires_tombstone} 
-                  onChange={e => setForm({...form, requires_tombstone: e.target.checked})}
+                  onChange={(e) => handleInputChange('requires_tombstone', e.target.checked)}
                   className="w-5 h-5 text-red-600 focus:ring-red-500 rounded"
                 />
                 <span className="text-gray-700 font-medium">Requires Tombstone</span>
@@ -522,7 +553,7 @@ export default function ConsultationForm() {
                   label="Intake Day"
                   type="date"
                   value={form.intake_day}
-                  onChange={e => setForm({...form, intake_day: e.target.value})}
+                  onChange={(e) => handleInputChange('intake_day', e.target.value)}
                 />
               </div>
             </div>
