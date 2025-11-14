@@ -116,43 +116,137 @@ if (vehiclesRoute) app.use("/api/vehicles", vehiclesRoute);
 if (inventoryRoute) app.use("/api/inventory", inventoryRoute);
 
 // ---------------------
-// 🚨 TEMPORARY INVENTORY ROUTE
+// 🚀 ENHANCED PROFESSIONAL INVENTORY ROUTES
 // ---------------------
+
+// Get all inventory with advanced filtering
+// Enhanced /api/inventory route with debugging
 app.get('/api/inventory', async (req, res) => {
   try {
-    console.log('📦 Inventory route called');
-    const { data, error } = await req.app.locals.supabase
+    const { category, low_stock } = req.query;
+    
+    let query = req.app.locals.supabase
       .from('inventory')
       .select('*')
       .order('category')
       .order('name');
 
-    if (error) {
-      console.error('Supabase error:', error);
-      throw error;
+    if (category && category !== 'all') {
+      query = query.eq('category', category);
     }
+    
+    const { data, error } = await query;
 
-    // Calculate available quantity
-    const inventoryWithAvailable = data.map(item => ({
-      ...item,
-      available_quantity: item.stock_quantity - (item.reserved_quantity || 0)
-    }));
+    if (error) throw error;
 
-    console.log(`✅ Returning ${inventoryWithAvailable.length} inventory items`);
-    res.json({ success: true, inventory: inventoryWithAvailable });
+    // DEBUG: Log each item's stock calculation
+    console.log('=== INVENTORY DEBUG ===');
+    const inventoryWithAvailable = data.map(item => {
+      const available = item.stock_quantity - (item.reserved_quantity || 0);
+      const isLowStock = available <= item.low_stock_threshold;
+      
+      console.log(`Item: ${item.name}`);
+      console.log(`  Stock: ${item.stock_quantity}, Reserved: ${item.reserved_quantity || 0}`);
+      console.log(`  Available: ${available}, Low Threshold: ${item.low_stock_threshold}`);
+      console.log(`  Is Low Stock: ${isLowStock} (${available} <= ${item.low_stock_threshold} = ${isLowStock})`);
+      
+      return {
+        ...item,
+        available_quantity: available,
+        is_low_stock: isLowStock
+      };
+    });
+
+    const lowStockCount = inventoryWithAvailable.filter(item => item.is_low_stock).length;
+    console.log(`=== TOTAL LOW STOCK ITEMS: ${lowStockCount} ===`);
+
+    res.json({ 
+      success: true, 
+      inventory: inventoryWithAvailable,
+      total: inventoryWithAvailable.length,
+      low_stock_count: lowStockCount
+    });
   } catch (error) {
     console.error('Error fetching inventory:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
+// Get inventory statistics for dashboard
+app.get('/api/inventory/stats', async (req, res) => {
+  try {
+    const { data, error } = await req.app.locals.supabase
+      .from('inventory')
+      .select('*');
+
+    if (error) throw error;
+
+    const stats = {
+      total_items: data.length,
+      total_value: data.reduce((sum, item) => sum + (item.stock_quantity * (item.unit_price || 0)), 0),
+      low_stock_items: data.filter(item => 
+        (item.stock_quantity - (item.reserved_quantity || 0)) <= item.low_stock_threshold
+      ).length,
+      out_of_stock: data.filter(item => 
+        (item.stock_quantity - (item.reserved_quantity || 0)) <= 0
+      ).length,
+      categories: {}
+    };
+
+    // Count by category
+    data.forEach(item => {
+      stats.categories[item.category] = (stats.categories[item.category] || 0) + 1;
+    });
+
+    res.json({ success: true, stats });
+  } catch (error) {
+    console.error('Error fetching inventory stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get stock movement history (REPORTS)
+app.get('/api/inventory/reports/movement', async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    
+    const { data: movements, error } = await req.app.locals.supabase
+      .from('stock_movements')
+      .select(`
+        *,
+        inventory:inventory_id (name, category, sku),
+        cases:case_id (case_number, deceased_name)
+      `)
+      .gte('movement_date', new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString())
+      .order('movement_date', { ascending: false });
+
+    if (error) throw error;
+
+    res.json({ success: true, movements });
+  } catch (error) {
+    console.error('Error fetching movement report:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update stock quantity
 app.patch('/api/inventory/:id/stock', async (req, res) => {
   try {
-    const { stock_quantity } = req.body;
+    const { stock_quantity, reason } = req.body;
     const { id } = req.params;
     
     console.log(`📦 Updating stock for item ${id} to ${stock_quantity}`);
     
+    // Get current stock for history
+    const { data: currentItem, error: fetchError } = await req.app.locals.supabase
+      .from('inventory')
+      .select('stock_quantity, name')
+      .eq('id', id)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // Update stock
     const { data, error } = await req.app.locals.supabase
       .from('inventory')
       .update({ stock_quantity })
@@ -164,9 +258,142 @@ app.patch('/api/inventory/:id/stock', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Inventory item not found' });
     }
 
+    // Record stock movement for reporting
+    await req.app.locals.supabase
+      .from('stock_movements')
+      .insert({
+        inventory_id: id,
+        movement_type: 'adjustment',
+        quantity_change: stock_quantity - currentItem.stock_quantity,
+        previous_quantity: currentItem.stock_quantity,
+        new_quantity: stock_quantity,
+        reason: reason || 'Manual adjustment',
+        recorded_by: 'admin' // You can add user authentication later
+      });
+
     res.json({ success: true, item: data[0] });
   } catch (error) {
     console.error('Error updating inventory stock:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create new inventory item
+app.post('/api/inventory', async (req, res) => {
+  try {
+    const { name, category, sku, stock_quantity, unit_price, low_stock_threshold, location } = req.body;
+    
+    const { data, error } = await req.app.locals.supabase
+      .from('inventory')
+      .insert([
+        {
+          name,
+          category,
+          sku,
+          stock_quantity: stock_quantity || 0,
+          unit_price: unit_price || 0,
+          low_stock_threshold: low_stock_threshold || 2,
+          location: location || 'Manekeng Showroom'
+        }
+      ])
+      .select();
+
+    if (error) throw error;
+
+    res.status(201).json({ success: true, item: data[0] });
+  } catch (error) {
+    console.error('Error creating inventory item:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Add this temporary debug route
+app.get('/api/inventory/debug-low-stock', async (req, res) => {
+  try {
+    const { data, error } = await req.app.locals.supabase
+      .from('inventory')
+      .select('*');
+
+    if (error) throw error;
+
+    const debugInfo = data.map(item => {
+      const available = item.stock_quantity - (item.reserved_quantity || 0);
+      return {
+        name: item.name,
+        stock_quantity: item.stock_quantity,
+        reserved_quantity: item.reserved_quantity || 0,
+        available: available,
+        low_stock_threshold: item.low_stock_threshold,
+        should_be_low_stock: available <= item.low_stock_threshold,
+        calculation: `${available} <= ${item.low_stock_threshold} = ${available <= item.low_stock_threshold}`
+      };
+    });
+
+    res.json({ success: true, debug: debugInfo });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get inventory statistics for dashboard 
+app.get('/api/inventory/stats', async (req, res) => {
+  try {
+    const { data, error } = await req.app.locals.supabase
+      .from('inventory')
+      .select('*');
+
+    if (error) throw error;
+
+    const stats = {
+      total_items: data.length,
+      total_value: data.reduce((sum, item) => sum + (item.stock_quantity * (item.unit_price || 0)), 0),
+      low_stock_items: data.filter(item => {
+        const available = item.stock_quantity - (item.reserved_quantity || 0);
+        return available <= item.low_stock_threshold;
+      }).length,
+      out_of_stock: data.filter(item => {
+        const available = item.stock_quantity - (item.reserved_quantity || 0);
+        return available <= 0;
+      }).length,
+      categories: {}
+    };
+
+    // Count by category
+    data.forEach(item => {
+      stats.categories[item.category] = (stats.categories[item.category] || 0) + 1;
+    });
+
+    console.log(`📊 Inventory Stats: ${stats.total_items} items, R${stats.total_value} value, ${stats.low_stock_items} low stock`);
+
+    res.json({ success: true, stats });
+  } catch (error) {
+    console.error('Error fetching inventory stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get stock movement history (REPORTS) 
+app.get('/api/inventory/reports/movement', async (req, res) => {
+  try {
+    // First, let's check if the stock_movements table exists
+    const { data, error } = await req.app.locals.supabase
+      .from('stock_movements')
+      .select(`
+        *,
+        inventory:inventory_id (name, category, sku)
+      `)
+      .order('movement_date', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.log('Stock movements table might not exist yet:', error.message);
+      // Return empty array if table doesn't exist
+      return res.json({ success: true, movements: [] });
+    }
+
+    res.json({ success: true, movements: data });
+  } catch (error) {
+    console.error('Error fetching movement report:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
