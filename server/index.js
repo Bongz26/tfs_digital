@@ -105,6 +105,7 @@ const dashboardRoute = loadRoute('./routes/dashboard', 'dashboard');
 const rosterRoute = loadRoute('./routes/roster', 'roster');
 const activeCasesRoute = loadRoute('./routes/activeCases', 'activeCases');
 const vehiclesRoute = loadRoute('./routes/vehicles', 'vehicles');
+const inventoryRoute = loadRoute('./routes/inventory', 'inventory');
 
 // Register routes that loaded successfully
 if (casesRoute) app.use("/api/cases", casesRoute);
@@ -112,6 +113,7 @@ if (dashboardRoute) app.use("/api/dashboard", dashboardRoute);
 if (rosterRoute) app.use("/api/roster", rosterRoute);
 if (activeCasesRoute) app.use("/api/activeCases", activeCasesRoute);
 if (vehiclesRoute) app.use("/api/vehicles", vehiclesRoute);
+if (inventoryRoute) app.use("/api/inventory", inventoryRoute);
 
 // ---------------------
 // 7️⃣ START SERVER

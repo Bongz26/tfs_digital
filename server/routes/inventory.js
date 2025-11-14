@@ -1,17 +1,24 @@
-// server/routes/inventory.js
 const express = require('express');
 const router = express.Router();
-const { query } = require('../config/db');
 
 // Get all inventory items
 router.get('/', async (req, res) => {
   try {
-    const result = await query(
-      `SELECT *, (stock_quantity - reserved_quantity) as available_quantity
-       FROM inventory 
-       ORDER BY category, name`
-    );
-    res.json({ success: true, inventory: result.rows });
+    const { data, error, count } = await req.app.locals.supabase
+      .from('inventory')
+      .select('*')
+      .order('category')
+      .order('name');
+
+    if (error) throw error;
+
+    // Calculate available quantity
+    const inventoryWithAvailable = data.map(item => ({
+      ...item,
+      available_quantity: item.stock_quantity - item.reserved_quantity
+    }));
+
+    res.json({ success: true, inventory: inventoryWithAvailable });
   } catch (error) {
     console.error('Error fetching inventory:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -21,33 +28,21 @@ router.get('/', async (req, res) => {
 // Get low stock items
 router.get('/low-stock', async (req, res) => {
   try {
-    const result = await query(
-      `SELECT *, (stock_quantity - reserved_quantity) as available_quantity
-       FROM inventory 
-       WHERE (stock_quantity - reserved_quantity) <= low_stock_threshold
-       ORDER BY (stock_quantity - reserved_quantity) ASC`
+    const { data, error } = await req.app.locals.supabase
+      .from('inventory')
+      .select('*')
+      .order('stock_quantity', { ascending: true });
+
+    if (error) throw error;
+
+    // Filter low stock items
+    const lowStockItems = data.filter(item => 
+      (item.stock_quantity - item.reserved_quantity) <= item.low_stock_threshold
     );
-    res.json({ success: true, inventory: result.rows });
+
+    res.json({ success: true, inventory: lowStockItems });
   } catch (error) {
     console.error('Error fetching low stock items:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Get single inventory item by ID
-router.get('/:id', async (req, res) => {
-  try {
-    const result = await query(
-      `SELECT *, (stock_quantity - reserved_quantity) as available_quantity
-       FROM inventory WHERE id = $1`,
-      [req.params.id]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Inventory item not found' });
-    }
-    res.json({ success: true, item: result.rows[0] });
-  } catch (error) {
-    console.error('Error fetching inventory item:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -56,14 +51,19 @@ router.get('/:id', async (req, res) => {
 router.patch('/:id/stock', async (req, res) => {
   try {
     const { stock_quantity } = req.body;
-    const result = await query(
-      `UPDATE inventory SET stock_quantity = $1 WHERE id = $2 RETURNING *`,
-      [stock_quantity, req.params.id]
-    );
-    if (result.rows.length === 0) {
+    
+    const { data, error } = await req.app.locals.supabase
+      .from('inventory')
+      .update({ stock_quantity })
+      .eq('id', req.params.id)
+      .select();
+
+    if (error) throw error;
+    if (data.length === 0) {
       return res.status(404).json({ success: false, error: 'Inventory item not found' });
     }
-    res.json({ success: true, item: result.rows[0] });
+
+    res.json({ success: true, item: data[0] });
   } catch (error) {
     console.error('Error updating inventory stock:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -77,15 +77,18 @@ router.post('/:id/reserve', async (req, res) => {
     const inventory_id = req.params.id;
 
     // Check available stock
-    const inventoryResult = await query(
-      `SELECT stock_quantity, reserved_quantity FROM inventory WHERE id = $1`,
-      [inventory_id]
-    );
-    if (inventoryResult.rows.length === 0) {
+    const { data: inventoryData, error: inventoryError } = await req.app.locals.supabase
+      .from('inventory')
+      .select('stock_quantity, reserved_quantity')
+      .eq('id', inventory_id)
+      .single();
+
+    if (inventoryError) throw inventoryError;
+    if (!inventoryData) {
       return res.status(404).json({ success: false, error: 'Inventory item not found' });
     }
 
-    const available = inventoryResult.rows[0].stock_quantity - inventoryResult.rows[0].reserved_quantity;
+    const available = inventoryData.stock_quantity - inventoryData.reserved_quantity;
     if (available < quantity) {
       return res.status(400).json({ 
         success: false, 
@@ -94,22 +97,29 @@ router.post('/:id/reserve', async (req, res) => {
     }
 
     // Create reservation
-    const reservationResult = await query(
-      `INSERT INTO reservations (case_id, inventory_id, quantity)
-       VALUES ($1, $2, $3)
-       RETURNING *`,
-      [case_id, inventory_id, quantity]
-    );
+    const { data: reservationData, error: reservationError } = await req.app.locals.supabase
+      .from('reservations')
+      .insert([
+        { 
+          case_id, 
+          inventory_id, 
+          quantity,
+          status: 'reserved'
+        }
+      ])
+      .select();
+
+    if (reservationError) throw reservationError;
 
     // Update reserved quantity
-    await query(
-      `UPDATE inventory 
-       SET reserved_quantity = reserved_quantity + $1 
-       WHERE id = $2`,
-      [quantity, inventory_id]
-    );
+    const { error: updateError } = await req.app.locals.supabase
+      .from('inventory')
+      .update({ reserved_quantity: inventoryData.reserved_quantity + quantity })
+      .eq('id', inventory_id);
 
-    res.status(201).json({ success: true, reservation: reservationResult.rows[0] });
+    if (updateError) throw updateError;
+
+    res.status(201).json({ success: true, reservation: reservationData[0] });
   } catch (error) {
     console.error('Error creating reservation:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -117,4 +127,3 @@ router.post('/:id/reserve', async (req, res) => {
 });
 
 module.exports = router;
-
