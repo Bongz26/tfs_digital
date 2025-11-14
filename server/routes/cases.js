@@ -21,8 +21,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// ✅ ADD THIS - Get single case by ID
-// GET /api/cases/:id
+// GET /api/cases/:id - Get single case by ID
 router.get('/:id', async (req, res) => {
   try {
     const supabase = req.app.locals.supabase;
@@ -47,6 +46,71 @@ router.get('/:id', async (req, res) => {
   } catch (err) {
     console.error('Single case fetch error:', err.message);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ✅ ADD THIS POST ROUTE - Create new case
+// POST /api/cases
+router.post('/', async (req, res) => {
+  try {
+    const supabase = req.app.locals.supabase;
+    const caseData = req.body;
+
+    console.log('Received case data:', caseData);
+
+    // Generate case number (THS-YYYY-XXX)
+    const today = new Date();
+    const year = today.getFullYear();
+    
+    // Get the latest case number to increment
+    const { data: latestCase, error: latestError } = await supabase
+      .from('cases')
+      .select('case_number')
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (latestError) throw latestError;
+
+    let caseNumber;
+    if (latestCase && latestCase.length > 0) {
+      const lastNumber = parseInt(latestCase[0].case_number.split('-')[2]) || 0;
+      caseNumber = `THS-${year}-${String(lastNumber + 1).padStart(3, '0')}`;
+    } else {
+      caseNumber = `THS-${year}-001`;
+    }
+
+    // Prepare data for insertion
+    const insertData = {
+      ...caseData,
+      case_number: caseNumber,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    // Insert into database
+    const { data, error } = await supabase
+      .from('cases')
+      .insert([insertData])
+      .select();
+
+    if (error) {
+      console.error('Database insert error:', error);
+      throw error;
+    }
+
+    console.log('Case created successfully:', data);
+    res.json({ 
+      success: true, 
+      message: 'Case created successfully', 
+      case: data[0] 
+    });
+
+  } catch (err) {
+    console.error('Create case error:', err.message);
+    res.status(500).json({ 
+      success: false, 
+      error: err.message 
+    });
   }
 });
 
