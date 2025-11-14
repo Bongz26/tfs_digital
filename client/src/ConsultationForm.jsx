@@ -1,5 +1,5 @@
 // src/components/ConsultationForm.jsx
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 
 const PLAN_DATA = {
   motjha: {
@@ -68,7 +68,6 @@ const SPECIAL_PLAN_BENEFITS = {
 };
 
 export default function ConsultationForm() {
-  // Initialize form state with all fields
   const [form, setForm] = useState({
     plan_category: 'motjha',
     plan_name: 'Green',
@@ -99,42 +98,32 @@ export default function ConsultationForm() {
 
   const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
-  // ✅ FIXED: Use useCallback to prevent unnecessary re-renders
-  const getAutoPrice = useCallback(() => {
+  // ✅ SIMPLE FIX: Move calculations outside of render
+  const getAutoPrice = () => {
     if (form.plan_category === 'colour_grade') return 0;
     const plan = PLAN_DATA[form.plan_category]?.[form.plan_name];
     const key = form.plan_category === 'motjha' || form.plan_category === 'specials' ? form.plan_members : form.plan_age_bracket;
     return plan?.[key] || 0;
-  }, [form.plan_category, form.plan_name, form.plan_members, form.plan_age_bracket]);
+  };
 
-  // ✅ FIXED: Memoize the displayed price
   const displayedPrice = form.service_type === 'book' ? getAutoPrice() : form.total_price || '';
 
-  // ✅ FIXED: Stable casket type function
-  const getAutoCasketType = useCallback(() => {
+  const getAutoCasketType = () => {
     if (form.plan_category === 'specials') {
       return SPECIAL_PLAN_BENEFITS[form.plan_name]?.casket || '';
     }
     return form.casket_type || COLOUR_GRADE[form.plan_name]?.casket || '';
-  }, [form.plan_category, form.plan_name, form.casket_type]);
+  };
 
   const isSpecialPlan = form.plan_category === 'specials';
 
-  // ✅ FIXED: Stable input handler
-  const handleInputChange = useCallback((field, value) => {
+  // ✅ SIMPLE FIX: Create stable handler functions
+  const handleInputChange = (field, value) => {
     setForm(prev => ({
       ...prev,
       [field]: value
     }));
-  }, []);
-
-  // ✅ FIXED: Stable select handler
-  const handleSelectChange = useCallback((field, value) => {
-    setForm(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  }, []);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -163,7 +152,6 @@ export default function ConsultationForm() {
       }
 
       setMessage('✅ Case submitted successfully!');
-      // Reset form
       setForm({
         plan_category: 'motjha',
         plan_name: 'Green',
@@ -196,45 +184,6 @@ export default function ConsultationForm() {
     }
   };
 
-  // ✅ FIXED: Stable InputField component
-  const InputField = React.memo(({ 
-    label, 
-    type = "text", 
-    placeholder, 
-    value, 
-    onChange, 
-    required = false, 
-    className = "" 
-  }) => (
-    <div className={className}>
-      <label className="block text-sm font-semibold text-gray-700 mb-1">
-        {label} {required && <span className="text-red-600">*</span>}
-      </label>
-      <input
-        type={type}
-        placeholder={placeholder}
-        required={required}
-        value={value}
-        onChange={onChange}
-        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
-      />
-    </div>
-  ));
-
-  // ✅ FIXED: Stable SelectField component
-  const SelectField = React.memo(({ label, value, onChange, children, className = "" }) => (
-    <div className={className}>
-      <label className="block text-sm font-semibold text-gray-700 mb-1">{label}</label>
-      <select
-        value={value}
-        onChange={onChange}
-        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
-      >
-        {children}
-      </select>
-    </div>
-  ));
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
       <div className="max-w-6xl mx-auto px-4">
@@ -261,39 +210,74 @@ export default function ConsultationForm() {
               Deceased & Next of Kin Information
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <InputField
-                label="Deceased Full Name"
-                placeholder="Enter deceased name"
-                required
-                value={form.deceased_name}
-                onChange={(e) => handleInputChange('deceased_name', e.target.value)}
-              />
-              <InputField
-                label="ID Number"
-                placeholder="Enter ID number"
-                value={form.deceased_id}
-                onChange={(e) => handleInputChange('deceased_id', e.target.value)}
-              />
-              <InputField
-                label="Next of Kin Name"
-                placeholder="Enter next of kin name"
-                required
-                value={form.nok_name}
-                onChange={(e) => handleInputChange('nok_name', e.target.value)}
-              />
-              <InputField
-                label="Contact Number"
-                placeholder="Enter contact number"
-                required
-                value={form.nok_contact}
-                onChange={(e) => handleInputChange('nok_contact', e.target.value)}
-              />
-              <InputField
-                label="Relationship to Deceased"
-                placeholder="e.g., Spouse, Child, Sibling"
-                value={form.nok_relation}
-                onChange={(e) => handleInputChange('nok_relation', e.target.value)}
-              />
+              {/* ✅ FIXED: Using stable handler function */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Deceased Full Name <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter deceased name"
+                  required
+                  value={form.deceased_name}
+                  onChange={(e) => handleInputChange('deceased_name', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  ID Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter ID number"
+                  value={form.deceased_id}
+                  onChange={(e) => handleInputChange('deceased_id', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Next of Kin Name <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter next of kin name"
+                  required
+                  value={form.nok_name}
+                  onChange={(e) => handleInputChange('nok_name', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Contact Number <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter contact number"
+                  required
+                  value={form.nok_contact}
+                  onChange={(e) => handleInputChange('nok_contact', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Relationship to Deceased
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Spouse, Child, Sibling"
+                  value={form.nok_relation}
+                  onChange={(e) => handleInputChange('nok_relation', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                />
+              </div>
             </div>
           </div>
 
@@ -304,54 +288,66 @@ export default function ConsultationForm() {
               Plan Selection & Pricing
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <SelectField
-                label="Plan Category"
-                value={form.plan_category}
-                onChange={(e) => {
-                  const newCategory = e.target.value;
-                  const newName = newCategory === 'specials' ? 'Spring A' : 'Green';
-                  setForm(prev => ({
-                    ...prev,
-                    plan_category: newCategory,
-                    plan_name: newName
-                  }));
-                }}
-              >
-                <option value="motjha">Motjha O Tlhele</option>
-                <option value="single">Single Plan</option>
-                <option value="family">Family Plan</option>
-                <option value="specials">Special Spring Plans</option>
-                <option value="colour_grade">Colour Grade</option>
-              </SelectField>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Plan Category</label>
+                <select
+                  value={form.plan_category}
+                  onChange={(e) => {
+                    const newCategory = e.target.value;
+                    const newName = newCategory === 'specials' ? 'Spring A' : 'Green';
+                    setForm(prev => ({
+                      ...prev,
+                      plan_category: newCategory,
+                      plan_name: newName
+                    }));
+                  }}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                >
+                  <option value="motjha">Motjha O Tlhele</option>
+                  <option value="single">Single Plan</option>
+                  <option value="family">Family Plan</option>
+                  <option value="specials">Special Spring Plans</option>
+                  <option value="colour_grade">Colour Grade</option>
+                </select>
+              </div>
 
-              <SelectField
-                label="Plan Name"
-                value={form.plan_name}
-                onChange={(e) => handleSelectChange('plan_name', e.target.value)}
-              >
-                {Object.keys(form.plan_category === 'colour_grade' ? COLOUR_GRADE : PLAN_DATA[form.plan_category]).map(p => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </SelectField>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Plan Name</label>
+                <select
+                  value={form.plan_name}
+                  onChange={(e) => handleInputChange('plan_name', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                >
+                  {Object.keys(form.plan_category === 'colour_grade' ? COLOUR_GRADE : PLAN_DATA[form.plan_category]).map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
 
               {(form.plan_category === 'motjha' || form.plan_category === 'specials') && (
-                <SelectField
-                  label="Members"
-                  value={form.plan_members}
-                  onChange={(e) => handleSelectChange('plan_members', parseInt(e.target.value))}
-                >
-                  {[6, 10].map(n => <option key={n} value={n}>{n} Members</option>)}
-                </SelectField>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Members</label>
+                  <select
+                    value={form.plan_members}
+                    onChange={(e) => handleInputChange('plan_members', parseInt(e.target.value))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                  >
+                    {[6, 10].map(n => <option key={n} value={n}>{n} Members</option>)}
+                  </select>
+                </div>
               )}
 
               {(form.plan_category === 'single' || form.plan_category === 'family') && (
-                <SelectField
-                  label="Age Bracket"
-                  value={form.plan_age_bracket}
-                  onChange={(e) => handleSelectChange('plan_age_bracket', e.target.value)}
-                >
-                  {['18-65', '66-85', '86-100'].map(a => <option key={a} value={a}>{a} Years</option>)}
-                </SelectField>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Age Bracket</label>
+                  <select
+                    value={form.plan_age_bracket}
+                    onChange={(e) => handleInputChange('plan_age_bracket', e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                  >
+                    {['18-65', '66-85', '86-100'].map(a => <option key={a} value={a}>{a} Years</option>)}
+                  </select>
+                </div>
               )}
             </div>
 
@@ -443,7 +439,6 @@ export default function ConsultationForm() {
               Casket & Delivery Details
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* FIXED: Casket Type Field */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">
                   Casket / Coffin Type
@@ -463,26 +458,42 @@ export default function ConsultationForm() {
                 )}
               </div>
 
-              <InputField
-                label="Casket Colour"
-                placeholder="Enter casket colour"
-                value={form.casket_colour}
-                onChange={(e) => handleInputChange('casket_colour', e.target.value)}
-              />
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Casket Colour
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter casket colour"
+                  value={form.casket_colour}
+                  onChange={(e) => handleInputChange('casket_colour', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                />
+              </div>
               
-              <InputField
-                label="Delivery Date"
-                type="date"
-                value={form.delivery_date}
-                onChange={(e) => handleInputChange('delivery_date', e.target.value)}
-              />
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Delivery Date
+                </label>
+                <input
+                  type="date"
+                  value={form.delivery_date}
+                  onChange={(e) => handleInputChange('delivery_date', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                />
+              </div>
               
-              <InputField
-                label="Delivery Time"
-                type="time"
-                value={form.delivery_time}
-                onChange={(e) => handleInputChange('delivery_time', e.target.value)}
-              />
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Delivery Time
+                </label>
+                <input
+                  type="time"
+                  value={form.delivery_time}
+                  onChange={(e) => handleInputChange('delivery_time', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                />
+              </div>
             </div>
           </div>
 
@@ -493,33 +504,58 @@ export default function ConsultationForm() {
               Funeral Service Details
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <InputField
-                label="Funeral Date"
-                type="date"
-                required
-                value={form.funeral_date}
-                onChange={(e) => handleInputChange('funeral_date', e.target.value)}
-              />
-              <InputField
-                label="Funeral Time"
-                type="time"
-                required
-                value={form.funeral_time}
-                onChange={(e) => handleInputChange('funeral_time', e.target.value)}
-              />
-              <InputField
-                label="Venue Name"
-                placeholder="e.g., Local Church, Community Hall"
-                value={form.venue_name}
-                onChange={(e) => handleInputChange('venue_name', e.target.value)}
-              />
-              <InputField
-                label="Full Address (GPS)"
-                placeholder="Enter complete venue address"
-                required
-                value={form.venue_address}
-                onChange={(e) => handleInputChange('venue_address', e.target.value)}
-              />
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Funeral Date <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={form.funeral_date}
+                  onChange={(e) => handleInputChange('funeral_date', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Funeral Time <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="time"
+                  required
+                  value={form.funeral_time}
+                  onChange={(e) => handleInputChange('funeral_time', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Venue Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Local Church, Community Hall"
+                  value={form.venue_name}
+                  onChange={(e) => handleInputChange('venue_name', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Full Address (GPS) <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter complete venue address"
+                  required
+                  value={form.venue_address}
+                  onChange={(e) => handleInputChange('venue_address', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+                />
+              </div>
             </div>
           </div>
 
@@ -549,11 +585,14 @@ export default function ConsultationForm() {
                 <span className="text-gray-700 font-medium">Requires Tombstone</span>
               </label>
               <div className="mt-4">
-                <InputField
-                  label="Intake Day"
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  Intake Day
+                </label>
+                <input
                   type="date"
                   value={form.intake_day}
                   onChange={(e) => handleInputChange('intake_day', e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
                 />
               </div>
             </div>
