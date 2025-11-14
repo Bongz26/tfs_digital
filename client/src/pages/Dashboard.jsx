@@ -211,33 +211,32 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* QUICK ACTIONS SECTION */}
-      <div className="bg-white p-8 rounded-xl shadow-lg border-t-4 border-red-600 mb-6">
-        <h2 className="text-2xl font-bold text-red-800 mb-6 text-center">
-          Quick Actions
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Link 
-            to="/active-cases" 
-            className="bg-red-600 text-white p-6 rounded-xl hover:bg-red-700 transition text-center font-semibold text-lg shadow-lg"
-          >
-            Manage Active Cases
-          </Link>
-          <Link 
-            to="/roster" 
-            className="bg-blue-600 text-white p-6 rounded-xl hover:bg-blue-700 transition text-center font-semibold text-lg shadow-lg"
-          >
-            View Vehicle Roster
-          </Link>
-          <Link 
-            to="/inventory" 
-            className="bg-green-600 text-white p-6 rounded-xl hover:bg-green-700 transition text-center font-semibold text-lg shadow-lg"
-          >
-            Check Inventory
-          </Link>
-        </div>
+        {/* QUICK ACTIONS SECTION */}
+    <div className="bg-white p-8 rounded-xl shadow-lg border-t-4 border-red-600 mb-6">
+      <h2 className="text-2xl font-bold text-red-800 mb-6 text-center">
+        Quick Actions
+      </h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Link 
+          to="/active-cases" 
+          className="bg-red-600 text-white p-6 rounded-xl hover:bg-red-700 transition text-center font-semibold text-lg shadow-lg"
+        >
+          Manage Active Cases
+        </Link>
+        <Link 
+          to="/roster" 
+          className="bg-blue-600 text-white p-6 rounded-xl hover:bg-blue-700 transition text-center font-semibold text-lg shadow-lg"
+        >
+          View Vehicle Roster
+        </Link>
+        <Link 
+          to="/stock"  // ✅ CHANGED FROM "/inventory" to "/stock"
+          className="bg-green-600 text-white p-6 rounded-xl hover:bg-green-700 transition text-center font-semibold text-lg shadow-lg"
+        >
+          Check Inventory
+        </Link>
       </div>
-
+    </div>
       {/* VEHICLE CALENDAR SECTION */}
       <div className="bg-white p-8 rounded-xl shadow-lg border-t-4 border-red-600">
         <h2 className="text-2xl font-bold text-red-800 mb-6 text-center">

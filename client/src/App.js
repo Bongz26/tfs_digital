@@ -4,7 +4,8 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import ConsultationForm from './ConsultationForm';
 import Dashboard from './pages/Dashboard';
 import CaseDetails from './pages/CaseDetails';
-import ActiveCases from './pages/ActiveCases'; // ✅ import new page
+import ActiveCases from './pages/ActiveCases'; 
+import StockManagement from './pages/StockManagement';
 import './index.css';
 
 function App() {
@@ -25,6 +26,8 @@ function App() {
             <Link to="/" className="hover:text-yellow-500 transition">Intake</Link>
             <Link to="/dashboard" className="hover:text-yellow-500 transition">Dashboard</Link>
             <Link to="/active-cases" className="hover:text-yellow-500 transition">Active Cases</Link> {/* ✅ NEW */}
+            <Link to="/stock" className="flex items-center px-4 py-2 text-gray-700 hover:bg-red-50 hover:text-red-700"><span className="mr-3">📦</span>Stock Management</Link>
+          
           </div>
         </div>
       </nav>
@@ -35,6 +38,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/cases/:id" element={<CaseDetails />} />
         <Route path="/active-cases" element={<ActiveCases />} /> {/* ✅ NEW */}
+        <Route path="/stock" element={<StockManagement />} />
       </Routes>
     </Router>
   );
