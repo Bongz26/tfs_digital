@@ -179,7 +179,17 @@ export default function ConsultationForm() {
     }
   };
 
-  const InputField = ({ label, type = "text", placeholder, value, onChange, required = false, className = "" }) => (
+  const InputField = ({ 
+    label, 
+    type = "text", 
+    placeholder, 
+    value, 
+    onChange, 
+    required = false, 
+    className = "", 
+    disabled = false,
+    readOnly = false 
+  }) => (
     <div className={className}>
       <label className="block text-sm font-semibold text-gray-700 mb-1">
         {label} {required && <span className="text-red-600">*</span>}
@@ -190,7 +200,11 @@ export default function ConsultationForm() {
         required={required}
         value={value}
         onChange={onChange}
-        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition"
+        disabled={disabled}
+        readOnly={readOnly}
+        className={`w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition ${
+          disabled || readOnly ? 'bg-gray-100 cursor-not-allowed' : ''
+        }`}
       />
     </div>
   );
