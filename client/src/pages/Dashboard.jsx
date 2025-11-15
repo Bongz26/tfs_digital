@@ -3,6 +3,28 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import VehicleCalendar from '../components/VehicleCalendar';
 
+function getUpcomingSaturday() {
+  const today = new Date();
+  const day = today.getDay(); // 0 = Sunday, 6 = Saturday
+
+  // How many days until Saturday
+  const daysUntilSaturday = (6 - day + 7) % 7;
+
+  const saturday = new Date();
+  saturday.setDate(today.getDate() + daysUntilSaturday);
+
+  return saturday;
+}
+
+function formatRosterDate(date) {
+  return date.toLocaleDateString("en-ZA", {
+    weekday: "long",
+    day: "numeric",
+    month: "short"
+  });
+}
+
+
 export default function Dashboard() {
   const [stats, setStats] = useState({
     upcoming: 0,
@@ -240,7 +262,7 @@ export default function Dashboard() {
       {/* VEHICLE CALENDAR SECTION */}
       <div className="bg-white p-8 rounded-xl shadow-lg border-t-4 border-red-600">
         <h2 className="text-2xl font-bold text-red-800 mb-6 text-center">
-          Saturday 15 Nov — Live Roster
+        {formatRosterDate(getUpcomingSaturday())} 🕊️ — Live Roster 
         </h2>
         <VehicleCalendar />
       </div>

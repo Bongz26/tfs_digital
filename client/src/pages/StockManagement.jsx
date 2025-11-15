@@ -23,23 +23,23 @@ export default function StockManagement() {
   const fetchInventory = async (category = 'all') => {
     try {
       setLoading(true);
+      console.log('Fetching inventory, category:', category);
       const url = category === 'all' 
         ? `${API_URL}/api/inventory`
         : `${API_URL}/api/inventory?category=${category}`;
       
       const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      
+      console.log('Inventory response: ', data);
+  
       if (data.success) {
-        setInventory(data.inventory);
-      } else {
-        setError(data.error);
-      }
+        const withLowStock = data.inventory.map(item => ({
+          ...item,
+          is_low_stock: (item.stock_quantity - (item.reserved_quantity || 0)) <= item.low_stock_threshold
+        }));
+        setInventory(withLowStock);
+      } else setError(data.error);
     } catch (err) {
       console.error('Inventory error:', err);
       setError('Failed to load inventory data.');
@@ -47,16 +47,15 @@ export default function StockManagement() {
       setLoading(false);
     }
   };
-
-  // Fetch statistics
+  
+  
+  // Fetch stats
   const fetchStats = async () => {
     try {
       const response = await fetch(`${API_URL}/api/inventory/stats`);
       if (response.ok) {
         const data = await response.json();
-        if (data.success) {
-          setStats(data.stats);
-        }
+        if (data.success) setStats(data.stats);
       }
     } catch (err) {
       console.error('Stats error:', err);
@@ -73,20 +72,12 @@ export default function StockManagement() {
       const response = await fetch(`${API_URL}/api/inventory/${itemId}/stock`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          stock_quantity: newQuantity,
-          reason 
-        })
+        body: JSON.stringify({ stock_quantity: newQuantity, reason })
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      
       if (data.success) {
-        await fetchInventory(activeTab);
+        await fetchInventory(activeTab === 'low' ? 'all' : activeTab);
         await fetchStats();
         return { success: true };
       } else {
@@ -104,13 +95,8 @@ export default function StockManagement() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newItem)
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      
       if (data.success) {
         setShowAddForm(false);
         setNewItem({
@@ -122,12 +108,10 @@ export default function StockManagement() {
           low_stock_threshold: 2,
           location: 'Manekeng Showroom'
         });
-        await fetchInventory(activeTab);
+        await fetchInventory(activeTab === 'low' ? 'all' : activeTab);
         await fetchStats();
         return { success: true };
-      } else {
-        return { success: false, error: data.error };
-      }
+      } else return { success: false, error: data.error };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -180,7 +164,7 @@ export default function StockManagement() {
         </div>
       )}
 
-      {/* ENHANCED STATS CARDS */}
+      {/* STATS */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-600">
@@ -188,19 +172,16 @@ export default function StockManagement() {
             <p className="text-5xl font-bold text-red-600 mt-2">{stats.total_items}</p>
             <p className="text-sm text-gray-600 mt-2">{Object.keys(stats.categories).length} categories</p>
           </div>
-
           <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-orange-500">
             <h3 className="text-lg font-semibold text-gray-700">Inventory Value</h3>
             <p className="text-3xl font-bold text-orange-600 mt-2">R{stats.total_value.toLocaleString()}</p>
             <p className="text-sm text-gray-600 mt-2">Total stock value</p>
           </div>
-
           <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-yellow-500">
             <h3 className="text-lg font-semibold text-gray-700">Low Stock</h3>
             <p className="text-5xl font-bold text-yellow-600 mt-2">{stats.low_stock_items}</p>
             <p className="text-sm text-gray-600 mt-2">Need reordering</p>
           </div>
-
           <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-green-600">
             <h3 className="text-lg font-semibold text-gray-700">Out of Stock</h3>
             <p className="text-5xl font-bold text-green-600 mt-2">{stats.out_of_stock}</p>
@@ -219,7 +200,8 @@ export default function StockManagement() {
                 key={tab}
                 onClick={() => {
                   setActiveTab(tab);
-                  if (tab !== 'low') fetchInventory(tab);
+                  // ALWAYS fetch all for low stock tab
+                  fetchInventory(tab === 'low' ? 'all' : tab);
                 }}
                 className={`px-4 py-2 rounded-lg font-semibold capitalize ${
                   activeTab === tab
@@ -227,9 +209,7 @@ export default function StockManagement() {
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
-                {tab === 'all' ? 'All Items' : 
-                 tab === 'low' ? 'Low Stock' : 
-                 tab}
+                {tab === 'all' ? 'All Items' : tab === 'low' ? 'Low Stock' : tab}
               </button>
             ))}
           </div>
@@ -257,7 +237,6 @@ export default function StockManagement() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
             <h3 className="text-xl font-bold text-red-800 mb-4">Add New Inventory Item</h3>
-            
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Item Name</label>
@@ -269,7 +248,6 @@ export default function StockManagement() {
                   placeholder="e.g., Premium Oak Casket"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Category</label>
                 <select
@@ -350,7 +328,7 @@ export default function StockManagement() {
         </div>
       )}
 
-      {/* ENHANCED INVENTORY TABLE */}
+      {/* INVENTORY TABLE */}
       <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-600">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-red-800">
@@ -387,21 +365,17 @@ export default function StockManagement() {
                   </td>
                 </tr>
               ) : (
-                filteredInventory.map((item) => (
-                  <tr key={item.id} className={`border-b hover:bg-gray-50 ${
-                    item.is_low_stock ? 'bg-red-50' : ''
-                  }`}>
+                filteredInventory.map(item => (
+                  <tr key={item.id} className={`border-b hover:bg-gray-50 ${item.is_low_stock ? 'bg-red-50' : ''}`}>
                     <td className="p-3">
                       <div className="font-semibold text-gray-800">{item.name}</div>
                       <div className="text-sm text-gray-600 flex items-center space-x-2 mt-1">
-                        <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs capitalize">
-                          {item.category}
-                        </span>
+                        <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs capitalize">{item.category}</span>
                         <span>{item.sku && `SKU: ${item.sku}`}</span>
                       </div>
                       <div className="text-xs text-gray-500 mt-1">{item.location}</div>
                     </td>
-                    
+
                     <td className="p-3">
                       <div className="space-y-1">
                         <div className="flex justify-between text-sm">
@@ -414,67 +388,70 @@ export default function StockManagement() {
                         </div>
                         <div className="flex justify-between text-sm">
                           <span>Available:</span>
-                          <span className={`font-semibold ${
-                            item.available_quantity <= item.low_stock_threshold ? 'text-red-600' : 'text-green-600'
-                          }`}>
+                          <span className={`font-semibold ${item.available_quantity <= item.low_stock_threshold ? 'text-red-600' : 'text-green-600'}`}>
                             {item.available_quantity}
                           </span>
                         </div>
                       </div>
                     </td>
-                    
+
                     <td className="p-3">
                       <div className="font-semibold text-gray-800">
                         R{parseFloat(item.unit_price || 0).toFixed(2)}
                       </div>
                       <div className="text-sm text-gray-600">
                         Low stock: {item.low_stock_threshold}
-                      </div>
+                        </div>
                     </td>
-                    
-                    
+
                     <td className="p-3">
-                    {item.available_quantity <= 0 ? (
-                        <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-semibold">
-                        🔴 Out of Stock
-                        </span>
-                    ) : item.available_quantity <= item.low_stock_threshold ? (
-                        <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs font-semibold">
-                        🟡 Low Stock
-                        </span>
-                    ) : (
-                        <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold">
-                        🟢 In Stock
-                        </span>
-                    )}
+                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                        item.available_quantity <= 0
+                          ? 'bg-gray-200 text-gray-600'
+                          : item.available_quantity <= item.low_stock_threshold
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-green-100 text-green-700'
+                      }`}>
+                        {item.available_quantity <= 0
+                          ? 'Out of Stock'
+                          : item.available_quantity <= item.low_stock_threshold
+                          ? 'Low Stock'
+                          : 'In Stock'}
+                      </span>
                     </td>
-                    
-                    <td className="p-3">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => {
-                            const newQty = prompt(`Update stock quantity for ${item.name}:`, item.stock_quantity);
-                            if (newQty !== null && !isNaN(newQty)) {
-                              const reason = prompt('Reason for update (optional):', 'Stock adjustment');
-                              updateStock(item.id, parseInt(newQty), reason);
+
+                    <td className="p-3 space-x-2">
+                      <button
+                        onClick={async () => {
+                          const newQty = prompt(`Update stock for "${item.name}" (current: ${item.stock_quantity})`);
+                          if (newQty !== null) {
+                            const parsedQty = parseInt(newQty);
+                            if (!isNaN(parsedQty)) {
+                              const result = await updateStock(item.id, parsedQty);
+                              if (!result.success) alert(`Error: ${result.error}`);
                             }
-                          }}
-                          className="text-blue-600 hover:text-blue-800 underline text-sm font-medium"
-                        >
-                          Update Stock
-                        </button>
-                        <button
-                          onClick={() => {
-                            const addQty = prompt(`Add quantity to ${item.name}:`, '1');
-                            if (addQty !== null && !isNaN(addQty)) {
-                              updateStock(item.id, item.stock_quantity + parseInt(addQty), 'Stock received');
+                          }
+                        }}
+                        className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 text-sm"
+                      >
+                        Update Stock
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          const addQty = prompt(`Add quantity for "${item.name}" (current: ${item.stock_quantity})`);
+                          if (addQty !== null) {
+                            const parsedAdd = parseInt(addQty);
+                            if (!isNaN(parsedAdd)) {
+                              const result = await updateStock(item.id, item.stock_quantity + parsedAdd, 'Added manually');
+                              if (!result.success) alert(`Error: ${result.error}`);
                             }
-                          }}
-                          className="text-green-600 hover:text-green-800 underline text-sm font-medium"
-                        >
-                          Add Stock
-                        </button>
-                      </div>
+                          }
+                        }}
+                        className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
+                      >
+                        Add Quantity
+                      </button>
                     </td>
                   </tr>
                 ))
@@ -482,11 +459,6 @@ export default function StockManagement() {
             </tbody>
           </table>
         </div>
-      </div>
-
-      {/* FOOTER */}
-      <div className="mt-8 text-center text-sm text-gray-600">
-        <p>Toll Free: <span className="font-bold text-red-600">0800 01 4574</span> | Professional Stock Management System</p>
       </div>
     </div>
   );
