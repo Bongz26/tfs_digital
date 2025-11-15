@@ -1,5 +1,41 @@
 import React, { useState, useEffect } from 'react';
 
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable"; // import the function
+
+const generateStockReportPDF = (inventory) => {
+  const doc = new jsPDF();
+
+  // attach autoTable
+  autoTable(doc, {
+    startY: 45,
+    head: [["Item", "Category", "Stock", "Reserved", "Available", "Unit Price (R)", "Status"]],
+    body: inventory.map(item => [
+      item.name,
+      item.category.charAt(0).toUpperCase() + item.category.slice(1),
+      item.stock_quantity,
+      item.reserved_quantity || 0,
+      item.available_quantity,
+      item.unit_price.toFixed(2),
+      item.is_low_stock ? "Low Stock" : "In Stock",
+    ]),
+    styles: { fontSize: 10, cellPadding: 3 },
+    headStyles: { fillColor: [220, 53, 69], textColor: 255, fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+    margin: { left: 14, right: 14 },
+  });
+
+  const finalY = doc.lastAutoTable?.finalY || 45;
+  doc.setFontSize(12);
+  doc.text(`Total Items: ${inventory.length}`, 14, finalY + 10);
+  const lowStockCount = inventory.filter(i => i.is_low_stock).length;
+  doc.text(`Low Stock Items: ${lowStockCount}`, 14, finalY + 16);
+
+  doc.save(`Stock_Report_${new Date().toISOString().slice(0,10)}.pdf`);
+};
+
+
+
 export default function StockManagement() {
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -222,6 +258,14 @@ export default function StockManagement() {
             >
               <span className="mr-2">+</span> Add New Item
             </button>
+
+            <button
+            onClick={() => generateStockReportPDF(filteredInventory)}
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 font-semibold"
+              >
+            📥 Download Stock Report
+            </button>
+
             <button
               onClick={() => window.print()}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold"

@@ -1,0 +1,5 @@
+# PowerShell
+Get-ChildItem -Recurse -Directory | Where-Object { $_.FullName -notmatch 'node_modules' }
+
+# Or for a tree-like view excluding node_modules
+tree /F /A | findstr /V "node_modules"
