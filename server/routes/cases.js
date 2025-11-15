@@ -56,13 +56,12 @@ router.post('/', async (req, res) => {
     const supabase = req.app.locals.supabase;
     const caseData = req.body;
 
-    console.log('Received case data:', caseData);
+    console.log("📌 Received caseData:", caseData);
 
     // Generate case number (THS-YYYY-XXX)
     const today = new Date();
     const year = today.getFullYear();
-    
-    // Get the latest case number to increment
+
     const { data: latestCase, error: latestError } = await supabase
       .from('cases')
       .select('case_number')
@@ -87,6 +86,8 @@ router.post('/', async (req, res) => {
       updated_at: new Date().toISOString()
     };
 
+    console.log("📌 Insert payload:", insertData);
+
     // Insert into database
     const { data, error } = await supabase
       .from('cases')
@@ -94,22 +95,26 @@ router.post('/', async (req, res) => {
       .select();
 
     if (error) {
-      console.error('Database insert error:', error);
-      throw error;
+      console.error("❌ Supabase insert ERROR:");
+      console.error("message:", error.message);
+      console.error("details:", error.details);
+      console.error("hint:", error.hint);
+      console.error("code:", error.code);
+      return res.status(500).json({ success: false, error });
     }
 
     console.log('Case created successfully:', data);
-    res.json({ 
-      success: true, 
-      message: 'Case created successfully', 
-      case: data[0] 
+    res.json({
+      success: true,
+      message: 'Case created successfully',
+      case: data[0]
     });
 
   } catch (err) {
-    console.error('Create case error:', err.message);
-    res.status(500).json({ 
-      success: false, 
-      error: err.message 
+    console.error('Create case error:', err);
+    res.status(500).json({
+      success: false,
+      error: err
     });
   }
 });

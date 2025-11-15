@@ -121,10 +121,12 @@ if (inventoryRoute) app.use("/api/inventory", inventoryRoute);
 
 // Get all inventory with advanced filtering
 // Enhanced /api/inventory route with debugging
+// server/index.js (or inventory.js if you separate routes)
 app.get('/api/inventory', async (req, res) => {
   try {
-    const { category, low_stock } = req.query;
-    
+    const { category } = req.query;
+    console.log('📌 /api/inventory called, category:', category);
+
     let query = req.app.locals.supabase
       .from('inventory')
       .select('*')
@@ -132,24 +134,24 @@ app.get('/api/inventory', async (req, res) => {
       .order('name');
 
     if (category && category !== 'all') {
+      console.log('🔹 Filtering by category:', category);
       query = query.eq('category', category);
     }
-    
-    const { data, error } = await query;
 
+    const { data, error } = await query;
     if (error) throw error;
 
-    // DEBUG: Log each item's stock calculation
-    console.log('=== INVENTORY DEBUG ===');
+    console.log(`📦 Total items fetched: ${data.length}`);
+
     const inventoryWithAvailable = data.map(item => {
       const available = item.stock_quantity - (item.reserved_quantity || 0);
       const isLowStock = available <= item.low_stock_threshold;
-      
+
       console.log(`Item: ${item.name}`);
       console.log(`  Stock: ${item.stock_quantity}, Reserved: ${item.reserved_quantity || 0}`);
       console.log(`  Available: ${available}, Low Threshold: ${item.low_stock_threshold}`);
-      console.log(`  Is Low Stock: ${isLowStock} (${available} <= ${item.low_stock_threshold} = ${isLowStock})`);
-      
+      console.log(`  is_low_stock: ${isLowStock}`);
+
       return {
         ...item,
         available_quantity: available,
@@ -157,23 +159,22 @@ app.get('/api/inventory', async (req, res) => {
       };
     });
 
-    const lowStockCount = inventoryWithAvailable.filter(item => item.is_low_stock).length;
-    console.log(`=== TOTAL LOW STOCK ITEMS: ${lowStockCount} ===`);
+    const lowStockCount = inventoryWithAvailable.filter(i => i.is_low_stock).length;
+    console.log(`🚨 Total low stock items: ${lowStockCount}`);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       inventory: inventoryWithAvailable,
       total: inventoryWithAvailable.length,
       low_stock_count: lowStockCount
     });
   } catch (error) {
-    console.error('Error fetching inventory:', error);
+    console.error('❌ Error fetching inventory:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Get inventory statistics for dashboard
-app.get('/api/inventory/stats', async (req, res) => {
+app.get('/api/inventory/debug-low-stock', async (req, res) => {
   try {
     const { data, error } = await req.app.locals.supabase
       .from('inventory')
@@ -181,29 +182,27 @@ app.get('/api/inventory/stats', async (req, res) => {
 
     if (error) throw error;
 
-    const stats = {
-      total_items: data.length,
-      total_value: data.reduce((sum, item) => sum + (item.stock_quantity * (item.unit_price || 0)), 0),
-      low_stock_items: data.filter(item => 
-        (item.stock_quantity - (item.reserved_quantity || 0)) <= item.low_stock_threshold
-      ).length,
-      out_of_stock: data.filter(item => 
-        (item.stock_quantity - (item.reserved_quantity || 0)) <= 0
-      ).length,
-      categories: {}
-    };
-
-    // Count by category
-    data.forEach(item => {
-      stats.categories[item.category] = (stats.categories[item.category] || 0) + 1;
+    const debug = data.map(item => {
+      const available = item.stock_quantity - (item.reserved_quantity || 0);
+      return {
+        id: item.id,
+        name: item.name,
+        stock_quantity: item.stock_quantity,
+        reserved_quantity: item.reserved_quantity || 0,
+        low_stock_threshold: item.low_stock_threshold,
+        available,
+        is_low_stock: available <= item.low_stock_threshold
+      };
     });
 
-    res.json({ success: true, stats });
+    console.log('🛠 DEBUG LOW STOCK:', debug);
+    res.json({ success: true, debug });
   } catch (error) {
-    console.error('Error fetching inventory stats:', error);
+    console.error(error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
 
 // Get stock movement history (REPORTS)
 app.get('/api/inventory/reports/movement', async (req, res) => {
