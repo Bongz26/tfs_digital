@@ -6,10 +6,19 @@ require('dotenv').config();
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-  console.error('❌ ERROR: DATABASE_URL is not set in .env file!');
-  console.error('   Please add DATABASE_URL to your server/.env file');
+  console.error('❌ ERROR: DATABASE_URL environment variable is not set!');
+  console.error('');
+  console.error('   For LOCAL development:');
+  console.error('   Add DATABASE_URL to your server/.env file');
   console.error('   Format: DATABASE_URL=postgresql://postgres:[PASSWORD]@db.xxxxx.supabase.co:5432/postgres');
-  console.error('   Get your connection string from Supabase → Settings → Database → Connection string');
+  console.error('');
+  console.error('   For RENDER (production):');
+  console.error('   1. Go to your Render dashboard → Your Service → Environment');
+  console.error('   2. Click "Add Environment Variable"');
+  console.error('   3. Key: DATABASE_URL');
+  console.error('   4. Value: Your Supabase connection string');
+  console.error('   5. Get connection string from: Supabase → Settings → Database → Connection string');
+  console.error('');
   process.exit(1);
 }
 
