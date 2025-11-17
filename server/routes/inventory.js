@@ -5,6 +5,25 @@ const { query, getClient } = require('../config/db');
 // GET all inventory
 router.get('/', async (req, res) => {
   try {
+    // Check if inventory table exists
+    const tableCheck = await query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'inventory'
+      );
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      console.error('❌ inventory table does not exist!');
+      return res.status(500).json({
+        success: false,
+        error: 'Database table not found',
+        message: 'The inventory table does not exist. Please run the database migration.',
+        hint: 'Run the schema.sql file on your Supabase database'
+      });
+    }
+
     const { category } = req.query;
     let sql = 'SELECT * FROM inventory';
     const params = [];
@@ -20,6 +39,7 @@ router.get('/', async (req, res) => {
     res.json({ success: true, inventory: result.rows || [] });
   } catch (err) {
     console.error('❌ Error fetching inventory:', err);
+    console.error('❌ Error stack:', err.stack);
     res.status(500).json({ success: false, error: 'Failed to fetch inventory', details: err.message });
   }
 });
@@ -27,6 +47,25 @@ router.get('/', async (req, res) => {
 // GET inventory stats
 router.get('/stats', async (req, res) => {
   try {
+    // Check if inventory table exists
+    const tableCheck = await query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'inventory'
+      );
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      console.error('❌ inventory table does not exist!');
+      return res.status(500).json({
+        success: false,
+        error: 'Database table not found',
+        message: 'The inventory table does not exist. Please run the database migration.',
+        hint: 'Run the schema.sql file on your Supabase database'
+      });
+    }
+
     const statsResult = await query(`
       SELECT 
         COUNT(*) as total_items,
@@ -46,6 +85,7 @@ router.get('/stats', async (req, res) => {
     res.json({ success: true, stats });
   } catch (err) {
     console.error('❌ Error fetching inventory stats:', err);
+    console.error('❌ Error stack:', err.stack);
     res.status(500).json({ success: false, error: 'Failed to fetch inventory stats', details: err.message });
   }
 });
