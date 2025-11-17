@@ -13,11 +13,11 @@ const generateStockReportPDF = (inventory) => {
     head: [["Item", "Category", "Stock", "Reserved", "Available", "Unit Price (R)", "Status"]],
     body: inventory.map(item => [
       item.name,
-      item.category.charAt(0).toUpperCase() + item.category.slice(1),
-      item.stock_quantity,
+      item.category ? item.category.charAt(0).toUpperCase() + item.category.slice(1) : 'Other',
+      item.stock_quantity || 0,
       item.reserved_quantity || 0,
-      item.available_quantity,
-      item.unit_price.toFixed(2),
+      (item.stock_quantity || 0) - (item.reserved_quantity || 0),
+      item.unit_price ? Number(item.unit_price).toFixed(2) : '0.00',
       item.is_low_stock ? "Low Stock" : "In Stock",
     ]),
     styles: { fontSize: 10, cellPadding: 3 },
@@ -178,7 +178,7 @@ export default function StockManagement() {
     <div className="p-8 max-w-7xl mx-auto bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
       {/* HEADER */}
       <div className="text-center mb-10">
-        <h1 className="text-5xl font-bold text-red-800 mb-2">THUSANANG FUNERAL SERVICES</h1>
+        
         <p className="text-yellow-600 text-xl font-semibold">Live from QwaQwa • Re tšotella sechaba sa rona</p>
         <h2 className="text-3xl font-bold text-red-700 mt-6">Professional Stock Management</h2>
         <p className="text-gray-600 mt-2">Real-time inventory tracking and reporting</p>
