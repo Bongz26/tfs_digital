@@ -2,9 +2,26 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
+// Check if DATABASE_URL is set
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  console.error('❌ ERROR: DATABASE_URL is not set in .env file!');
+  console.error('   Please add DATABASE_URL to your server/.env file');
+  console.error('   Format: DATABASE_URL=postgresql://postgres:[PASSWORD]@db.xxxxx.supabase.co:5432/postgres');
+  console.error('   Get your connection string from Supabase → Settings → Database → Connection string');
+  process.exit(1);
+}
+
+// Validate DATABASE_URL format
+if (!databaseUrl.includes('supabase.co') && !databaseUrl.includes('@')) {
+  console.warn('⚠️  WARNING: DATABASE_URL does not appear to be a Supabase connection string');
+  console.warn('   Current value starts with:', databaseUrl.substring(0, 30) + '...');
+}
+
 // Supabase requires SSL connections
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: databaseUrl,
   ssl: {
     rejectUnauthorized: false // Supabase uses self-signed certificates
   },
@@ -20,8 +37,30 @@ pool.on('connect', () => {
 });
 
 pool.on('error', (err) => {
-  console.error('❌ Database connection error:', err);
-  process.exit(-1);
+  console.error('❌ Database connection error:', err.message);
+  if (err.code === 'ECONNREFUSED') {
+    console.error('   This usually means:');
+    console.error('   1. DATABASE_URL is pointing to localhost instead of Supabase');
+    console.error('   2. The database server is not running (if using local PostgreSQL)');
+    console.error('   3. DATABASE_URL is incorrect or missing');
+    console.error('   Check your .env file and ensure DATABASE_URL points to your Supabase database');
+  } else if (err.code === 'XX000' || err.message.includes('Tenant or user not found')) {
+    console.error('   This usually means:');
+    console.error('   1. Username format is incorrect for pooler connection');
+    console.error('   2. Try using direct connection instead of pooler');
+    console.error('   3. Or use username format: postgres (not postgres.PROJECT_REF)');
+    console.error('   For direct connection, use: postgresql://postgres:[PASSWORD]@db.xxxxx.supabase.co:5432/postgres');
+    console.error('   For pooler, username should be: postgres (not postgres.xxxxx)');
+  } else if (err.code === 'ENOTFOUND') {
+    console.error('   This usually means:');
+    console.error('   1. Supabase project might be paused - check dashboard');
+    console.error('   2. Hostname in DATABASE_URL is incorrect');
+    console.error('   3. Network/DNS issue');
+  }
+  // Don't exit in production, just log the error
+  if (process.env.NODE_ENV !== 'production') {
+    // process.exit(-1);
+  }
 });
 
 // Helper function to execute queries

@@ -35,6 +35,23 @@ const insertTestData = async () => {
     );
     console.log('✅ Test case inserted:', caseResult.rows[0].case_number);
 
+    // Insert test suppliers
+    console.log('🏢 Inserting test suppliers...');
+    const suppliers = [
+      { name: 'Phuthanang Suppliers', contact_person: 'Mpho Mokoena', phone: '+27 71 234 5678', email: 'procurement@phuthanang.co.za', address: 'Phuthaditjhaba, Free State' },
+      { name: 'Manekeng Traders', contact_person: 'Bongani Nkosi', phone: '+27 72 987 6543', email: 'orders@manekengtraders.co.za', address: 'Bethlehem, Free State' }
+    ];
+
+    for (const supplier of suppliers) {
+      await query(
+        `INSERT INTO suppliers (name, contact_person, phone, email, address)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (name) DO NOTHING`,
+        [supplier.name, supplier.contact_person, supplier.phone, supplier.email, supplier.address]
+      );
+    }
+    console.log('✅ Test suppliers inserted');
+
     // Insert test inventory items
     console.log('📦 Inserting test inventory...');
     const inventoryItems = [

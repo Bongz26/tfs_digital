@@ -49,7 +49,9 @@ CREATE TABLE IF NOT EXISTS inventory (
     reserved_quantity INT DEFAULT 0,
     location VARCHAR(50) DEFAULT 'Manekeng',
     low_stock_threshold INT DEFAULT 2,
-    unit_price DECIMAL(10,2)
+    unit_price DECIMAL(10,2),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- 4. Reservations (Stock Lock)
@@ -124,4 +126,86 @@ CREATE INDEX IF NOT EXISTS idx_reservations_inventory_id ON reservations(invento
 CREATE INDEX IF NOT EXISTS idx_roster_case_id ON roster(case_id);
 CREATE INDEX IF NOT EXISTS idx_roster_vehicle_id ON roster(vehicle_id);
 CREATE INDEX IF NOT EXISTS idx_checklist_case_id ON checklist(case_id);
+
+-- 9. Suppliers
+CREATE TABLE IF NOT EXISTS suppliers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) UNIQUE NOT NULL,
+    contact_person VARCHAR(100),
+    phone VARCHAR(20),
+    email VARCHAR(120),
+    address TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 10. Purchase Orders
+CREATE TABLE IF NOT EXISTS purchase_orders (
+    id SERIAL PRIMARY KEY,
+    po_number VARCHAR(50) UNIQUE NOT NULL,
+    supplier_id INT NOT NULL REFERENCES suppliers(id),
+    order_date DATE NOT NULL,
+    expected_delivery DATE,
+    status VARCHAR(20) DEFAULT 'draft',
+    created_by VARCHAR(100),
+    total_amount DECIMAL(12,2) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 11. Purchase Order Items
+CREATE TABLE IF NOT EXISTS purchase_order_items (
+    id SERIAL PRIMARY KEY,
+    po_id INT NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+    inventory_id INT REFERENCES inventory(id),
+    quantity_ordered INT NOT NULL,
+    received_quantity INT DEFAULT 0,
+    unit_cost DECIMAL(12,2) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 12. Stock Movements (for tracking inventory changes)
+CREATE TABLE IF NOT EXISTS stock_movements (
+    id SERIAL PRIMARY KEY,
+    inventory_id INT NOT NULL REFERENCES inventory(id),
+    movement_type VARCHAR(20) NOT NULL, -- 'purchase', 'sale', 'adjustment', 'return'
+    quantity_change INT NOT NULL,
+    previous_quantity INT NOT NULL,
+    new_quantity INT NOT NULL,
+    reason VARCHAR(200),
+    recorded_by VARCHAR(100),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_po_supplier_id ON purchase_orders(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_po_order_date ON purchase_orders(order_date);
+CREATE INDEX IF NOT EXISTS idx_poi_po_id ON purchase_order_items(po_id);
+CREATE INDEX IF NOT EXISTS idx_poi_inventory_id ON purchase_order_items(inventory_id);
+CREATE INDEX IF NOT EXISTS idx_stock_movements_inventory_id ON stock_movements(inventory_id);
+CREATE INDEX IF NOT EXISTS idx_stock_movements_created_at ON stock_movements(created_at);
+
+-- 13. Stock Takes
+CREATE TABLE IF NOT EXISTS stock_takes (
+    id SERIAL PRIMARY KEY,
+    taken_by VARCHAR(100) NOT NULL,
+    status VARCHAR(20) DEFAULT 'in_progress', -- 'in_progress', 'completed', 'cancelled'
+    created_at TIMESTAMP DEFAULT NOW(),
+    completed_at TIMESTAMP
+);
+
+-- 14. Stock Take Items
+CREATE TABLE IF NOT EXISTS stock_take_items (
+    id SERIAL PRIMARY KEY,
+    stock_take_id INT NOT NULL REFERENCES stock_takes(id) ON DELETE CASCADE,
+    inventory_id INT NOT NULL REFERENCES inventory(id),
+    system_quantity INT NOT NULL, -- Quantity in system when stock take started
+    physical_quantity INT, -- Actual counted quantity (nullable until counted)
+    difference INT, -- Calculated as physical_quantity - system_quantity
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_stock_takes_status ON stock_takes(status);
+CREATE INDEX IF NOT EXISTS idx_stock_takes_created_at ON stock_takes(created_at);
+CREATE INDEX IF NOT EXISTS idx_stock_take_items_stock_take_id ON stock_take_items(stock_take_id);
+CREATE INDEX IF NOT EXISTS idx_stock_take_items_inventory_id ON stock_take_items(inventory_id);
 

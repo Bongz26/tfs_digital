@@ -31,7 +31,7 @@ router.get('/', async (req, res) => {
 
     if (inventoryError) throw inventoryError;
 
-    // 4️⃣ Cows Assigned
+    // 4️⃣ Grocery Assigned
     const { count: cowsAssigned, error: cowError } = await supabase
       .from('livestock')
       .select('*', { count: 'exact', head: true })
