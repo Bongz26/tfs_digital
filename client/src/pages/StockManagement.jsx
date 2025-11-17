@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-
+import { API_HOST } from '../api/config';
+import StockTakeModal from '../components/StockTake/StockTakeModal';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable"; // import the function
 
@@ -43,6 +44,7 @@ export default function StockManagement() {
   const [activeTab, setActiveTab] = useState('all');
   const [stats, setStats] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showStockTake, setShowStockTake] = useState(false);
   const [newItem, setNewItem] = useState({
     name: '',
     category: 'coffin',
@@ -53,7 +55,7 @@ export default function StockManagement() {
     location: 'Manekeng Showroom'
   });
 
-  const API_URL = process.env.REACT_APP_API_URL || 'https://tfs-digital.onrender.com';
+  const API_URL = API_HOST;
 
   // Fetch inventory data
   const fetchInventory = async (category = 'all') => {
@@ -205,23 +207,23 @@ export default function StockManagement() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-600">
             <h3 className="text-lg font-semibold text-gray-700">Total Items</h3>
-            <p className="text-5xl font-bold text-red-600 mt-2">{stats.total_items}</p>
-            <p className="text-sm text-gray-600 mt-2">{Object.keys(stats.categories).length} categories</p>
+            <p className="text-5xl font-bold text-red-600 mt-2">{stats.total_items || 0}</p>
+            <p className="text-sm text-gray-600 mt-2">{stats.categories || 0} categories</p>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-orange-500">
-            <h3 className="text-lg font-semibold text-gray-700">Inventory Value</h3>
-            <p className="text-3xl font-bold text-orange-600 mt-2">R{stats.total_value.toLocaleString()}</p>
-            <p className="text-sm text-gray-600 mt-2">Total stock value</p>
+            <h3 className="text-lg font-semibold text-gray-700">Total Stock</h3>
+            <p className="text-3xl font-bold text-orange-600 mt-2">{(stats.total_stock || 0).toLocaleString()}</p>
+            <p className="text-sm text-gray-600 mt-2">Total units in stock</p>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-yellow-500">
             <h3 className="text-lg font-semibold text-gray-700">Low Stock</h3>
-            <p className="text-5xl font-bold text-yellow-600 mt-2">{stats.low_stock_items}</p>
+            <p className="text-5xl font-bold text-yellow-600 mt-2">{stats.low_stock_count || 0}</p>
             <p className="text-sm text-gray-600 mt-2">Need reordering</p>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-green-600">
-            <h3 className="text-lg font-semibold text-gray-700">Out of Stock</h3>
-            <p className="text-5xl font-bold text-green-600 mt-2">{stats.out_of_stock}</p>
-            <p className="text-sm text-gray-600 mt-2">Urgent attention needed</p>
+            <h3 className="text-lg font-semibold text-gray-700">Categories</h3>
+            <p className="text-5xl font-bold text-green-600 mt-2">{stats.categories || 0}</p>
+            <p className="text-sm text-gray-600 mt-2">Active categories</p>
           </div>
         </div>
       )}
@@ -251,7 +253,14 @@ export default function StockManagement() {
           </div>
 
           {/* ACTIONS */}
-          <div className="flex space-x-3">
+          <div className="flex space-x-3 flex-wrap">
+            <button
+              onClick={() => setShowStockTake(true)}
+              className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 font-semibold flex items-center shadow-lg"
+            >
+              <span className="mr-2">📋</span> Stock Take
+            </button>
+            
             <button
               onClick={() => setShowAddForm(true)}
               className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-semibold flex items-center"
@@ -504,6 +513,17 @@ export default function StockManagement() {
           </table>
         </div>
       </div>
+
+      {/* Stock Take Modal */}
+      <StockTakeModal
+        isOpen={showStockTake}
+        onClose={() => setShowStockTake(false)}
+        onComplete={() => {
+          // Refresh inventory after stock take completion
+          fetchInventory(activeTab === 'low' ? 'all' : activeTab);
+          fetchStats();
+        }}
+      />
     </div>
   );
 }

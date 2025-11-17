@@ -1,6 +1,7 @@
 // src/pages/ActiveCases.jsx
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { API_HOST } from '../api/config';
 
 export default function ActiveCases() {
   const [cases, setCases] = useState([]);
@@ -9,7 +10,7 @@ export default function ActiveCases() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  const API_URL = API_HOST;
 
   // Fetch active cases and vehicles in one call
   useEffect(() => {
@@ -19,7 +20,7 @@ export default function ActiveCases() {
         setError('');
         
         console.log('Fetching active cases data...');
-        const response = await fetch(`${API_URL}/api/activeCases`);
+        const response = await fetch(`${API_URL}/api/active-cases`);
         
         // Check if response is OK before parsing as JSON
         if (!response.ok) {

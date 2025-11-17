@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import VehicleCalendar from '../components/VehicleCalendar';
+import { API_HOST } from '../api/config';
 
 function getUpcomingSaturday() {
   const today = new Date();
@@ -38,13 +39,16 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  // Use shared API config to ensure localhost detection works correctly
+  const API_URL = API_HOST;
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`${API_URL}/api/dashboard`);
+        const url = `${API_URL}/api/dashboard`;
+        console.log('🔍 [Dashboard] Fetching from:', url);
+        const response = await fetch(url);
         
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
@@ -152,7 +156,7 @@ export default function Dashboard() {
         </div>
 
         <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-green-600">
-          <h3 className="text-lg font-semibold text-gray-700">Cows Assigned</h3>
+          <h3 className="text-lg font-semibold text-gray-700">Grocery Assigned</h3>
           <p className="text-5xl font-bold text-green-600 mt-2">{stats.cowsAssigned}/8</p>
         </div>
       </div>

@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import CaseDetails from './pages/CaseDetails';
 import ActiveCases from './pages/ActiveCases'; 
 import StockManagement from './pages/StockManagement';
+import PurchaseOrdersPage from './pages/purchaseOrders';
 import './index.css';
 
 function App() {
@@ -27,7 +28,8 @@ function App() {
             <Link to="/dashboard" className="hover:text-yellow-500 transition">Dashboard</Link>
             <Link to="/active-cases" className="hover:text-yellow-500 transition">Active Cases</Link> {/* ✅ NEW */}
             <Link to="/stock" className="flex items-center px-4 py-2 text-gray-700 hover:bg-red-50 hover:text-red-700"><span className="mr-3">📦</span>Stock Management</Link>
-          
+            <Link to="/purchase" className="hover:text-yellow-500 transition">Purchase Orders</Link>
+
           </div>
         </div>
       </nav>
@@ -39,6 +41,7 @@ function App() {
         <Route path="/cases/:id" element={<CaseDetails />} />
         <Route path="/active-cases" element={<ActiveCases />} /> {/* ✅ NEW */}
         <Route path="/stock" element={<StockManagement />} />
+        <Route path="/purchase" element={<PurchaseOrdersPage/>}/>
       </Routes>
     </Router>
   );

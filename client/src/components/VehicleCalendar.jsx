@@ -1,12 +1,13 @@
 // client/src/components/VehicleCalendar.jsx
 import React, { useEffect, useState } from 'react';
+import { API_HOST } from '../api/config';
 
 export default function VehicleCalendar() {
   const [roster, setRoster] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    const API_URL = API_HOST;
     fetch(`${API_URL}/api/roster`)
       .then(res => res.ok ? res.json() : Promise.reject(`HTTP ${res.status}`))
       .then(data => setRoster(data.roster || []))

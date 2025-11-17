@@ -3,11 +3,12 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import reportWebVitals from './reportWebVitals';
+import { API_HOST } from './api/config';
 
-//warm up
-fetch("https://tfs-digital.onrender.com/api/health")
-  .then(() => console.log("✅ Backend pre-warmed"))
-  .catch(() => console.log("⚠️ Backend cold start"));
+// Warm up backend using the same host the API layer uses
+fetch(`${API_HOST}/api/health`)
+  .then(() => console.log('✅ Backend pre-warmed:', API_HOST))
+  .catch(() => console.log('⚠️ Backend cold start or unreachable:', API_HOST));
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
