@@ -23,20 +23,19 @@ const insertDrivers = async (drivers) => {
         }
 
         const result = await query(
-          `INSERT INTO drivers (name, contact, license_number, active)
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT DO NOTHING
+          `INSERT INTO drivers (name, contact, active)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (name) DO NOTHING
            RETURNING *`,
           [
             driver.name.trim(),
             driver.contact && driver.contact.trim() !== '' ? driver.contact.trim() : null,
-            driver.license_number && driver.license_number.trim() !== '' ? driver.license_number.trim() : null,
             driver.active !== undefined ? driver.active : true
           ]
         );
         
         if (result.rows.length > 0) {
-          console.log(`✅ ${driver.name} - ${driver.contact || 'No contact'} (${driver.license_number || 'No license'})`);
+          console.log(`✅ ${driver.name} - ${driver.contact || 'No contact'}`);
           successCount++;
         } else {
           console.log(`⏭️  ${driver.name} - Already exists, skipped`);

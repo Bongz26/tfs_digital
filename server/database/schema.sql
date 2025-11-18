@@ -44,7 +44,6 @@ CREATE TABLE IF NOT EXISTS drivers (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
     contact VARCHAR(15),
-    license_number VARCHAR(20),
     active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -125,15 +124,11 @@ INSERT INTO vehicles (reg_number, type) VALUES
 ('THS 004 FS', 'hilux')
 ON CONFLICT (reg_number) DO NOTHING;
 
--- Insert default drivers
-INSERT INTO drivers (name, contact, license_number, active) VALUES
-('Sipho Mthembu', '0821234567', 'DL123456', true),
-('Thabo Nkosi', '0834567890', 'DL234567', true),
-('Moses Dlamini', '0845678901', 'DL345678', true),
-('Anna Khumalo', '0856789012', 'DL456789', true),
-('Jacob Mokoena', '0867890123', 'DL567890', true),
-('Peter Sithole', '0878901234', 'DL678901', true)
-ON CONFLICT DO NOTHING;
+-- Insert default drivers (example - replace with your actual drivers)
+-- INSERT INTO drivers (name, contact, active) VALUES
+-- ('T MOFOKENG', '0821234567', true),
+-- ('T KHESA', '0834567890', true)
+-- ON CONFLICT (name) DO NOTHING;
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_cases_funeral_date ON cases(funeral_date);

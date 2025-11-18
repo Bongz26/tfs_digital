@@ -25,7 +25,6 @@ const setupDrivers = async () => {
           id SERIAL PRIMARY KEY,
           name VARCHAR(100) NOT NULL UNIQUE,
           contact VARCHAR(15),
-          license_number VARCHAR(20),
           active BOOLEAN DEFAULT TRUE,
           created_at TIMESTAMP DEFAULT NOW()
         )
@@ -46,21 +45,26 @@ const setupDrivers = async () => {
       console.log('⚠️  No drivers found. Inserting default drivers...\n');
       
       const defaultDrivers = [
-        ['Sipho Mthembu', '0821234567', 'DL123456'],
-        ['Thabo Nkosi', '0834567890', 'DL234567'],
-        ['Moses Dlamini', '0845678901', 'DL345678'],
-        ['Anna Khumalo', '0856789012', 'DL456789'],
-        ['Jacob Mokoena', '0867890123', 'DL567890'],
-        ['Peter Sithole', '0878901234', 'DL678901']
+        ['T MOFOKENG', '0821234567'],
+        ['T KHESA', '0834567890'],
+        ['S KHESA', '0834567890'],
+        ['S MOLEFE', '0845678901'],
+        ['M LEKHOABA', '0856789012'],
+        ['MOLOI', '0867890123'],
+        ['L SIBEKO', '0878901234'],
+        ['T MOTAUNG', '0878901234'],
+        ['J MOFOKENG', '0878901234'],
+        ['T NTLERU', '0834567890'],
+        ['MJ RAMPETA', '0834567890']
       ];
       
-      for (const [name, contact, license] of defaultDrivers) {
+      for (const [name, contact] of defaultDrivers) {
         try {
           await client.query(`
-            INSERT INTO drivers (name, contact, license_number, active)
-            VALUES ($1, $2, $3, true)
+            INSERT INTO drivers (name, contact, active)
+            VALUES ($1, $2, true)
             ON CONFLICT (name) DO NOTHING
-          `, [name, contact, license]);
+          `, [name, contact]);
           console.log(`✅ Added: ${name}`);
         } catch (error) {
           console.log(`⏭️  ${name} - Already exists or error`);
@@ -72,7 +76,7 @@ const setupDrivers = async () => {
     
     // Show all drivers
     const drivers = await client.query(`
-      SELECT id, name, contact, license_number, active 
+      SELECT id, name, contact, active 
       FROM drivers 
       ORDER BY name
     `);
