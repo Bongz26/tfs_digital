@@ -44,12 +44,22 @@ export default function ActiveCases() {
         }
 
         // Fetch drivers separately
-        const driversResponse = await fetch(`${API_URL}/api/drivers`);
-        if (driversResponse.ok) {
-          const driversData = await driversResponse.json();
-          if (driversData.success) {
-            setDrivers(driversData.drivers || []);
+        try {
+          const driversResponse = await fetch(`${API_URL}/api/drivers`);
+          if (driversResponse.ok) {
+            const driversData = await driversResponse.json();
+            if (driversData.success) {
+              console.log('Drivers loaded:', driversData.drivers?.length || 0);
+              setDrivers(driversData.drivers || []);
+            } else {
+              console.warn('Drivers API returned success=false:', driversData.error);
+            }
+          } else {
+            console.warn('Failed to fetch drivers:', driversResponse.status, driversResponse.statusText);
           }
+        } catch (driversError) {
+          console.error('Error fetching drivers:', driversError);
+          // Don't fail the whole page if drivers fail to load
         }
       } catch (err) {
         console.error('Data fetch error:', err);
