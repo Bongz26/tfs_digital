@@ -6,13 +6,48 @@ const { query } = require('../config/db');
 // GET all active drivers
 router.get('/', async (req, res) => {
   try {
+    // First check if table exists
+    const tableCheck = await query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'drivers'
+      )
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      console.warn('⚠️  Drivers table does not exist');
+      return res.json({ 
+        success: true, 
+        drivers: [],
+        message: 'Drivers table does not exist. Run the schema migration first.'
+      });
+    }
+    
     const result = await query(
       'SELECT id, name, contact, license_number FROM drivers WHERE active = true ORDER BY name'
     );
+    
+    console.log(`✅ Fetched ${result.rows.length} active drivers`);
     res.json({ success: true, drivers: result.rows });
   } catch (err) {
-    console.error('Error fetching drivers:', err);
-    res.status(500).json({ success: false, error: 'Failed to fetch drivers' });
+    console.error('❌ Error fetching drivers:', err);
+    console.error('Error details:', err.message);
+    
+    // If table doesn't exist, return empty array instead of error
+    if (err.message.includes('does not exist') || err.message.includes('relation') || err.code === '42P01') {
+      console.warn('⚠️  Drivers table does not exist');
+      return res.json({ 
+        success: true, 
+        drivers: [],
+        message: 'Drivers table does not exist. Please run the database migration.'
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch drivers',
+      details: err.message 
+    });
   }
 });
 
