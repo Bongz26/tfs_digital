@@ -45,20 +45,35 @@ export default function ActiveCases() {
 
         // Fetch drivers separately
         try {
+          console.log('🔍 Fetching drivers from:', `${API_URL}/api/drivers`);
           const driversResponse = await fetch(`${API_URL}/api/drivers`);
+          console.log('📡 Drivers response status:', driversResponse.status);
+          
           if (driversResponse.ok) {
             const driversData = await driversResponse.json();
+            console.log('📦 Drivers API response:', driversData);
+            
             if (driversData.success) {
-              console.log('Drivers loaded:', driversData.drivers?.length || 0);
+              const driverCount = driversData.drivers?.length || 0;
+              console.log(`✅ Drivers loaded: ${driverCount} drivers`);
+              if (driverCount > 0) {
+                console.log('📋 Driver names:', driversData.drivers.map(d => d.name));
+              }
               setDrivers(driversData.drivers || []);
             } else {
-              console.warn('Drivers API returned success=false:', driversData.error);
+              console.warn('⚠️ Drivers API returned success=false:', driversData.error || driversData.message);
+              if (driversData.message) {
+                console.warn('💡 Message:', driversData.message);
+              }
             }
           } else {
-            console.warn('Failed to fetch drivers:', driversResponse.status, driversResponse.statusText);
+            const errorText = await driversResponse.text();
+            console.error('❌ Failed to fetch drivers:', driversResponse.status, driversResponse.statusText);
+            console.error('Error response:', errorText);
           }
         } catch (driversError) {
-          console.error('Error fetching drivers:', driversError);
+          console.error('❌ Error fetching drivers:', driversError);
+          console.error('Error details:', driversError.message);
           // Don't fail the whole page if drivers fail to load
         }
       } catch (err) {
@@ -408,12 +423,21 @@ export default function ActiveCases() {
                             }}
                           >
                             <option value="">Select Driver</option>
-                            {drivers.map(d => (
-                              <option key={d.id} value={d.id}>
-                                {d.name} {d.contact ? `(${d.contact})` : ''}
-                              </option>
-                            ))}
+                            {drivers.length === 0 ? (
+                              <option value="" disabled>No drivers available</option>
+                            ) : (
+                              drivers.map(d => (
+                                <option key={d.id} value={d.id}>
+                                  {d.name} {d.contact ? `(${d.contact})` : ''}
+                                </option>
+                              ))
+                            )}
                           </select>
+                          {drivers.length === 0 && (
+                            <div className="text-xs text-red-600 mt-1">
+                              ⚠️ No drivers found. Run: node database/setup-drivers.js
+                            </div>
+                          )}
                           
                           <button
                             className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
@@ -474,9 +498,6 @@ export default function ActiveCases() {
                 <div className="font-semibold text-gray-800">{driver.name}</div>
                 {driver.contact && (
                   <div className="text-sm text-gray-600">{driver.contact}</div>
-                )}
-                {driver.license_number && (
-                  <div className="text-xs text-gray-500">License: {driver.license_number}</div>
                 )}
                 <div className="text-xs text-green-600 font-medium mt-1">● Active</div>
               </div>
