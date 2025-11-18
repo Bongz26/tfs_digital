@@ -107,8 +107,8 @@ export default function ActiveCases() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           vehicle_id: vehicle.id,
-          driver_name: driver.name,
-          pickup_time: new Date().toISOString()
+          driver_name: driver.name
+          // pickup_time will be calculated on backend (1.5 hours before funeral time)
         })
       });
       
@@ -395,12 +395,30 @@ export default function ActiveCases() {
                             }}
                           >
                             <option value="">Select Vehicle</option>
-                            {vehicles.map(v => (
-                              <option key={v.id} value={v.id}>
-                                {v.type ? v.type.toUpperCase().replace('_', ' ') : 'VEHICLE'} - {v.reg_number}
-                              </option>
-                            ))}
+                            {(() => {
+                              // Use case-specific available vehicles if provided, otherwise all vehicles
+                              const availableVehicles = c.available_vehicles || vehicles;
+                              return availableVehicles.map(v => {
+                                // Check if vehicle is already assigned to another case today
+                                const hasConflict = vehicles.some(vehicle => {
+                                  if (vehicle.id !== v.id) return false;
+                                  // This logic is handled on backend, but we can show a warning
+                                  return false;
+                                });
+                                
+                                return (
+                                  <option key={v.id} value={v.id}>
+                                    {v.type ? v.type.toUpperCase().replace('_', ' ') : 'VEHICLE'} - {v.reg_number}
+                                  </option>
+                                );
+                              });
+                            })()}
                           </select>
+                          {c.available_vehicles && c.available_vehicles.length < vehicles.length && (
+                            <div className="text-xs text-orange-600 mt-1">
+                              ⚠️ Some vehicles unavailable due to time conflicts
+                            </div>
+                          )}
                           
                           <select
                             className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"

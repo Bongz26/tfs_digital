@@ -76,6 +76,15 @@ export default function VehicleCalendar() {
             ⏰ Funeral Time: <span className="font-medium">{item.funeral_time || 'Time To Be Announced'}</span>
           </p>
 
+          {/* Delivery Time */}
+          {item.delivery_date && item.delivery_time && (
+            <p className="text-gray-600 text-sm mb-1">
+              🚚 Delivery: <span className="font-medium">
+                {new Date(item.delivery_date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })} at {item.delivery_time}
+              </span>
+            </p>
+          )}
+
           {/* Driver Info */}
           <div className="bg-yellow-50 p-3 rounded-lg mt-3 border border-yellow-200">
             <p className="text-yellow-800 font-semibold flex items-center">
@@ -85,14 +94,16 @@ export default function VehicleCalendar() {
               🚗 {item.vehicle_type ? item.vehicle_type.toUpperCase().replace('_', ' ') : '—'} — {item.reg_number || '—'}
             </p>
             <p className="text-gray-600 text-xs mt-1">
-              Pickup: {item.pickup_time 
-                ? new Date(item.pickup_time).toLocaleString('en-ZA', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })
-                : '—'}
+              Pickup: {item.delivery_date && item.delivery_time 
+                ? `${new Date(item.delivery_date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })} at ${item.delivery_time}`
+                : item.pickup_time 
+                  ? new Date(item.pickup_time).toLocaleString('en-ZA', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })
+                  : '—'}
             </p>
           </div>
 
