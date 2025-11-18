@@ -620,7 +620,7 @@ export default function ConsultationForm() {
                   Processing...
                 </>
               ) : (
-                "Reserve Stock & Add to Planner"
+                "Submit Case"
               )}
             </button>
 
