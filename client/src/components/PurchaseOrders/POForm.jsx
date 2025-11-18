@@ -1,27 +1,55 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { API_HOST } from "../../api/config";
 
 const POForm = ({ onCreate }) => {
   const [poNumber, setPoNumber] = useState("");
-  const [supplierId, setSupplierId] = useState("");
+  const [supplierName, setSupplierName] = useState("");
   const [orderDate, setOrderDate] = useState("");
   const [expectedDelivery, setExpectedDelivery] = useState("");
+  const [suppliers, setSuppliers] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Fetch suppliers
+    const fetchSuppliers = async () => {
+      try {
+        const response = await fetch(`${API_HOST}/api/purchase-orders/suppliers`);
+        const data = await response.json();
+        if (data.success) {
+          setSuppliers(data.suppliers || []);
+        }
+      } catch (err) {
+        console.error("Error fetching suppliers:", err);
+      }
+    };
+    fetchSuppliers();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!poNumber || !supplierId || !orderDate) return alert("Please fill required fields");
+    if (!poNumber || !supplierName || !orderDate) {
+      return alert("Please fill all required fields");
+    }
 
-    await onCreate({
-      po_number: poNumber,
-      supplier_id: Number(supplierId),
-      order_date: orderDate,
-      expected_delivery: expectedDelivery,
-      created_by: "frontend-user"
-    });
+    setLoading(true);
+    try {
+      await onCreate({
+        po_number: poNumber,
+        supplier_name: supplierName,
+        order_date: orderDate,
+        expected_delivery: expectedDelivery,
+        created_by: "frontend-user"
+      });
 
-    setPoNumber("");
-    setSupplierId("");
-    setOrderDate("");
-    setExpectedDelivery("");
+      setPoNumber("");
+      setSupplierName("");
+      setOrderDate("");
+      setExpectedDelivery("");
+    } catch (err) {
+      alert(err.message || "Failed to create purchase order");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -36,14 +64,19 @@ const POForm = ({ onCreate }) => {
           className="border p-2 rounded"
           required
         />
-        <input
-          type="number"
-          placeholder="Supplier ID"
-          value={supplierId}
-          onChange={e => setSupplierId(e.target.value)}
+        <select
+          value={supplierName}
+          onChange={e => setSupplierName(e.target.value)}
           className="border p-2 rounded"
           required
-        />
+        >
+          <option value="">Select Supplier</option>
+          {suppliers.map(supplier => (
+            <option key={supplier.id} value={supplier.name}>
+              {supplier.name} {supplier.email ? `(${supplier.email})` : ''}
+            </option>
+          ))}
+        </select>
         <input
           type="date"
           placeholder="Order Date"
@@ -60,9 +93,18 @@ const POForm = ({ onCreate }) => {
           className="border p-2 rounded"
         />
       </div>
-      <button type="submit" className="mt-4 bg-red-800 text-white px-4 py-2 rounded hover:bg-red-600">
-        Create PO
+      <button 
+        type="submit" 
+        disabled={loading}
+        className="mt-4 bg-red-800 text-white px-4 py-2 rounded hover:bg-red-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
+      >
+        {loading ? "Creating..." : "Create PO"}
       </button>
+      {suppliers.length === 0 && (
+        <p className="mt-2 text-sm text-gray-600">
+          No suppliers found. Please add suppliers to the database first.
+        </p>
+      )}
     </form>
   );
 };

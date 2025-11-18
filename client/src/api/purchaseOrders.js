@@ -33,3 +33,13 @@ export const addPOItem = async (poId, itemData) => {
     throw err;
   }
 };
+
+export const processPurchaseOrder = async (poId, adminEmail) => {
+  try {
+    const res = await axios.post(`${BASE_URL}/${poId}/process`, { admin_email: adminEmail });
+    return res.data;
+  } catch (err) {
+    console.error("Error processing PO:", err.response || err);
+    throw err;
+  }
+};

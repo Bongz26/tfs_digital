@@ -7,7 +7,7 @@ import { usePurchaseOrders } from "../hooks/usePurchaseOrders";
 
 
 const PurchaseOrdersPage = () => {
-  const { purchaseOrders, loading, error, createPO, addItemToPO } = usePurchaseOrders();
+  const { purchaseOrders, loading, error, createPO, addItemToPO, reloadPOs } = usePurchaseOrders();
 
   if (loading) return <div className="p-4"><p>Loading purchase orders...</p></div>;
   if (error) {
@@ -24,7 +24,11 @@ const PurchaseOrdersPage = () => {
   return (
     <div className="max-w-5xl mx-auto p-4">
       <POForm onCreate={createPO} />
-      <POList purchaseOrders={purchaseOrders} onAddItem={addItemToPO} />
+      <POList 
+        purchaseOrders={purchaseOrders} 
+        onAddItem={addItemToPO} 
+        onReload={reloadPOs}
+      />
     </div>
   );
 };
