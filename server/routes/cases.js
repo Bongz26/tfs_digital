@@ -229,4 +229,29 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
+// GET single case by ID (must come last to avoid conflicts with /assign/:caseId)
+router.get('/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const result = await query('SELECT * FROM cases WHERE id = $1', [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Case not found' 
+      });
+    }
+    
+    res.json({ success: true, case: result.rows[0] });
+  } catch (err) {
+    console.error('Error fetching case:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to fetch case',
+      details: err.message 
+    });
+  }
+});
+
 module.exports = router;

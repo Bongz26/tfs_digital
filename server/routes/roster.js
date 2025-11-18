@@ -25,8 +25,7 @@ router.get('/', async (req, res) => {
         vehicles:vehicle_id (
           id,
           reg_number,
-          type,
-          driver_name
+          type
         )
       `)
       .order('pickup_time', { ascending: true });
@@ -45,7 +44,7 @@ router.get('/', async (req, res) => {
         id: item.id,
         case_id: item.case_id,
         vehicle_id: item.vehicle_id,
-        driver_name: item.driver_name || vehicleData?.driver_name || null,
+        driver_name: item.driver_name || null,
         pickup_time: item.pickup_time,
         status: item.status,
         // Case data (flattened)
@@ -56,8 +55,7 @@ router.get('/', async (req, res) => {
         venue_name: caseData?.venue_name || null,
         // Vehicle data (flattened)
         reg_number: vehicleData?.reg_number || null,
-        vehicle_type: vehicleData?.type || null,
-        vehicle_driver_name: vehicleData?.driver_name || null
+        vehicle_type: vehicleData?.type || null
       };
     });
 
