@@ -15,6 +15,13 @@ router.get('/', async (req, res) => {
 
 // POST new case
 router.post('/', async (req, res) => {
+  console.log('📥 [POST /api/cases] Request received at', new Date().toISOString());
+  console.log('📦 [POST /api/cases] Request body keys:', Object.keys(req.body));
+  console.log('📦 [POST /api/cases] Delivery fields:', {
+    delivery_date: req.body.delivery_date,
+    delivery_time: req.body.delivery_time
+  });
+
   const {
     case_number, deceased_name, deceased_id, nok_name, nok_contact, nok_relation,
     plan_category, plan_name, plan_members, plan_age_bracket,
@@ -24,6 +31,35 @@ router.post('/', async (req, res) => {
   } = req.body;
 
   try {
+    // Generate case_number if not provided (format: THS-YYYY-XXX)
+    let finalCaseNumber = case_number;
+    if (!finalCaseNumber) {
+      const year = new Date().getFullYear();
+      
+      // Get the highest case number for this year
+      const maxCaseResult = await query(
+        `SELECT case_number FROM cases 
+         WHERE case_number LIKE $1 
+         ORDER BY case_number DESC 
+         LIMIT 1`,
+        [`THS-${year}-%`]
+      );
+      
+      let nextNumber = 1;
+      if (maxCaseResult.rows.length > 0) {
+        const lastCaseNumber = maxCaseResult.rows[0].case_number;
+        const match = lastCaseNumber.match(/THS-\d{4}-(\d+)/);
+        if (match) {
+          nextNumber = parseInt(match[1], 10) + 1;
+        }
+      }
+      
+      finalCaseNumber = `THS-${year}-${String(nextNumber).padStart(3, '0')}`;
+      console.log('🔢 [POST /api/cases] Generated case_number:', finalCaseNumber);
+    }
+
+    console.log('🔍 [POST /api/cases] Attempting to insert case with case_number:', finalCaseNumber);
+
     const result = await query(
       `INSERT INTO cases 
        (case_number, deceased_name, deceased_id, nok_name, nok_contact, nok_relation,
@@ -33,16 +69,38 @@ router.post('/', async (req, res) => {
         casket_type, casket_colour, delivery_date, delivery_time)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
        RETURNING *`,
-      [case_number, deceased_name, deceased_id, nok_name, nok_contact, nok_relation,
+      [finalCaseNumber, deceased_name, deceased_id, nok_name, nok_contact, nok_relation,
        plan_category, plan_name, plan_members, plan_age_bracket,
        funeral_date, funeral_time, venue_name, venue_address, venue_lat, venue_lng,
        requires_cow, requires_tombstone, service_type, total_price,
        casket_type, casket_colour, delivery_date, delivery_time]
     );
+    
+    console.log('✅ [POST /api/cases] Case created successfully:', result.rows[0]?.id, result.rows[0]?.case_number);
     res.json({ success: true, case: result.rows[0] });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, error: 'Failed to create case' });
+    console.error('❌ [POST /api/cases] Error creating case:', err);
+    console.error('❌ [POST /api/cases] Error details:', {
+      message: err.message,
+      code: err.code,
+      detail: err.detail,
+      constraint: err.constraint,
+      position: err.position,
+      where: err.where
+    });
+    console.error('❌ [POST /api/cases] Full error object:', JSON.stringify(err, null, 2));
+    
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to create case',
+      details: err.message,
+      code: err.code,
+      hint: err.code === '42703' 
+        ? 'Missing column in database. Run migration: ALTER TABLE cases ADD COLUMN delivery_date DATE; ALTER TABLE cases ADD COLUMN delivery_time TIME;' 
+        : err.code === '23502'
+        ? 'Missing required field value'
+        : undefined
+    });
   }
 });
 
