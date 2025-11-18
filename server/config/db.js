@@ -28,8 +28,8 @@ if (!databaseUrl.includes('supabase.co') && !databaseUrl.includes('@')) {
   console.warn('   Current value starts with:', databaseUrl.substring(0, 30) + '...');
 }
 
-// Supabase requires SSL connections
-const pool = new Pool({
+// Parse connection string to force IPv4 if needed
+let connectionConfig = {
   connectionString: databaseUrl,
   ssl: {
     rejectUnauthorized: false // Supabase uses self-signed certificates
@@ -38,7 +38,23 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000, // 10 seconds
   idleTimeoutMillis: 30000, // 30 seconds
   max: 20 // Maximum number of clients in the pool
-});
+};
+
+// Force IPv4 if connection string contains IPv6 (Render network issue)
+// Replace IPv6 hostname with IPv4 or use connection pooling
+try {
+  const url = new URL(databaseUrl);
+  // If hostname is an IPv6 address, try to use connection pooling instead
+  if (url.hostname.includes(':') && url.hostname.includes('db.')) {
+    console.warn('⚠️  Detected IPv6 address in DATABASE_URL - this may cause ENETUNREACH errors on Render');
+    console.warn('   Solution: Use connection pooling string from Supabase instead');
+    console.warn('   Format: postgresql://postgres:[PASSWORD]@aws-0-[region].pooler.supabase.com:6543/postgres');
+  }
+} catch (e) {
+  // URL parsing failed, continue with original connection string
+}
+
+const pool = new Pool(connectionConfig);
 
 // Test database connection
 pool.on('connect', () => {

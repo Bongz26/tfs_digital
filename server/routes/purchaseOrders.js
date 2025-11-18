@@ -2,6 +2,7 @@
 
 const express = require('express');
 const router = express.Router();
+const nodemailer = require('nodemailer');
 // Use shared DB config (Supabase/Postgres via DATABASE_URL)
 const { pool, query, getClient } = require('../config/db');
 
@@ -22,6 +23,17 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = supabaseUrl && supabaseKey 
   ? createClient(supabaseUrl, supabaseKey)
   : null;
+
+// --- GET ALL SUPPLIERS ---
+router.get('/suppliers', async (req, res) => {
+  try {
+    const suppliers = await query('SELECT id, name, email, phone, contact_person FROM suppliers ORDER BY name');
+    res.json({ success: true, suppliers: suppliers.rows || [] });
+  } catch (err) {
+    console.error('❌ Error fetching suppliers:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch suppliers', details: err.message });
+  }
+});
 
 // --- CREATE NEW PURCHASE ORDER ---
 router.post("/", async (req, res) => {
@@ -52,15 +64,39 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const { po_number, supplier_id, order_date, expected_delivery, created_by } = req.body;
+    const { po_number, supplier_id, supplier_name, order_date, expected_delivery, created_by } = req.body;
 
     // Validate required fields
-    if (!po_number || !supplier_id || !order_date) {
+    if (!po_number || !order_date) {
       clearTimeout(timeout);
       return res.status(400).json({
         success: false,
         message: "Missing required fields",
-        required: ["po_number", "supplier_id", "order_date"]
+        required: ["po_number", "order_date", "supplier_id or supplier_name"]
+      });
+    }
+
+    // Lookup supplier_id if supplier_name is provided
+    let finalSupplierId = supplier_id;
+    if (supplier_name && !supplier_id) {
+      const supplierResult = await query('SELECT id FROM suppliers WHERE name = $1', [supplier_name]);
+      if (!supplierResult.rows.length) {
+        clearTimeout(timeout);
+        return res.status(400).json({
+          success: false,
+          message: "Supplier not found",
+          error: `Supplier "${supplier_name}" does not exist. Please add the supplier first.`
+        });
+      }
+      finalSupplierId = supplierResult.rows[0].id;
+    }
+
+    if (!finalSupplierId) {
+      clearTimeout(timeout);
+      return res.status(400).json({
+        success: false,
+        message: "Supplier required",
+        error: "Please provide either supplier_id or supplier_name"
       });
     }
 
@@ -71,7 +107,7 @@ router.post("/", async (req, res) => {
     const insertPromise = supabase
       .from("purchase_orders")
       .insert([
-        { po_number, supplier_id, order_date, expected_delivery, created_by }
+        { po_number, supplier_id: finalSupplierId, order_date, expected_delivery, created_by }
       ])
       .select();
 
@@ -315,6 +351,254 @@ router.get('/', async (req, res) => {
 });
 
 
+
+// --- PROCESS/SEND PURCHASE ORDER (Email to Supplier) ---
+router.post('/:poId/process', async (req, res) => {
+  const { poId } = req.params;
+  const { admin_email } = req.body; // Email to send copy to
+
+  try {
+    // Get PO with items and supplier info
+    const poResult = await query(
+      `SELECT po.*, s.name as supplier_name, s.email as supplier_email, s.contact_person, s.phone
+       FROM purchase_orders po
+       JOIN suppliers s ON po.supplier_id = s.id
+       WHERE po.id = $1`,
+      [poId]
+    );
+
+    if (!poResult.rows.length) {
+      return res.status(404).json({ success: false, error: 'Purchase order not found' });
+    }
+
+    const po = poResult.rows[0];
+
+    // Get PO items with full inventory details
+    const itemsResult = await query(
+      `SELECT poi.*, i.name AS inventory_name, i.sku, i.category, i.description
+       FROM purchase_order_items poi
+       LEFT JOIN inventory i ON poi.inventory_id = i.id
+       WHERE poi.po_id = $1
+       ORDER BY poi.id`,
+      [poId]
+    );
+
+    const items = itemsResult.rows || [];
+    if (items.length === 0) {
+      return res.status(400).json({ success: false, error: 'Purchase order has no items' });
+    }
+
+    // Calculate total
+    const total = items.reduce((sum, item) => sum + (item.quantity_ordered * item.unit_cost), 0);
+
+    // Create email transporter
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: false, // true for 465, false for other ports
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    // Create professional HTML email content
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f5f5f5; }
+          .email-container { max-width: 800px; margin: 20px auto; background-color: #ffffff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+          .header { background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; padding: 30px 40px; text-align: center; }
+          .header h1 { font-size: 28px; margin-bottom: 5px; font-weight: 600; }
+          .header .po-number { font-size: 18px; opacity: 0.95; }
+          .company-info { background-color: #f8f9fa; padding: 25px 40px; border-bottom: 3px solid #dc3545; }
+          .company-info h2 { color: #dc3545; font-size: 20px; margin-bottom: 15px; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px; }
+          .info-item { padding: 10px 0; }
+          .info-item strong { color: #555; display: block; margin-bottom: 5px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+          .info-item span { color: #333; font-size: 15px; }
+          .content { padding: 30px 40px; }
+          .section-title { color: #dc3545; font-size: 18px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #e9ecef; }
+          table { width: 100%; border-collapse: collapse; margin: 25px 0; background-color: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+          thead { background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; }
+          th { padding: 15px; text-align: left; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+          th:nth-child(2) { text-align: center; }
+          th:nth-child(3), th:nth-child(4) { text-align: right; }
+          td { padding: 15px; border-bottom: 1px solid #e9ecef; }
+          td:nth-child(2) { text-align: center; font-weight: 600; }
+          td:nth-child(3), td:nth-child(4) { text-align: right; }
+          tbody tr:hover { background-color: #f8f9fa; }
+          tbody tr:last-child td { border-bottom: none; }
+          .item-name { font-weight: 600; color: #333; }
+          .item-description { font-size: 12px; color: #666; margin-top: 3px; }
+          .totals-section { margin-top: 30px; padding-top: 20px; border-top: 2px solid #e9ecef; }
+          .total-row { display: flex; justify-content: space-between; padding: 12px 0; font-size: 16px; }
+          .total-row.grand-total { font-size: 22px; font-weight: 700; color: #dc3545; padding-top: 15px; border-top: 2px solid #dc3545; margin-top: 10px; }
+          .total-label { font-weight: 600; }
+          .instructions { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 20px; margin: 25px 0; border-radius: 4px; }
+          .instructions h3 { color: #856404; margin-bottom: 10px; font-size: 16px; }
+          .instructions ul { margin-left: 20px; color: #856404; }
+          .instructions li { margin: 5px 0; }
+          .footer { background-color: #343a40; color: #ffffff; padding: 25px 40px; text-align: center; font-size: 13px; }
+          .footer p { margin: 5px 0; opacity: 0.9; }
+          .footer .company-name { font-weight: 600; font-size: 15px; margin-bottom: 10px; }
+        </style>
+      </head>
+      <body>
+        <div class="email-container">
+          <div class="header">
+            <h1>PURCHASE ORDER</h1>
+            <div class="po-number">PO Number: ${po.po_number}</div>
+          </div>
+          
+          <div class="company-info">
+            <h2>THUSANANG FUNERAL SERVICES</h2>
+            <div class="info-grid">
+              <div class="info-item">
+                <strong>Order Date</strong>
+                <span>${new Date(po.order_date).toLocaleDateString('en-ZA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
+              </div>
+              <div class="info-item">
+                <strong>Expected Delivery</strong>
+                <span>${po.expected_delivery ? new Date(po.expected_delivery).toLocaleDateString('en-ZA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'To be confirmed'}</span>
+              </div>
+              <div class="info-item">
+                <strong>Supplier</strong>
+                <span>${po.supplier_name}</span>
+              </div>
+              ${po.contact_person ? `
+              <div class="info-item">
+                <strong>Contact Person</strong>
+                <span>${po.contact_person}${po.phone ? ` | ${po.phone}` : ''}</span>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+
+          <div class="content">
+            <h2 class="section-title">Items Requested</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 45%;">Item Description</th>
+                  <th style="width: 15%;">Quantity</th>
+                  <th style="width: 20%;">Unit Price</th>
+                  <th style="width: 20%;">Line Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${items.map((item, index) => `
+                  <tr>
+                    <td>
+                      <div class="item-name">${item.inventory_name || 'Item #' + item.inventory_id}</div>
+                      ${item.sku ? `<div class="item-description">SKU: ${item.sku}</div>` : ''}
+                    </td>
+                    <td>${item.quantity_ordered}</td>
+                    <td>R ${parseFloat(item.unit_cost).toFixed(2)}</td>
+                    <td><strong>R ${(item.quantity_ordered * item.unit_cost).toFixed(2)}</strong></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+
+            <div class="totals-section">
+              <div class="total-row">
+                <span class="total-label">Subtotal:</span>
+                <span>R ${total.toFixed(2)}</span>
+              </div>
+              <div class="total-row">
+                <span class="total-label">VAT (0%):</span>
+                <span>R 0.00</span>
+              </div>
+              <div class="total-row grand-total">
+                <span class="total-label">TOTAL AMOUNT:</span>
+                <span>R ${total.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div class="instructions">
+              <h3>📋 Delivery Instructions</h3>
+              <ul>
+                <li>Please confirm receipt of this purchase order within 24 hours</li>
+                <li>Ensure all items meet the specified quantities and quality standards</li>
+                <li>Contact us immediately if there are any issues or delays</li>
+                <li>Include delivery note with all items</li>
+                <li>Expected delivery date: ${po.expected_delivery ? new Date(po.expected_delivery).toLocaleDateString('en-ZA') : 'To be confirmed'}</li>
+              </ul>
+            </div>
+
+            <div style="margin-top: 30px; padding: 20px; background-color: #f8f9fa; border-radius: 4px;">
+              <p style="margin-bottom: 10px;"><strong>Payment Terms:</strong> Payment will be processed upon receipt and verification of goods.</p>
+              <p style="margin-bottom: 10px;"><strong>Delivery Address:</strong> Please confirm delivery location with our team.</p>
+              <p><strong>Contact:</strong> For any queries regarding this order, please contact us immediately.</p>
+            </div>
+          </div>
+
+          <div class="footer">
+            <div class="company-name">THUSANANG FUNERAL SERVICES</div>
+            <p>This is an official Purchase Order. Please confirm receipt.</p>
+            <p style="margin-top: 15px; opacity: 0.7;">Generated by TFS Digital Purchase Order System</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Send email to supplier
+    let supplierEmailSent = false;
+    if (po.supplier_email) {
+      try {
+        await transporter.sendMail({
+          from: process.env.SMTP_USER,
+          to: po.supplier_email,
+          subject: `Purchase Order ${po.po_number} - TFS Digital`,
+          html: emailHtml,
+        });
+        supplierEmailSent = true;
+        console.log(`✅ Email sent to supplier: ${po.supplier_email}`);
+      } catch (emailErr) {
+        console.error('❌ Error sending email to supplier:', emailErr);
+      }
+    }
+
+    // Send copy to admin
+    let adminEmailSent = false;
+    if (admin_email) {
+      try {
+        await transporter.sendMail({
+          from: process.env.SMTP_USER,
+          to: admin_email,
+          subject: `Purchase Order ${po.po_number} - Copy (Sent to ${po.supplier_name})`,
+          html: emailHtml + `<p><strong>Note:</strong> This is a copy. Email sent to supplier: ${po.supplier_email || 'No email on file'}</p>`,
+        });
+        adminEmailSent = true;
+        console.log(`✅ Copy sent to admin: ${admin_email}`);
+      } catch (emailErr) {
+        console.error('❌ Error sending copy to admin:', emailErr);
+      }
+    }
+
+    // Update PO status
+    await query('UPDATE purchase_orders SET status = $1 WHERE id = $2', ['sent', poId]);
+
+    res.json({
+      success: true,
+      message: 'Purchase order processed',
+      supplier_email_sent: supplierEmailSent,
+      admin_email_sent: adminEmailSent,
+      supplier_email: po.supplier_email,
+      admin_email: admin_email || null,
+    });
+
+  } catch (err) {
+    console.error('❌ Error processing PO:', err);
+    res.status(500).json({ success: false, error: 'Failed to process purchase order', details: err.message });
+  }
+});
 
 // --- TEST ENDPOINT ---
 router.get('/test', (req, res) => {
