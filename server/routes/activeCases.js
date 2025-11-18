@@ -37,10 +37,33 @@ router.get('/', async (req, res) => {
 
     console.log(`Found ${vehicles?.length || 0} available vehicles`);
 
-    // For now, just return cases without roster data
+    // Get roster assignments for these cases
+    const caseIds = cases.map(c => c.id);
+    let rosterAssignments = [];
+    
+    if (caseIds.length > 0) {
+      const { data: rosterData, error: rosterError } = await supabase
+        .from('roster')
+        .select('case_id, vehicle_id, driver_name, status')
+        .in('case_id', caseIds);
+      
+      if (!rosterError && rosterData) {
+        // Group by case_id
+        const rosterByCase = {};
+        rosterData.forEach(r => {
+          if (!rosterByCase[r.case_id]) {
+            rosterByCase[r.case_id] = [];
+          }
+          rosterByCase[r.case_id].push(r);
+        });
+        rosterAssignments = rosterByCase;
+      }
+    }
+
+    // Attach roster data to cases
     const casesWithRoster = cases.map(caseItem => ({
       ...caseItem,
-      roster: [] // Empty array for now to avoid complex joins
+      roster: rosterAssignments[caseItem.id] || []
     }));
 
     res.json({ 
