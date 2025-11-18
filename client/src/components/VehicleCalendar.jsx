@@ -47,40 +47,52 @@ export default function VehicleCalendar() {
           {/* Header */}
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-lg font-bold text-red-700">
-              {item.case_number || `CASE-${item.id}`}
+              {item.case_number || `CASE-${item.case_id || item.id}`}
             </h3>
             <span className="text-sm text-gray-500">
               {item.funeral_date
-                ? new Date(item.funeral_date).toLocaleDateString()
-                : 'N/A'}
+                ? new Date(item.funeral_date).toLocaleDateString('en-ZA', {
+                    weekday: 'short',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                  })
+                : 'Date TBA'}
             </span>
           </div>
 
           {/* Deceased Name */}
           <p className="text-gray-800 font-semibold text-xl mb-2">
-            {item.deceased_name || 'Unknown Deceased'}
+            {item.deceased_name || 'Deceased Name Not Available'}
           </p>
 
           {/* Venue */}
           <p className="text-gray-600 text-sm mb-1">
-            📍 <span className="font-medium">{item.venue_name || 'TBD Venue'}</span>
+            📍 <span className="font-medium">{item.venue_name || 'Venue To Be Announced'}</span>
           </p>
 
           {/* Time */}
           <p className="text-gray-600 text-sm mb-1">
-            ⏰ Funeral Time: <span className="font-medium">{item.funeral_time || 'TBA'}</span>
+            ⏰ Funeral Time: <span className="font-medium">{item.funeral_time || 'Time To Be Announced'}</span>
           </p>
 
           {/* Driver Info */}
           <div className="bg-yellow-50 p-3 rounded-lg mt-3 border border-yellow-200">
             <p className="text-yellow-800 font-semibold flex items-center">
-              👤 {item.driver_name || 'Driver not assigned'}
+              👤 {item.driver_name || item.vehicle_driver_name || 'Driver not assigned'}
             </p>
             <p className="text-yellow-700 text-sm">
-              🚗 {item.vehicle_type || '—'} — {item.reg_number || '—'}
+              🚗 {item.vehicle_type ? item.vehicle_type.toUpperCase().replace('_', ' ') : '—'} — {item.reg_number || '—'}
             </p>
             <p className="text-gray-600 text-xs mt-1">
-              Pickup: {item.pickup_time || '—'}
+              Pickup: {item.pickup_time 
+                ? new Date(item.pickup_time).toLocaleString('en-ZA', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })
+                : '—'}
             </p>
           </div>
 

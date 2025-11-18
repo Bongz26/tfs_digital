@@ -6,7 +6,11 @@ const PLAN_DATA = {
   motjha: {
     Green: { 6: 132, 10: 165, 14: 187 },
     Silver: { 6: 180, 10: 242, 14: 308 },
-    Gold: { 6: 264, 10: 341, 14: 473 }
+    Gold: { 6: 264, 10: 341, 14: 473 },
+    Platinum: { 6: 330, 10: 462, 14: 682 },
+    Black: { 6: 460, 10: 704},
+    Pearl: { 6: 640, 10: 946},
+    Ivory: { 6: 790, 10: 1368},
   },
   single: {
     Green: { '18-65': 45, '66-85': 80, '86-100': 105 },
@@ -14,7 +18,7 @@ const PLAN_DATA = {
     Gold: { '18-65': 132, '66-85': 187, '86-100': 312 },
     Platinum: { '18-65': 165, '66-85': 275, '86-100': 415 },
     Black: { '18-65': 240, '66-85': 410 },
-    Pearl: { '18-65': 405 },
+    Pearl: { '18-65': 315 },
     Ivory: { '18-65': 450 }
   },
   family: {
@@ -23,7 +27,7 @@ const PLAN_DATA = {
     Gold: { '18-65': 152, '66-85': 207, '86-100': 402 },
     Platinum: { '18-65': 195, '66-85': 315, '86-100': 535 },
     Black: { '18-65': 280, '66-85': 470 },
-    Pearl: { '18-65': 455 },
+    Pearl: { '18-65': 405 },
     Ivory: { '18-65': 565 }
   },
   specials: {
@@ -33,13 +37,14 @@ const PLAN_DATA = {
 };
 
 const COLOUR_GRADE = {
-  Green: { casket: "Bedwood", tent: 1, chairs: 50, grocery: 100 },
-  Silver: { casket: "Crucifix", tent: 1, chairs: 100, grocery: 100 },
-  Gold: { casket: "Raised Halfview", tent: 1, chairs: 100, grocery: 100 },
-  Platinum: { casket: "4-Tier", tent: 1, chairs: 100, grocery: 100 },
-  Black: { casket: "Princeton Dome", tent: 1, chairs: 100, grocery: 150 },
-  Pearl: { casket: "Royal Dome", tent: 1, chairs: 200, grocery: 100 },
-  Ivory: { casket: "Tombstone", tent: 1, chairs: 200, grocery: 100 }
+  
+  Silver: { casket: "Redwood", tent: 1, table: 1, toilet:1, chairs: 50, grocery: 1000,crucifix: 1, programmes: 50, airtime: 100 },
+  Gold: { casket: "Raised Halfview", tent: 1, table: 2, toilet:1, chairs: 100, grocery: 1000, programmes: 100, crucifix:1, flower:1, airtime: 200 },
+  Platinum: { casket: "4-Tier", tent: 1, table: 2, toilet:"VIP",  chairs: 100, grocery: 1000, programmes: 100, crucifix:1, flower:1, airtime: 200},
+  Black: { casket: "Princeton Dome", tombstone:"1/cow", tent: 1, table:2, toilet:"VIP", chairs: 150, grocery: 1000, programmes: 100, crucifix:1, flower:1, airtime: 200 },
+  Pearl: { casket:"Four Cnr Figurine Cas", tombstone:"1/cow", tent: 1, table:2, toilet:"VIP", chairs: 200, grocery: 1000 , programmes: 150, airtime: 200 },
+  Ivory: { casket:"Royal Dome Casket", tombstone:1,cow:1, tent: 1,table:2,toilet:"VIP", chairs: 200, grocery: 100 , programmes: 150, airtime: 200 },
+  
 };
 
 const SPECIAL_PLAN_BENEFITS = {

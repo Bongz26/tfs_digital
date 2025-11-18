@@ -75,7 +75,19 @@ export default function ActiveCases() {
       }
       
       alert('Vehicle assigned successfully!');
-      window.location.reload(); // Refresh to show updated assignments
+      // Refresh data instead of full page reload
+      const refreshResponse = await fetch(`${API_URL}/api/active-cases`);
+      const refreshData = await refreshResponse.json();
+      if (refreshData.success) {
+        setCases(refreshData.cases || []);
+        setVehicles(refreshData.vehicles || []);
+        // Clear selection for this case
+        setSelectedVehicle(prev => {
+          const newState = { ...prev };
+          delete newState[caseId];
+          return newState;
+        });
+      }
     } catch (err) {
       console.error('Assign error:', err);
       alert(`Failed to assign vehicle: ${err.message}`);
@@ -226,7 +238,7 @@ export default function ActiveCases() {
                     <td className="p-4">
                       {c.roster && c.roster.length > 0 ? (
                         <div className="text-green-600 font-medium">
-                          ✓ Assigned
+                          ✓ Assigned ({c.roster.length} vehicle{c.roster.length > 1 ? 's' : ''})
                         </div>
                       ) : (
                         <div className="text-red-600 font-medium">
@@ -239,6 +251,7 @@ export default function ActiveCases() {
                         <div className="flex flex-col space-y-2">
                           <select
                             className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            value={selectedVehicle[c.id]?.id || ''}
                             onChange={e => {
                               const vehicleId = e.target.value;
                               if (vehicleId) {
@@ -247,13 +260,19 @@ export default function ActiveCases() {
                                   ...prev,
                                   [c.id]: vehicle
                                 }));
+                              } else {
+                                setSelectedVehicle(prev => {
+                                  const newState = { ...prev };
+                                  delete newState[c.id];
+                                  return newState;
+                                });
                               }
                             }}
                           >
                             <option value="">Select Vehicle</option>
                             {vehicles.map(v => (
                               <option key={v.id} value={v.id}>
-                                {v.type.toUpperCase()} - {v.reg_number} ({v.driver_name || 'No driver'})
+                                {v.type ? v.type.toUpperCase().replace('_', ' ') : 'VEHICLE'} - {v.reg_number} ({v.driver_name || 'No driver'})
                               </option>
                             ))}
                           </select>
@@ -266,8 +285,15 @@ export default function ActiveCases() {
                           </button>
                         </div>
                       ) : (
-                        <div className="text-center text-green-600 font-medium">
-                          Vehicle Assigned
+                        <div className="text-center">
+                          <div className="text-green-600 font-medium mb-2">
+                            ✓ Vehicle Assigned
+                          </div>
+                          {c.roster.map((r, idx) => (
+                            <div key={idx} className="text-xs text-gray-600">
+                              Driver: {r.driver_name || 'TBD'}
+                            </div>
+                          ))}
                         </div>
                       )}
                     </td>
