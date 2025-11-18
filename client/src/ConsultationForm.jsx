@@ -145,6 +145,14 @@ export default function ConsultationForm() {
       status: 'intake'
     };
 
+    console.log('📤 [ConsultationForm] Submitting case data:', {
+      ...data,
+      total_price: data.total_price,
+      delivery_date: data.delivery_date,
+      delivery_time: data.delivery_time
+    });
+    console.log('🌐 [ConsultationForm] API URL:', `${API_URL}/api/cases`);
+
     try {
       const res = await fetch(`${API_URL}/api/cases`, {
         method: 'POST',
@@ -152,10 +160,26 @@ export default function ConsultationForm() {
         body: JSON.stringify(data)
       });
 
+      console.log('📥 [ConsultationForm] Response status:', res.status, res.statusText);
+
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`HTTP ${res.status}`);
+        let errorData;
+        try {
+          errorData = await res.json();
+          console.error('❌ [ConsultationForm] Error response:', errorData);
+        } catch (parseErr) {
+          const text = await res.text();
+          console.error('❌ [ConsultationForm] Error response (text):', text);
+          errorData = { error: text, status: res.status };
+        }
+        
+        const errorMessage = errorData.details || errorData.error || errorData.message || `HTTP ${res.status}`;
+        const hint = errorData.hint ? `\n💡 ${errorData.hint}` : '';
+        throw new Error(`${errorMessage}${hint}`);
       }
+
+      const result = await res.json();
+      console.log('✅ [ConsultationForm] Success response:', result);
 
       setMessage('✅ Case submitted successfully!');
       setForm({
@@ -183,8 +207,9 @@ export default function ConsultationForm() {
         casket_colour: ''
       });
     } catch (err) {
-      console.error('Submit error:', err);
-      setMessage('❌ Failed to submit data. Please try again.');
+      console.error('❌ [ConsultationForm] Submit error:', err);
+      console.error('❌ [ConsultationForm] Error message:', err.message);
+      setMessage(`❌ Failed to submit data: ${err.message}`);
     } finally {
       setSubmitting(false);
     }
