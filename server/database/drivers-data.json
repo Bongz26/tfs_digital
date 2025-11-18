@@ -1,0 +1,39 @@
+[
+  {
+    "name": "Sipho Mthembu",
+    "contact": "0821234567",
+    "license_number": "DL123456",
+    "active": true
+  },
+  {
+    "name": "Thabo Nkosi",
+    "contact": "0834567890",
+    "license_number": "DL234567",
+    "active": true
+  },
+  {
+    "name": "Moses Dlamini",
+    "contact": "0845678901",
+    "license_number": "DL345678",
+    "active": true
+  },
+  {
+    "name": "Anna Khumalo",
+    "contact": "0856789012",
+    "license_number": "DL456789",
+    "active": true
+  },
+  {
+    "name": "Jacob Mokoena",
+    "contact": "0867890123",
+    "license_number": "DL567890",
+    "active": true
+  },
+  {
+    "name": "Peter Sithole",
+    "contact": "0878901234",
+    "license_number": "DL678901",
+    "active": true
+  }
+]
+

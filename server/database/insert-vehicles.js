@@ -23,9 +23,10 @@ const insertVehicles = async (vehicles) => {
         }
 
         // Validate type
-        const validTypes = ['hearse', 'family_car', 'bus', 'backup'];
+        const validTypes = ['fortuner', 'vito', 'v_class', 'truck', 'q7', 'hilux'];
         if (!validTypes.includes(vehicle.type)) {
           console.error(`❌ Invalid type for ${vehicle.reg_number}: ${vehicle.type}`);
+          console.error(`💡 Valid types are: ${validTypes.join(', ')}`);
           errorCount++;
           continue;
         }

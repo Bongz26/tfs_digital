@@ -69,7 +69,7 @@ router.post('/assign/:caseId', async (req, res) => {
 
     // 2. Verify vehicle exists and is available
     const vehicleResult = await client.query(
-      'SELECT id, reg_number, type, driver_name, available FROM vehicles WHERE id = $1', 
+      'SELECT id, reg_number, type, available FROM vehicles WHERE id = $1', 
       [vehicle_id]
     );
     if (vehicleResult.rows.length === 0) {
@@ -94,11 +94,28 @@ router.post('/assign/:caseId', async (req, res) => {
       }
     }
 
+    // 2a. Verify driver exists (if provided)
+    if (driver_name && driver_name !== 'TBD' && driver_name.trim() !== '') {
+      const driverResult = await client.query(
+        'SELECT id, name FROM drivers WHERE name = $1 AND active = true',
+        [driver_name.trim()]
+      );
+      if (driverResult.rows.length === 0) {
+        // Driver doesn't exist in database, but we'll still allow it (might be a new driver)
+        console.log(`⚠️  Driver "${driver_name}" not found in drivers table, but allowing assignment`);
+      }
+    }
+
     // 3. Check if roster entry already exists for this case
     const existingRoster = await client.query(
       'SELECT id FROM roster WHERE case_id = $1',
       [caseId]
     );
+
+    // Use provided driver_name or default to 'TBD'
+    const assignedDriver = driver_name && driver_name.trim() !== '' 
+      ? driver_name.trim() 
+      : 'TBD';
 
     let rosterEntry;
     if (existingRoster.rows.length > 0) {
@@ -113,7 +130,7 @@ router.post('/assign/:caseId', async (req, res) => {
          RETURNING *`,
         [
           vehicle_id,
-          driver_name || vehicle.driver_name || 'TBD',
+          assignedDriver,
           pickup_time || new Date().toISOString(),
           caseId
         ]
@@ -127,7 +144,7 @@ router.post('/assign/:caseId', async (req, res) => {
         [
           caseId,
           vehicle_id,
-          driver_name || vehicle.driver_name || 'TBD',
+          assignedDriver,
           pickup_time || new Date().toISOString()
         ]
       );
@@ -159,6 +176,56 @@ router.post('/assign/:caseId', async (req, res) => {
     });
   } finally {
     client.release();
+  }
+});
+
+// PATCH update case status
+router.patch('/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status, notes } = req.body;
+
+  // Validate status
+  const validStatuses = ['intake', 'confirmed', 'preparation', 'scheduled', 'in_progress', 'completed', 'archived', 'cancelled'];
+  if (!status || !validStatuses.includes(status)) {
+    return res.status(400).json({ 
+      success: false, 
+      error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` 
+    });
+  }
+
+  try {
+    // Verify case exists
+    const caseCheck = await query('SELECT id, status FROM cases WHERE id = $1', [id]);
+    if (caseCheck.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Case not found' });
+    }
+
+    const oldStatus = caseCheck.rows[0].status;
+
+    // Update status
+    const result = await query(
+      `UPDATE cases 
+       SET status = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING *`,
+      [status, id]
+    );
+
+    console.log(`✅ Case ${id} status changed: ${oldStatus} → ${status}`);
+
+    res.json({
+      success: true,
+      message: `Status updated from ${oldStatus} to ${status}`,
+      case: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error('❌ Error updating case status:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to update case status',
+      details: err.message 
+    });
   }
 });
 

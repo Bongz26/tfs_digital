@@ -9,11 +9,12 @@ router.get('/', async (req, res) => {
 
     console.log('Fetching active cases...');
 
-    // Get active cases (simplified query)
+    // Get active cases (exclude completed and archived)
     const { data: cases, error: casesError } = await supabase
       .from('cases')
       .select('*')
-      .in('status', ['intake', 'confirmed', 'in_progress'])
+      .not('status', 'eq', 'completed')
+      .not('status', 'eq', 'archived')
       .order('funeral_date', { ascending: true });
 
     if (casesError) {

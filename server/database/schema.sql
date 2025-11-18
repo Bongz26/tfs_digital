@@ -22,22 +22,31 @@ CREATE TABLE IF NOT EXISTS cases (
     venue_lng DECIMAL(11, 8),
     requires_cow BOOLEAN DEFAULT FALSE,
     requires_tombstone BOOLEAN DEFAULT FALSE,
-    status VARCHAR(20) DEFAULT 'intake', -- intake, confirmed, in_progress, completed
+    status VARCHAR(20) DEFAULT 'intake', -- intake, confirmed, preparation, scheduled, in_progress, completed, archived, cancelled
     intake_day DATE CHECK (EXTRACT(DOW FROM intake_day) = 3), -- Wednesday = 3
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- 2. Vehicles (6 Total)
+-- 2. Vehicles
 CREATE TABLE IF NOT EXISTS vehicles (
     id SERIAL PRIMARY KEY,
     reg_number VARCHAR(12) UNIQUE NOT NULL,
-    type VARCHAR(20) CHECK (type IN ('hearse', 'family_car', 'bus', 'backup')),
-    driver_name VARCHAR(100),
-    driver_contact VARCHAR(15),
+    type VARCHAR(20) CHECK (type IN ('fortuner', 'vito', 'v_class', 'truck', 'q7', 'hilux')),
     available BOOLEAN DEFAULT TRUE,
     current_location VARCHAR(100),
     last_service DATE
+    -- Note: driver_name and driver_contact removed - drivers are assigned per case, not per vehicle
+);
+
+-- 2a. Drivers
+CREATE TABLE IF NOT EXISTS drivers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    contact VARCHAR(15),
+    license_number VARCHAR(20),
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- 3. Inventory Items
@@ -106,15 +115,25 @@ CREATE TABLE IF NOT EXISTS sms_log (
     status VARCHAR(20)
 );
 
--- Insert default vehicles
-INSERT INTO vehicles (reg_number, type, driver_name) VALUES
-('HVR 607 FS', 'hearse', 'Sipho'),
-('TSF 145 FS', 'family_car', 'Thabo'),
-('THS 001 FS', 'hearse', 'Moses'),
-('THS 002 FS', 'family_car', 'Anna'),
-('THS 003 FS', 'bus', 'Jacob'),
-('THS 004 FS', 'backup', 'Peter')
+-- Insert default vehicles (no driver assignment - drivers assigned per case)
+INSERT INTO vehicles (reg_number, type) VALUES
+('HVR 607 FS', 'fortuner'),
+('TSF 145 FS', 'vito'),
+('THS 001 FS', 'v_class'),
+('THS 002 FS', 'truck'),
+('THS 003 FS', 'q7'),
+('THS 004 FS', 'hilux')
 ON CONFLICT (reg_number) DO NOTHING;
+
+-- Insert default drivers
+INSERT INTO drivers (name, contact, license_number, active) VALUES
+('Sipho Mthembu', '0821234567', 'DL123456', true),
+('Thabo Nkosi', '0834567890', 'DL234567', true),
+('Moses Dlamini', '0845678901', 'DL345678', true),
+('Anna Khumalo', '0856789012', 'DL456789', true),
+('Jacob Mokoena', '0867890123', 'DL567890', true),
+('Peter Sithole', '0878901234', 'DL678901', true)
+ON CONFLICT DO NOTHING;
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_cases_funeral_date ON cases(funeral_date);

@@ -15,6 +15,7 @@ const rosterRoutes = require('./routes/roster');
 const livestockRoutes = require('./routes/livestock');
 const checklistRoutes = require('./routes/checklist');
 const smsRoutes = require('./routes/sms');
+const driversRoutes = require('./routes/drivers');
 
 const app = express();
 
@@ -54,6 +55,7 @@ app.use('/api/roster', rosterRoutes);
 app.use('/api/livestock', livestockRoutes);
 app.use('/api/checklist', checklistRoutes);
 app.use('/api/sms', smsRoutes);
+app.use('/api/drivers', driversRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

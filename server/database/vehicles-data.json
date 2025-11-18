@@ -1,7 +1,7 @@
 [
   {
     "reg_number": "HVR 607 FS",
-    "type": "hearse",
+    "type": "fortuner",
     "driver_name": "Sipho",
     "driver_contact": "",
     "available": true,
@@ -10,7 +10,7 @@
   },
   {
     "reg_number": "TSF 145 FS",
-    "type": "family_car",
+    "type": "vito",
     "driver_name": "Thabo",
     "driver_contact": "",
     "available": true,
@@ -19,7 +19,7 @@
   },
   {
     "reg_number": "THS 001 FS",
-    "type": "hearse",
+    "type": "v_class",
     "driver_name": "Moses",
     "driver_contact": "",
     "available": true,
@@ -28,7 +28,7 @@
   },
   {
     "reg_number": "THS 002 FS",
-    "type": "family_car",
+    "type": "truck",
     "driver_name": "Anna",
     "driver_contact": "",
     "available": true,
@@ -37,7 +37,7 @@
   },
   {
     "reg_number": "THS 003 FS",
-    "type": "bus",
+    "type": "q7",
     "driver_name": "Jacob",
     "driver_contact": "",
     "available": true,
@@ -46,7 +46,7 @@
   },
   {
     "reg_number": "THS 004 FS",
-    "type": "backup",
+    "type": "hilux",
     "driver_name": "Peter",
     "driver_contact": "",
     "available": true,
