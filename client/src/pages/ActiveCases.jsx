@@ -2,13 +2,17 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { API_HOST } from '../api/config';
+import { getStatusConfig, getNextStatuses, suggestStatus, getStatusBadgeProps } from '../utils/caseStatus';
 
 export default function ActiveCases() {
   const [cases, setCases] = useState([]);
   const [vehicles, setVehicles] = useState([]);
+  const [drivers, setDrivers] = useState([]);
   const [selectedVehicle, setSelectedVehicle] = useState({});
+  const [selectedDriver, setSelectedDriver] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [changingStatus, setChangingStatus] = useState({});
 
   const API_URL = API_HOST;
 
@@ -38,6 +42,15 @@ export default function ActiveCases() {
         } else {
           throw new Error(data.error || 'Failed to load data');
         }
+
+        // Fetch drivers separately
+        const driversResponse = await fetch(`${API_URL}/api/drivers`);
+        if (driversResponse.ok) {
+          const driversData = await driversResponse.json();
+          if (driversData.success) {
+            setDrivers(driversData.drivers || []);
+          }
+        }
       } catch (err) {
         console.error('Data fetch error:', err);
         setError(`Failed to load active cases: ${err.message}`);
@@ -56,6 +69,12 @@ export default function ActiveCases() {
     }
     
     const vehicle = selectedVehicle[caseId];
+    const driver = selectedDriver[caseId];
+
+    if (!driver || !driver.name) {
+      alert('Please select a driver for this assignment');
+      return;
+    }
 
     try {
       const res = await fetch(`${API_URL}/api/cases/assign/${caseId}`, {
@@ -63,7 +82,7 @@ export default function ActiveCases() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           vehicle_id: vehicle.id,
-          driver_name: vehicle.driver_name || 'TBD',
+          driver_name: driver.name,
           pickup_time: new Date().toISOString()
         })
       });
@@ -87,10 +106,52 @@ export default function ActiveCases() {
           delete newState[caseId];
           return newState;
         });
+        setSelectedDriver(prev => {
+          const newState = { ...prev };
+          delete newState[caseId];
+          return newState;
+        });
       }
     } catch (err) {
       console.error('Assign error:', err);
       alert(`Failed to assign vehicle: ${err.message}`);
+    }
+  };
+
+  const changeCaseStatus = async (caseId, newStatus) => {
+    setChangingStatus(prev => ({ ...prev, [caseId]: true }));
+    
+    try {
+      const res = await fetch(`${API_URL}/api/cases/${caseId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      
+      const data = await res.json();
+      
+      if (!data.success) {
+        throw new Error(data.error);
+      }
+      
+      // Refresh data
+      const refreshResponse = await fetch(`${API_URL}/api/active-cases`);
+      const refreshData = await refreshResponse.json();
+      if (refreshData.success) {
+        setCases(refreshData.cases || []);
+        setVehicles(refreshData.vehicles || []);
+      }
+      
+      alert(`Status updated to: ${getStatusConfig(newStatus).label}`);
+    } catch (err) {
+      console.error('Status change error:', err);
+      alert(`Failed to update status: ${err.message}`);
+    } finally {
+      setChangingStatus(prev => {
+        const newState = { ...prev };
+        delete newState[caseId];
+        return newState;
+      });
     }
   };
 
@@ -227,13 +288,52 @@ export default function ActiveCases() {
                       )}
                     </td>
                     <td className="p-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        c.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
-                        c.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {c.status}
-                      </span>
+                      <div className="flex flex-col gap-2">
+                        {(() => {
+                          const statusConfig = getStatusConfig(c.status);
+                          const suggestedStatus = suggestStatus(c.funeral_date, c.status);
+                          const hasSuggestion = suggestedStatus !== c.status;
+                          
+                          return (
+                            <>
+                              <div className="flex items-center gap-2">
+                                <span {...getStatusBadgeProps(c.status)}>
+                                  {statusConfig.icon} {statusConfig.label}
+                                </span>
+                                {hasSuggestion && (
+                                  <span className="text-xs text-orange-600" title={`Suggested: ${getStatusConfig(suggestedStatus).label}`}>
+                                    💡
+                                  </span>
+                                )}
+                              </div>
+                              
+                              {/* Status Change Dropdown */}
+                              {getNextStatuses(c.status).length > 0 && (
+                                <select
+                                  className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-red-500 focus:border-red-500"
+                                  value=""
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      if (window.confirm(`Change status to "${getStatusConfig(e.target.value).label}"?`)) {
+                                        changeCaseStatus(c.id, e.target.value);
+                                      }
+                                      e.target.value = '';
+                                    }
+                                  }}
+                                  disabled={changingStatus[c.id]}
+                                >
+                                  <option value="">Change Status...</option>
+                                  {getNextStatuses(c.status).map(nextStatus => (
+                                    <option key={nextStatus.value} value={nextStatus.value}>
+                                      {nextStatus.icon} {nextStatus.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
                     </td>
                     <td className="p-4">
                       {c.roster && c.roster.length > 0 ? (
@@ -272,16 +372,45 @@ export default function ActiveCases() {
                             <option value="">Select Vehicle</option>
                             {vehicles.map(v => (
                               <option key={v.id} value={v.id}>
-                                {v.type ? v.type.toUpperCase().replace('_', ' ') : 'VEHICLE'} - {v.reg_number} ({v.driver_name || 'No driver'})
+                                {v.type ? v.type.toUpperCase().replace('_', ' ') : 'VEHICLE'} - {v.reg_number}
                               </option>
                             ))}
                           </select>
+                          
+                          <select
+                            className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            value={selectedDriver[c.id]?.id || ''}
+                            onChange={e => {
+                              const driverId = e.target.value;
+                              if (driverId) {
+                                const driver = drivers.find(d => d.id === parseInt(driverId));
+                                setSelectedDriver(prev => ({
+                                  ...prev,
+                                  [c.id]: driver
+                                }));
+                              } else {
+                                setSelectedDriver(prev => {
+                                  const newState = { ...prev };
+                                  delete newState[c.id];
+                                  return newState;
+                                });
+                              }
+                            }}
+                          >
+                            <option value="">Select Driver</option>
+                            {drivers.map(d => (
+                              <option key={d.id} value={d.id}>
+                                {d.name} {d.contact ? `(${d.contact})` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          
                           <button
                             className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
                             onClick={() => assignVehicle(c.id)}
-                            disabled={!selectedVehicle[c.id]}
+                            disabled={!selectedVehicle[c.id] || !selectedDriver[c.id]}
                           >
-                            Assign Vehicle
+                            Assign Vehicle & Driver
                           </button>
                         </div>
                       ) : (
@@ -315,9 +444,31 @@ export default function ActiveCases() {
             {vehicles.map(vehicle => (
               <div key={vehicle.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
                 <div className="font-semibold text-gray-800">{vehicle.reg_number}</div>
-                <div className="text-sm text-gray-600 capitalize">{vehicle.type.replace('_', ' ')}</div>
-                <div className="text-sm text-gray-600">{vehicle.driver_name || 'Driver TBD'}</div>
+                <div className="text-sm text-gray-600 capitalize">{vehicle.type ? vehicle.type.replace('_', ' ') : 'Vehicle'}</div>
                 <div className="text-xs text-green-600 font-medium mt-1">● Available</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* AVAILABLE DRIVERS SECTION */}
+      {drivers.length > 0 && (
+        <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-green-600 mb-6">
+          <h3 className="text-xl font-bold text-green-800 mb-4 text-center">
+            Available Drivers ({drivers.length})
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {drivers.map(driver => (
+              <div key={driver.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+                <div className="font-semibold text-gray-800">{driver.name}</div>
+                {driver.contact && (
+                  <div className="text-sm text-gray-600">{driver.contact}</div>
+                )}
+                {driver.license_number && (
+                  <div className="text-xs text-gray-500">License: {driver.license_number}</div>
+                )}
+                <div className="text-xs text-green-600 font-medium mt-1">● Active</div>
               </div>
             ))}
           </div>
