@@ -20,6 +20,8 @@ router.get('/', async (req, res) => {
           deceased_name,
           funeral_date,
           funeral_time,
+          delivery_date,
+          delivery_time,
           venue_name
         ),
         vehicles:vehicle_id (
@@ -52,6 +54,8 @@ router.get('/', async (req, res) => {
         deceased_name: caseData?.deceased_name || null,
         funeral_date: caseData?.funeral_date || null,
         funeral_time: caseData?.funeral_time || null,
+        delivery_date: caseData?.delivery_date || null,
+        delivery_time: caseData?.delivery_time || null,
         venue_name: caseData?.venue_name || null,
         // Vehicle data (flattened)
         reg_number: vehicleData?.reg_number || null,

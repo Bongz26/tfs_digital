@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS cases (
     plan_age_bracket VARCHAR(20),
     funeral_date DATE NOT NULL,
     funeral_time TIME,
+    delivery_date DATE,
+    delivery_time TIME,
     venue_name VARCHAR(100),
     venue_address TEXT,
     venue_lat DECIMAL(10, 8),

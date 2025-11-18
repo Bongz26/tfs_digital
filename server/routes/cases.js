@@ -60,16 +60,55 @@ router.post('/assign/:caseId', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // 1. Verify case exists
-    const caseResult = await client.query('SELECT id, case_number FROM cases WHERE id = $1', [caseId]);
+    // 1. Verify case exists and get funeral details including delivery_time
+    const caseResult = await client.query(
+      'SELECT id, case_number, funeral_date, funeral_time, delivery_date, delivery_time FROM cases WHERE id = $1', 
+      [caseId]
+    );
     if (caseResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(404).json({ success: false, error: 'Case not found' });
     }
 
-    // 2. Verify vehicle exists and is available
+    const currentCase = caseResult.rows[0];
+    const currentFuneralDate = currentCase.funeral_date;
+    const currentFuneralTime = currentCase.funeral_time;
+    const deliveryDate = currentCase.delivery_date;
+    const deliveryTime = currentCase.delivery_time;
+    
+    // Use delivery_time from case if available, otherwise use provided pickup_time or calculate
+    let calculatedPickupTime = pickup_time;
+    
+    if (deliveryDate && deliveryTime) {
+      // Use delivery date and time from case (entered during intake)
+      try {
+        calculatedPickupTime = new Date(`${deliveryDate}T${deliveryTime}`).toISOString();
+        console.log(`📅 Using delivery_time from case: ${calculatedPickupTime} (${deliveryDate} ${deliveryTime})`);
+      } catch (err) {
+        console.warn('⚠️  Could not parse delivery_time, falling back to calculation');
+        calculatedPickupTime = null; // Will fall through to calculation
+      }
+    }
+    
+    // Fallback: Calculate from funeral time if delivery_time not available
+    if (!calculatedPickupTime && currentFuneralDate && currentFuneralTime) {
+      try {
+        const funeralDateTime = new Date(`${currentFuneralDate}T${currentFuneralTime}`);
+        // Set pickup time to 1.5 hours before funeral time
+        calculatedPickupTime = new Date(funeralDateTime.getTime() - (1.5 * 60 * 60 * 1000)).toISOString();
+        console.log(`📅 Calculated pickup_time: ${calculatedPickupTime} (1.5 hours before funeral at ${currentFuneralTime})`);
+      } catch (err) {
+        console.warn('⚠️  Could not calculate pickup_time from funeral time, using provided or current time');
+        calculatedPickupTime = pickup_time || new Date().toISOString();
+      }
+    } else if (!calculatedPickupTime) {
+      // Final fallback to current time if nothing available
+      calculatedPickupTime = pickup_time || new Date().toISOString();
+    }
+
+    // 2. Verify vehicle exists
     const vehicleResult = await client.query(
-      'SELECT id, reg_number, type, available FROM vehicles WHERE id = $1', 
+      'SELECT id, reg_number, type FROM vehicles WHERE id = $1', 
       [vehicle_id]
     );
     if (vehicleResult.rows.length === 0) {
@@ -79,18 +118,83 @@ router.post('/assign/:caseId', async (req, res) => {
 
     const vehicle = vehicleResult.rows[0];
     
-    // Check if vehicle is already assigned to another case
-    if (!vehicle.available) {
-      const assignedCase = await client.query(
-        'SELECT case_id FROM roster WHERE vehicle_id = $1 AND case_id != $2',
-        [vehicle_id, caseId]
-      );
-      if (assignedCase.rows.length > 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Vehicle is already assigned to another case' 
-        });
+    // 3. Check for time conflicts with other assignments
+    // Get all other cases this vehicle is assigned to on the same date
+    if (currentFuneralDate) {
+      const conflictingAssignments = await client.query(`
+        SELECT 
+          r.case_id,
+          c.funeral_date,
+          c.funeral_time,
+          c.case_number,
+          c.deceased_name
+        FROM roster r
+        JOIN cases c ON r.case_id = c.id
+        WHERE r.vehicle_id = $1 
+          AND r.case_id != $2
+          AND r.status != 'completed'
+          AND c.funeral_date = $3
+      `, [vehicle_id, caseId, currentFuneralDate]);
+
+      if (conflictingAssignments.rows.length > 0) {
+        // Check if times overlap (with 2 hour buffer for service + travel)
+        const BUFFER_HOURS = 2; // 2 hours buffer for service duration and travel
+        
+        if (currentFuneralTime) {
+          const currentTime = new Date(`${currentFuneralDate}T${currentFuneralTime}`);
+          const currentEndTime = new Date(currentTime.getTime() + (BUFFER_HOURS * 60 * 60 * 1000));
+
+          for (const assignment of conflictingAssignments.rows) {
+            if (assignment.funeral_time) {
+              const assignmentTime = new Date(`${assignment.funeral_date}T${assignment.funeral_time}`);
+              const assignmentEndTime = new Date(assignmentTime.getTime() + (BUFFER_HOURS * 60 * 60 * 1000));
+
+              // Check if times overlap
+              if (
+                (currentTime >= assignmentTime && currentTime < assignmentEndTime) ||
+                (currentEndTime > assignmentTime && currentEndTime <= assignmentEndTime) ||
+                (currentTime <= assignmentTime && currentEndTime >= assignmentEndTime)
+              ) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ 
+                  success: false, 
+                  error: `Time conflict: Vehicle is already assigned to ${assignment.case_number} (${assignment.deceased_name}) at ${assignment.funeral_time || 'TBA'} on the same day. Please choose a different time or vehicle.`,
+                  conflict: {
+                    case_number: assignment.case_number,
+                    deceased_name: assignment.deceased_name,
+                    time: assignment.funeral_time
+                  }
+                });
+              }
+            } else {
+              // If other assignment has no time, assume it might conflict
+              await client.query('ROLLBACK');
+              return res.status(400).json({ 
+                success: false, 
+                error: `Vehicle is assigned to ${assignment.case_number} (${assignment.deceased_name}) on the same day without a specific time. Please confirm times don't conflict or choose a different vehicle.`,
+                conflict: {
+                  case_number: assignment.case_number,
+                  deceased_name: assignment.deceased_name
+                }
+              });
+            }
+          }
+        } else {
+          // Current case has no time - check if any assignment has a time
+          const hasTimedAssignment = conflictingAssignments.rows.some(a => a.funeral_time);
+          if (hasTimedAssignment) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ 
+              success: false, 
+              error: `Vehicle is assigned to other case(s) on the same day with specific times. Please set a funeral time for this case first, or choose a different vehicle.`,
+              conflicts: conflictingAssignments.rows.map(a => ({
+                case_number: a.case_number,
+                deceased_name: a.deceased_name,
+                time: a.funeral_time
+              }))
+            });
+          }
+        }
       }
     }
 
@@ -131,7 +235,7 @@ router.post('/assign/:caseId', async (req, res) => {
         [
           vehicle_id,
           assignedDriver,
-          pickup_time || new Date().toISOString(),
+          calculatedPickupTime,
           caseId
         ]
       );
@@ -145,16 +249,13 @@ router.post('/assign/:caseId', async (req, res) => {
           caseId,
           vehicle_id,
           assignedDriver,
-          pickup_time || new Date().toISOString()
+          calculatedPickupTime
         ]
       );
     }
 
-    // 4. Update vehicle availability (mark as not available)
-    await client.query(
-      'UPDATE vehicles SET available = false WHERE id = $1',
-      [vehicle_id]
-    );
+    // 4. Don't mark vehicle as unavailable - allow multiple assignments if times don't conflict
+    // Vehicle availability is now determined by time conflicts, not a boolean flag
 
     await client.query('COMMIT');
 
