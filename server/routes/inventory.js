@@ -148,11 +148,41 @@ router.post('/:id/adjust', async (req, res) => {
   }
 });
 
+// GET list open stock takes
+router.get('/stock-take/open', async (req, res) => {
+  try {
+    const openTakes = await query(
+      `SELECT id, taken_by, created_at, status 
+       FROM stock_takes 
+       WHERE status = 'in_progress' 
+       ORDER BY created_at DESC`
+    );
+    res.json({ success: true, stock_takes: openTakes.rows });
+  } catch (err) {
+    console.error('❌ Error fetching open stock takes:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch open stock takes', details: err.message });
+  }
+});
+
 // POST start stock take
 router.post('/stock-take/start', async (req, res) => {
   const { taken_by } = req.body;
 
   try {
+    // Check how many open stock takes exist
+    const openCount = await query(
+      `SELECT COUNT(*) as count FROM stock_takes WHERE status = 'in_progress'`
+    );
+    const count = parseInt(openCount.rows[0].count);
+
+    if (count >= 2) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Maximum of 2 open stock take sessions allowed. Please complete or cancel existing sessions first.',
+        open_count: count
+      });
+    }
+
     const take = await query(
       `INSERT INTO stock_takes (taken_by) VALUES ($1) RETURNING id, created_at`,
       [taken_by]
@@ -253,7 +283,88 @@ router.put('/stock-take/:id/item/:itemId', async (req, res) => {
   }
 });
 
-// POST complete stock take (apply adjustments to inventory)
+// GET specific stock take with items (must be before POST routes)
+router.get('/stock-take/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Get stock take info
+    const takeResult = await query(
+      `SELECT id, taken_by, created_at, status FROM stock_takes WHERE id = $1`,
+      [id]
+    );
+
+    if (takeResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Stock take not found' });
+    }
+
+    // Get items with inventory details
+    const itemsWithDetails = await query(
+      `SELECT 
+         sti.id,
+         sti.stock_take_id,
+         sti.inventory_id,
+         sti.system_quantity,
+         sti.physical_quantity,
+         sti.difference,
+         sti.notes,
+         sti.created_at,
+         i.name,
+         i.category,
+         i.sku
+       FROM stock_take_items sti
+       INNER JOIN inventory i ON sti.inventory_id = i.id
+       WHERE sti.stock_take_id = $1
+       ORDER BY i.category, i.name`,
+      [id]
+    );
+
+    res.json({ 
+      success: true, 
+      stock_take: takeResult.rows[0],
+      items: itemsWithDetails.rows 
+    });
+  } catch (err) {
+    console.error('❌ Error fetching stock take:', err);
+    res.status(500).json({ success: false, error: 'Failed to fetch stock take', details: err.message });
+  }
+});
+
+// POST cancel stock take
+router.post('/stock-take/:id/cancel', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Check if stock take exists and is in progress
+    const takeResult = await query(
+      `SELECT id, status FROM stock_takes WHERE id = $1`,
+      [id]
+    );
+
+    if (takeResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Stock take not found' });
+    }
+
+    if (takeResult.rows[0].status !== 'in_progress') {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Cannot cancel stock take. Current status: ${takeResult.rows[0].status}` 
+      });
+    }
+
+    // Update status to cancelled (items will be deleted via CASCADE)
+    await query(
+      `UPDATE stock_takes SET status = 'cancelled' WHERE id = $1`,
+      [id]
+    );
+
+    res.json({ success: true, message: 'Stock take cancelled successfully' });
+  } catch (err) {
+    console.error('❌ Error cancelling stock take:', err);
+    res.status(500).json({ success: false, error: 'Failed to cancel stock take', details: err.message });
+  }
+});
+
 router.post('/stock-take/:id/complete', async (req, res) => {
   const { id } = req.params;
   const client = await getClient();

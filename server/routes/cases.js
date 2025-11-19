@@ -27,10 +27,46 @@ router.post('/', async (req, res) => {
     plan_category, plan_name, plan_members, plan_age_bracket,
     funeral_date, funeral_time, venue_name, venue_address, venue_lat, venue_lng,
     requires_cow, requires_tombstone, service_type, total_price, casket_type,
-    casket_colour, delivery_date, delivery_time
+    casket_colour, delivery_date, delivery_time, intake_day
   } = req.body;
 
   try {
+    // Validate intake_day is required and is a Wednesday
+    if (!intake_day) {
+      return res.status(400).json({
+        success: false,
+        error: 'Intake day is required',
+        details: 'Intake day must be provided and must be a Wednesday'
+      });
+    }
+
+    const intakeDate = new Date(intake_day);
+    const dayOfWeek = intakeDate.getDay(); // 0 = Sunday, 3 = Wednesday
+    if (dayOfWeek !== 3) {
+      return res.status(400).json({
+        success: false,
+        error: 'Intake day must be a Wednesday',
+        details: `Selected date ${intake_day} is not a Wednesday`
+      });
+    }
+
+    // Validate delivery_date and delivery_time are required
+    if (!delivery_date) {
+      return res.status(400).json({
+        success: false,
+        error: 'Delivery date is required',
+        details: 'Delivery date must be provided'
+      });
+    }
+
+    if (!delivery_time) {
+      return res.status(400).json({
+        success: false,
+        error: 'Delivery time is required',
+        details: 'Delivery time must be provided'
+      });
+    }
+
     // Generate case_number if not provided (format: THS-YYYY-XXX)
     let finalCaseNumber = case_number;
     if (!finalCaseNumber) {
@@ -66,14 +102,14 @@ router.post('/', async (req, res) => {
         plan_category, plan_name, plan_members, plan_age_bracket,
         funeral_date, funeral_time, venue_name, venue_address, venue_lat, venue_lng,
         requires_cow, requires_tombstone, service_type, total_price,
-        casket_type, casket_colour, delivery_date, delivery_time)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+        casket_type, casket_colour, delivery_date, delivery_time, intake_day)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
        RETURNING *`,
       [finalCaseNumber, deceased_name, deceased_id, nok_name, nok_contact, nok_relation,
        plan_category, plan_name, plan_members, plan_age_bracket,
        funeral_date, funeral_time, venue_name, venue_address, venue_lat, venue_lng,
        requires_cow, requires_tombstone, service_type, total_price,
-       casket_type, casket_colour, delivery_date, delivery_time]
+       casket_type, casket_colour, delivery_date, delivery_time, intake_day]
     );
     
     console.log('✅ [POST /api/cases] Case created successfully:', result.rows[0]?.id, result.rows[0]?.case_number);
