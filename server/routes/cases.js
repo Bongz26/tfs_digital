@@ -428,6 +428,77 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
+// PATCH update funeral time (only if status is 'intake')
+router.patch('/:id/funeral-time', async (req, res) => {
+  const { id } = req.params;
+  const { funeral_time, funeral_date } = req.body;
+
+  if (!funeral_time) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'funeral_time is required' 
+    });
+  }
+
+  try {
+    // Verify case exists and check status
+    const caseCheck = await query('SELECT id, status FROM cases WHERE id = $1', [id]);
+    if (caseCheck.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Case not found' });
+    }
+
+    const currentStatus = caseCheck.rows[0].status;
+    
+    // Only allow update if status is 'intake'
+    if (currentStatus !== 'intake') {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Cannot update funeral time. Case status is "${currentStatus}". Funeral time can only be changed when status is "intake".` 
+      });
+    }
+
+    // Update funeral time (and date if provided)
+    const updateFields = [];
+    const updateValues = [];
+    let paramIndex = 1;
+
+    if (funeral_date) {
+      updateFields.push(`funeral_date = $${paramIndex++}`);
+      updateValues.push(funeral_date);
+    }
+
+    updateFields.push(`funeral_time = $${paramIndex++}`);
+    updateValues.push(funeral_time);
+    
+    updateFields.push(`updated_at = NOW()`);
+    updateValues.push(id);
+
+    const result = await query(
+      `UPDATE cases 
+       SET ${updateFields.join(', ')}
+       WHERE id = $${paramIndex}
+       RETURNING *`,
+      updateValues
+    );
+
+    console.log(`✅ Case ${id} funeral time updated: ${funeral_time}`);
+
+    res.json({
+      success: true,
+      message: 'Funeral time updated successfully',
+      case: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error('❌ Error updating funeral time:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to update funeral time',
+      details: err.message 
+    });
+  }
+});
+
 // GET single case by ID (must come last to avoid conflicts with /assign/:caseId)
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
