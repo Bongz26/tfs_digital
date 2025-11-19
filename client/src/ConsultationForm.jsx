@@ -354,8 +354,8 @@ export default function ConsultationForm() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
-      <div className="max-w-6xl mx-auto px-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-4 sm:py-6 md:py-8">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 md:px-6">
         <div className="text-center mb-8">
           {/* <h1 className="text-5xl font-bold text-red-800 mb-2">THUSANANG FUNERAL SERVICES</h1> */}
           <p className="text-yellow-600 text-xl font-semibold mb-6">Live from QwaQwa • Re tšotella sechaba sa rona</p>

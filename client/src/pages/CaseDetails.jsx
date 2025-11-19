@@ -32,12 +32,12 @@ export default function CaseDetails() {
     fetchCase();
   }, [id]);
 
-  if (loading) return <div className="p-8 text-center text-red-600">Loading case details...</div>;
-  if (error) return <div className="p-8 text-center text-red-600">{error}</div>;
-  if (!caseData) return <div className="p-8 text-center text-gray-600">Case not found</div>;
+  if (loading) return <div className="p-3 sm:p-4 md:p-6 lg:p-8 text-center text-red-600">Loading case details...</div>;
+  if (error) return <div className="p-3 sm:p-4 md:p-6 lg:p-8 text-center text-red-600">{error}</div>;
+  if (!caseData) return <div className="p-3 sm:p-4 md:p-6 lg:p-8 text-center text-gray-600">Case not found</div>;
 
   return (
-    <div className="p-8 max-w-5xl mx-auto bg-gray-50 min-h-screen">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-5xl mx-auto bg-gray-50 min-h-screen">
       <Link to="/dashboard" className="text-blue-600 hover:underline mb-6 inline-block">← Back to Dashboard</Link>
 
       <h1 className="text-3xl font-bold text-center text-red-800 mb-6">

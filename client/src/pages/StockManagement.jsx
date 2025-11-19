@@ -164,23 +164,23 @@ export default function StockManagement() {
 
   if (loading) {
     return (
-      <div className="p-8 max-w-7xl mx-auto bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
-        <div className="text-center mb-10">
-          <h1 className="text-5xl font-bold text-red-800 mb-2">THUSANANG FUNERAL SERVICES</h1>
-          <p className="text-yellow-600 text-xl font-semibold">Live from QwaQwa • Re tšotella sechaba sa rona</p>
+      <div className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-7xl mx-auto bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
+        <div className="text-center mb-6 sm:mb-8 md:mb-10">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-red-800 mb-2">THUSANANG FUNERAL SERVICES</h1>
+          <p className="text-yellow-600 text-base sm:text-lg md:text-xl font-semibold">Live from QwaQwa • Re tšotella sechaba sa rona</p>
         </div>
-        <div className="p-8 text-center text-red-600">Loading Professional Stock System...</div>
+        <div className="p-4 sm:p-6 md:p-8 text-center text-red-600">Loading Professional Stock System...</div>
       </div>
     );
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-7xl mx-auto bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
       {/* HEADER */}
-      <div className="text-center mb-10">
+      <div className="text-center mb-6 sm:mb-8 md:mb-10">
         
-        <p className="text-yellow-600 text-xl font-semibold">Live from QwaQwa • Re tšotella sechaba sa rona</p>
-        <h2 className="text-3xl font-bold text-red-700 mt-6">Professional Stock Management</h2>
+        <p className="text-yellow-600 text-base sm:text-lg md:text-xl font-semibold">Live from QwaQwa • Re tšotella sechaba sa rona</p>
+        <h2 className="text-2xl sm:text-3xl font-bold text-red-700 mt-4 sm:mt-6">Professional Stock Management</h2>
         <p className="text-gray-600 mt-2">Real-time inventory tracking and reporting</p>
       </div>
 
