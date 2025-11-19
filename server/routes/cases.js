@@ -348,8 +348,12 @@ router.post('/assign/:caseId', async (req, res) => {
       );
     }
 
-    // 4. Don't mark vehicle as unavailable - allow multiple assignments if times don't conflict
-    // Vehicle availability is now determined by time conflicts, not a boolean flag
+    // 4. Mark vehicle as unavailable when assigned
+    await client.query(
+      'UPDATE vehicles SET available = false WHERE id = $1',
+      [vehicle_id]
+    );
+    console.log(`🚗 Vehicle ${vehicle_id} marked as unavailable`);
 
     await client.query('COMMIT');
 
