@@ -229,10 +229,10 @@ export default function StockManagement() {
       )}
 
       {/* CONTROL PANEL */}
-      <div className="bg-white p-6 rounded-xl shadow-lg mb-6">
-        <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+      <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg mb-4 sm:mb-6">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
           {/* TABS */}
-          <div className="flex space-x-2 flex-wrap">
+          <div className="flex flex-wrap gap-2 w-full lg:w-auto">
             {['all', 'coffin', 'tent', 'chair', 'grocery', 'low'].map(tab => (
               <button
                 key={tab}
@@ -241,10 +241,10 @@ export default function StockManagement() {
                   // ALWAYS fetch all for low stock tab
                   fetchInventory(tab === 'low' ? 'all' : tab);
                 }}
-                className={`px-4 py-2 rounded-lg font-semibold capitalize ${
+                className={`px-3 sm:px-4 py-2 rounded-lg font-semibold capitalize text-sm sm:text-base transition-all ${
                   activeTab === tab
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    ? 'bg-red-600 text-white shadow-md'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300 hover:shadow-sm'
                 }`}
               >
                 {tab === 'all' ? 'All Items' : tab === 'low' ? 'Low Stock' : tab}
@@ -253,33 +253,35 @@ export default function StockManagement() {
           </div>
 
           {/* ACTIONS */}
-          <div className="flex space-x-3 flex-wrap">
+          <div className="flex flex-wrap gap-2 sm:gap-3 w-full lg:w-auto">
             <button
               onClick={() => setShowStockTake(true)}
-              className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 font-semibold flex items-center shadow-lg"
+              className="bg-orange-600 text-white px-4 sm:px-5 py-2.5 rounded-lg hover:bg-orange-700 font-semibold flex items-center justify-center transition-all shadow-md hover:shadow-lg text-sm sm:text-base min-w-[140px]"
             >
-              <span className="mr-2">📋</span> Stock Take
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              Stock Take
             </button>
             
             <button
               onClick={() => setShowAddForm(true)}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-semibold flex items-center"
+              className="bg-green-600 text-white px-4 sm:px-5 py-2.5 rounded-lg hover:bg-green-700 font-semibold flex items-center justify-center transition-all shadow-md hover:shadow-lg text-sm sm:text-base min-w-[140px]"
             >
-              <span className="mr-2">+</span> Add New Item
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add New Item
             </button>
 
             <button
-            onClick={() => generateStockReportPDF(filteredInventory)}
-            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 font-semibold"
-              >
-            📥 Download Stock Report
-            </button>
-
-            <button
-              onClick={() => window.print()}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold"
+              onClick={() => generateStockReportPDF(filteredInventory)}
+              className="bg-red-600 text-white px-4 sm:px-5 py-2.5 rounded-lg hover:bg-red-700 font-semibold flex items-center justify-center transition-all shadow-md hover:shadow-lg text-sm sm:text-base min-w-[140px]"
             >
-              📄 Print Report
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Export Report
             </button>
           </div>
         </div>
