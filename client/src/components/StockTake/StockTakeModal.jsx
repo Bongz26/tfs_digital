@@ -10,8 +10,96 @@ export default function StockTakeModal({ isOpen, onClose, onComplete }) {
   const [takenBy, setTakenBy] = useState('');
   const [saving, setSaving] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [openStockTakes, setOpenStockTakes] = useState([]);
+  const [loadingOpen, setLoadingOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [view, setView] = useState('list'); // 'list' or 'new' or 'active'
 
   const API_URL = API_HOST;
+
+  // Fetch open stock takes
+  const fetchOpenStockTakes = async () => {
+    try {
+      setLoadingOpen(true);
+      const response = await fetch(`${API_URL}/api/inventory/stock-take/open`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      if (data.success) {
+        setOpenStockTakes(data.stock_takes || []);
+      }
+    } catch (err) {
+      console.error('Error fetching open stock takes:', err);
+    } finally {
+      setLoadingOpen(false);
+    }
+  };
+
+  // Load existing stock take
+  const loadStockTake = async (stockTakeId) => {
+    try {
+      setLoading(true);
+      setError('');
+      const response = await fetch(`${API_URL}/api/inventory/stock-take/${stockTakeId}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setStockTake(data.stock_take);
+        setItems(data.items || []);
+        setView('active');
+      } else {
+        throw new Error(data.error || 'Failed to load stock take');
+      }
+    } catch (err) {
+      setError(`Failed to load stock take: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cancel stock take
+  const cancelStockTake = async (stockTakeId) => {
+    if (!window.confirm('Are you sure you want to cancel this stock take? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setCancelling(true);
+      const response = await fetch(`${API_URL}/api/inventory/stock-take/${stockTakeId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+
+      if (data.success) {
+        // Refresh open stock takes list
+        await fetchOpenStockTakes();
+        if (stockTake && stockTake.id === stockTakeId) {
+          // If cancelling the currently active one, reset
+          setStockTake(null);
+          setItems([]);
+          setView('list');
+        }
+      } else {
+        throw new Error(data.error || 'Failed to cancel stock take');
+      }
+    } catch (err) {
+      setError(`Failed to cancel stock take: ${err.message}`);
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  // Load open stock takes when modal opens
+  useEffect(() => {
+    if (isOpen && !stockTake) {
+      fetchOpenStockTakes();
+      setView('list');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   // Start new stock take
   const startStockTake = async () => {
@@ -29,8 +117,16 @@ export default function StockTakeModal({ isOpen, onClose, onComplete }) {
         body: JSON.stringify({ taken_by: takenBy })
       });
 
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
+
+      if (!response.ok) {
+        // If limit reached, refresh open stock takes and show error
+        if (response.status === 400 && data.open_count >= 2) {
+          await fetchOpenStockTakes();
+          setView('list');
+        }
+        throw new Error(data.error || `HTTP ${response.status}`);
+      }
 
       if (data.success) {
         setStockTake({ id: data.stock_take_id, taken_by: takenBy });
@@ -42,6 +138,9 @@ export default function StockTakeModal({ isOpen, onClose, onComplete }) {
           console.log('📦 First item name:', itemsList[0].name);
         }
         setItems(itemsList);
+        setView('active');
+        // Refresh open stock takes list
+        await fetchOpenStockTakes();
       } else {
         throw new Error(data.error || 'Failed to start stock take');
       }
@@ -116,6 +215,8 @@ export default function StockTakeModal({ isOpen, onClose, onComplete }) {
 
       if (data.success) {
         alert(`Stock take completed! ${data.items_updated} items updated.`);
+        // Refresh open stock takes list
+        await fetchOpenStockTakes();
         onComplete();
         handleClose();
       } else {
@@ -133,6 +234,8 @@ export default function StockTakeModal({ isOpen, onClose, onComplete }) {
     setItems([]);
     setTakenBy('');
     setError('');
+    setView('list');
+    setOpenStockTakes([]);
     onClose();
   };
 
@@ -171,7 +274,86 @@ export default function StockTakeModal({ isOpen, onClose, onComplete }) {
             </div>
           )}
 
-          {!stockTake ? (
+          {view === 'list' && !stockTake ? (
+            // List of Open Stock Takes
+            <div className="max-w-2xl mx-auto">
+              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded">
+                <p className="text-blue-800">
+                  <strong>Stock Take Sessions:</strong> You can have a maximum of 2 open stock take sessions at a time.
+                  {openStockTakes.length >= 2 && (
+                    <span className="block mt-2 text-red-600 font-semibold">
+                      ⚠️ Maximum sessions reached. Complete or cancel an existing session to start a new one.
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              {loadingOpen ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-600">Loading open stock takes...</p>
+                </div>
+              ) : openStockTakes.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-600 mb-4">No open stock take sessions.</p>
+                  <button
+                    onClick={() => setView('new')}
+                    className="bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-semibold"
+                  >
+                    Start New Stock Take
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                    Open Stock Takes ({openStockTakes.length}/2)
+                  </h3>
+                  {openStockTakes.map((st) => (
+                    <div
+                      key={st.id}
+                      className="border border-gray-300 rounded-lg p-4 hover:bg-gray-50 transition"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-semibold text-gray-800">
+                            Stock Take #{st.id}
+                          </h4>
+                          <p className="text-sm text-gray-600">
+                            Started by: <span className="font-medium">{st.taken_by}</span>
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Created: {new Date(st.created_at).toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => loadStockTake(st.id)}
+                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold"
+                          >
+                            Continue
+                          </button>
+                          <button
+                            onClick={() => cancelStockTake(st.id)}
+                            disabled={cancelling}
+                            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm font-semibold disabled:bg-gray-400"
+                          >
+                            {cancelling ? 'Cancelling...' : 'Cancel'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {openStockTakes.length < 2 && (
+                    <button
+                      onClick={() => setView('new')}
+                      className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-semibold mt-4"
+                    >
+                      + Start New Stock Take
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : view === 'new' && !stockTake ? (
             // Start Stock Take Form
             <div className="max-w-md mx-auto">
               <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 rounded">
@@ -182,6 +364,13 @@ export default function StockTakeModal({ isOpen, onClose, onComplete }) {
               </div>
 
               <div className="space-y-4">
+                <button
+                  onClick={() => setView('list')}
+                  className="text-blue-600 hover:text-blue-800 text-sm font-semibold mb-4"
+                >
+                  ← Back to Open Sessions
+                </button>
+
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Your Name <span className="text-red-600">*</span>
@@ -205,7 +394,7 @@ export default function StockTakeModal({ isOpen, onClose, onComplete }) {
                 </button>
               </div>
             </div>
-          ) : (
+          ) : stockTake ? (
             // Stock Take Items
             <div>
               {/* Progress Bar */}
@@ -253,7 +442,7 @@ export default function StockTakeModal({ isOpen, onClose, onComplete }) {
                 </table>
               </div>
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Footer */}
@@ -268,10 +457,21 @@ export default function StockTakeModal({ isOpen, onClose, onComplete }) {
             </div>
             <div className="flex space-x-3">
               <button
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to cancel this stock take? This action cannot be undone.')) {
+                    cancelStockTake(stockTake.id);
+                  }
+                }}
+                disabled={cancelling}
+                className="px-6 py-2 border border-red-300 text-red-700 rounded-lg hover:bg-red-50 font-semibold disabled:bg-gray-400"
+              >
+                {cancelling ? 'Cancelling...' : 'Cancel Session'}
+              </button>
+              <button
                 onClick={handleClose}
                 className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 font-semibold"
               >
-                Cancel
+                Close
               </button>
               <button
                 onClick={completeStockTake}

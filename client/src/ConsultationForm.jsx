@@ -357,7 +357,7 @@ export default function ConsultationForm() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
       <div className="max-w-6xl mx-auto px-4">
         <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold text-red-800 mb-2">THUSANANG FUNERAL SERVICES</h1>
+          {/* <h1 className="text-5xl font-bold text-red-800 mb-2">THUSANANG FUNERAL SERVICES</h1> */}
           <p className="text-yellow-600 text-xl font-semibold mb-6">Live from QwaQwa • Re tšotella sechaba sa rona</p>
           <h2 className="text-3xl font-bold text-red-700">Wednesday Family Consultation</h2>
           <p className="text-gray-600 mt-2">Complete the form below to create a new case</p>

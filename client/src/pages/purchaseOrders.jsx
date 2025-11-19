@@ -22,7 +22,7 @@ const PurchaseOrdersPage = () => {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-4">
+    <div className="max-w-5xl mx-auto p-3 sm:p-4 md:p-6">
       <POForm onCreate={createPO} />
       <POList 
         purchaseOrders={purchaseOrders} 

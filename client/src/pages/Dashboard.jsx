@@ -120,9 +120,9 @@ export default function Dashboard() {
     <div className="p-8 max-w-7xl mx-auto bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
       {/* HEADER */}
       <div className="text-center mb-10">
-        <h1 className="text-5xl font-bold text-red-800 mb-2">
+        {/*<h1 className="text-5xl font-bold text-red-800 mb-2">
           THUSANANG FUNERAL SERVICES
-        </h1>
+        </h1>*/}
         <p className="text-yellow-600 text-xl font-semibold">
           Live from QwaQwa • Re tšotella sechaba sa rona
         </p>
