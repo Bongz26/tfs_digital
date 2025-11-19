@@ -13,6 +13,8 @@ export default function ActiveCases() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [changingStatus, setChangingStatus] = useState({});
+  const [editingFuneralTime, setEditingFuneralTime] = useState({});
+  const [funeralTimeValues, setFuneralTimeValues] = useState({});
 
   const API_URL = API_HOST;
 
@@ -180,6 +182,55 @@ export default function ActiveCases() {
     }
   };
 
+  const updateFuneralTime = async (caseId, funeralTime) => {
+    setEditingFuneralTime(prev => ({ ...prev, [caseId]: true }));
+    
+    try {
+      const res = await fetch(`${API_URL}/api/cases/${caseId}/funeral-time`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ funeral_time: funeralTime })
+      });
+      
+      const data = await res.json();
+      
+      if (!data.success) {
+        throw new Error(data.error);
+      }
+      
+      // Refresh data
+      const refreshResponse = await fetch(`${API_URL}/api/active-cases`);
+      const refreshData = await refreshResponse.json();
+      if (refreshData.success) {
+        setCases(refreshData.cases || []);
+        setVehicles(refreshData.vehicles || []);
+      }
+      
+      // Clear editing state
+      setEditingFuneralTime(prev => {
+        const newState = { ...prev };
+        delete newState[caseId];
+        return newState;
+      });
+      setFuneralTimeValues(prev => {
+        const newState = { ...prev };
+        delete newState[caseId];
+        return newState;
+      });
+      
+      alert('Funeral time updated successfully');
+    } catch (err) {
+      console.error('Funeral time update error:', err);
+      alert(`Failed to update funeral time: ${err.message}`);
+    } finally {
+      setEditingFuneralTime(prev => {
+        const newState = { ...prev };
+        delete newState[caseId];
+        return newState;
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-7xl mx-auto bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
@@ -310,8 +361,57 @@ export default function ActiveCases() {
                         <div className="text-gray-800 text-sm">
                           {new Date(c.funeral_date).toLocaleDateString()}
                         </div>
-                        {c.funeral_time && (
-                          <div className="text-xs text-gray-600">{c.funeral_time}</div>
+                        {c.status === 'intake' ? (
+                          <div className="mt-1">
+                            {editingFuneralTime[c.id] ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="time"
+                                  value={funeralTimeValues[c.id] || c.funeral_time || ''}
+                                  onChange={(e) => setFuneralTimeValues(prev => ({ ...prev, [c.id]: e.target.value }))}
+                                  className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-red-500 focus:border-red-500"
+                                />
+                                <button
+                                  onClick={() => updateFuneralTime(c.id, funeralTimeValues[c.id] || c.funeral_time)}
+                                  className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
+                                >
+                                  ✓
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingFuneralTime(prev => {
+                                      const newState = { ...prev };
+                                      delete newState[c.id];
+                                      return newState;
+                                    });
+                                    setFuneralTimeValues(prev => {
+                                      const newState = { ...prev };
+                                      delete newState[c.id];
+                                      return newState;
+                                    });
+                                  }}
+                                  className="text-xs bg-gray-400 text-white px-2 py-1 rounded hover:bg-gray-500"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <div 
+                                className="text-xs text-blue-600 cursor-pointer hover:underline flex items-center gap-1"
+                                onClick={() => {
+                                  setEditingFuneralTime(prev => ({ ...prev, [c.id]: true }));
+                                  setFuneralTimeValues(prev => ({ ...prev, [c.id]: c.funeral_time || '' }));
+                                }}
+                                title="Click to edit funeral time"
+                              >
+                                {c.funeral_time || 'Not set'} <span className="text-xs">✏️</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          c.funeral_time && (
+                            <div className="text-xs text-gray-600">{c.funeral_time}</div>
+                          )
                         )}
                       </td>
                       <td className="p-3 sm:p-4">
@@ -499,7 +599,58 @@ export default function ActiveCases() {
                   </div>
 
                   <div className="text-xs text-gray-600 mb-3 space-y-1">
-                    <div>Funeral: {new Date(c.funeral_date).toLocaleDateString()} {c.funeral_time && `at ${c.funeral_time}`}</div>
+                    <div>
+                      Funeral: {new Date(c.funeral_date).toLocaleDateString()}
+                      {c.status === 'intake' ? (
+                        <div className="mt-1">
+                          {editingFuneralTime[c.id] ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="time"
+                                value={funeralTimeValues[c.id] || c.funeral_time || ''}
+                                onChange={(e) => setFuneralTimeValues(prev => ({ ...prev, [c.id]: e.target.value }))}
+                                className="text-xs border border-gray-300 rounded px-2 py-1 w-24 focus:ring-1 focus:ring-red-500 focus:border-red-500"
+                              />
+                              <button
+                                onClick={() => updateFuneralTime(c.id, funeralTimeValues[c.id] || c.funeral_time)}
+                                className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
+                              >
+                                ✓
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingFuneralTime(prev => {
+                                    const newState = { ...prev };
+                                    delete newState[c.id];
+                                    return newState;
+                                  });
+                                  setFuneralTimeValues(prev => {
+                                    const newState = { ...prev };
+                                    delete newState[c.id];
+                                    return newState;
+                                  });
+                                }}
+                                className="text-xs bg-gray-400 text-white px-2 py-1 rounded hover:bg-gray-500"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <span 
+                              className="text-blue-600 cursor-pointer hover:underline ml-1"
+                              onClick={() => {
+                                setEditingFuneralTime(prev => ({ ...prev, [c.id]: true }));
+                                setFuneralTimeValues(prev => ({ ...prev, [c.id]: c.funeral_time || '' }));
+                              }}
+                            >
+                              {c.funeral_time ? `at ${c.funeral_time} ✏️` : 'Click to set time ✏️'}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        c.funeral_time && ` at ${c.funeral_time}`
+                      )}
+                    </div>
                     {c.roster && c.roster.length > 0 ? (
                       <div className="text-green-600 font-medium">
                         ✓ Assigned ({c.roster.length} vehicle{c.roster.length > 1 ? 's' : ''})
