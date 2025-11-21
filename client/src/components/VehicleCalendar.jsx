@@ -163,9 +163,9 @@ export default function VehicleCalendar() {
               🚗 {item.vehicle_type ? item.vehicle_type.toUpperCase().replace('_', ' ') : '—'} — {item.reg_number || '—'}
             </p>
             <p className="text-gray-600 text-xs mt-1">
-              Delivery: {item.delivery_date && item.delivery_time 
-                ? `${new Date(item.delivery_date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })} at ${item.delivery_time}`
-                : 'Not set'}
+              Funeral: {item.funeral_date 
+                ? `${new Date(item.funeral_date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}${item.funeral_time ? ` at ${item.funeral_time}` : ''}`
+                : 'Date not set'}
             </p>
           </div>
 

@@ -43,3 +43,16 @@ export const processPurchaseOrder = async (poId, adminEmail) => {
     throw err;
   }
 };
+
+export const receiveGRV = async (poId, receivedItems, receivedBy) => {
+  try {
+    const res = await axios.post(`${BASE_URL}/${poId}/receive`, {
+      received_items: receivedItems,
+      received_by: receivedBy
+    });
+    return res.data;
+  } catch (err) {
+    console.error("Error receiving GRV:", err.response || err);
+    throw err;
+  }
+};

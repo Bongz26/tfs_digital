@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import POItemRow from "./POItemRow";
+import GRVReceiveForm from "./GRVReceiveForm";
 import { processPurchaseOrder } from "../../api/purchaseOrders";
 
 const POList = ({ purchaseOrders, onAddItem, onReload }) => {
   const [processing, setProcessing] = useState({});
   const [adminEmail, setAdminEmail] = useState("");
+  const [showGRVForm, setShowGRVForm] = useState({});
 
   const handleProcess = async (poId, poNumber) => {
     if (!adminEmail) {
@@ -51,19 +53,42 @@ const POList = ({ purchaseOrders, onAddItem, onReload }) => {
                 {po.supplier && <p className="break-words">Supplier: {po.supplier.name}</p>}
               </div>
             </div>
-            {po.items && po.items.length > 0 && po.status !== 'sent' && (
-              <button
-                onClick={() => handleProcess(po.id, po.po_number)}
-                disabled={processing[po.id]}
-                className="w-full sm:w-auto bg-green-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm font-semibold transition-colors"
-              >
-                {processing[po.id] ? "Sending..." : "📧 Send to Supplier"}
-              </button>
-            )}
+            <div className="flex flex-col sm:flex-row gap-2">
+              {po.items && po.items.length > 0 && po.status !== 'sent' && (
+                <button
+                  onClick={() => handleProcess(po.id, po.po_number)}
+                  disabled={processing[po.id]}
+                  className="w-full sm:w-auto bg-green-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-sm font-semibold transition-colors"
+                >
+                  {processing[po.id] ? "Sending..." : "📧 Send to Supplier"}
+                </button>
+              )}
+              {po.items && po.items.length > 0 && (po.status === 'sent' || po.status === 'received') && (
+                <button
+                  onClick={() => setShowGRVForm(prev => ({ ...prev, [po.id]: !prev[po.id] }))}
+                  className="w-full sm:w-auto bg-blue-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold transition-colors"
+                >
+                  {showGRVForm[po.id] ? "❌ Cancel Receive" : "📦 Receive Items (GRV)"}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Add Item Form */}
           <POItemRow poId={po.id} onAddItem={onAddItem} />
+
+          {/* GRV Receive Form */}
+          {showGRVForm[po.id] && po.items && po.items.length > 0 && (
+            <GRVReceiveForm
+              poId={po.id}
+              items={po.items}
+              onSuccess={() => {
+                setShowGRVForm(prev => ({ ...prev, [po.id]: false }));
+                if (onReload) onReload();
+              }}
+              onCancel={() => setShowGRVForm(prev => ({ ...prev, [po.id]: false }))}
+            />
+          )}
 
           {/* Items Table - Desktop View */}
           {po.items && po.items.length > 0 && (

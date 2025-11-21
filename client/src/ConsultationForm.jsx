@@ -12,7 +12,7 @@ const PLAN_DATA = {
     'Plan D': { 6: 455, 10: 699 },
     'Plan E': { 6: 635, 10: 941 },
     'Plan F': { 6: 785, 10: 1363 },
-    // Legacy color grades (kept for backward compatibility)
+    // Color-graded plans (latest plans)
     Green: { 6: 132, 10: 165, 14: 187 },
     Silver: { 6: 180, 10: 242, 14: 308 },
     Gold: { 6: 264, 10: 341, 14: 473 },
@@ -30,7 +30,7 @@ const PLAN_DATA = {
     'Plan D': { '18-65': 240, '66-85': 410 },
     'Plan E': { '18-65': 315 },
     'Plan F': { '18-65': 450 },
-    // Legacy color grades (kept for backward compatibility)
+    // Color-graded plans (latest plans)
     Green: { '18-65': 45, '66-85': 80, '86-100': 105 },
     Silver: { '18-65': 88, '66-85': 130, '86-100': 205 },
     Gold: { '18-65': 132, '66-85': 187, '86-100': 312 },
@@ -48,7 +48,7 @@ const PLAN_DATA = {
     'Plan D': { '18-65': 280, '66-85': 470 },
     'Plan E': { '18-65': 405 },
     'Plan F': { '18-65': 565 },
-    // Legacy color grades (kept for backward compatibility)
+    // Color-graded plans (latest plans)
     Green: { '18-65': 65, '66-85': 90, '86-100': 145 },
     Silver: { '18-65': 115, '66-85': 150, '86-100': 285 },
     Gold: { '18-65': 152, '66-85': 207, '86-100': 402 },
@@ -152,13 +152,100 @@ const PLAN_BENEFITS = {
     cashback: 0,
     service: "1 Service (Incl. Hearse & Family Cars & Deco)"
   },
-  // Legacy color grades (kept for backward compatibility)
-  Silver: { casket: "Redwood", tent: 1, table: 1, toilet: 1, chairs: 50, grocery: 1000, crucifix: 1, programmes: 50, airtime: 100 },
-  Gold: { casket: "Raised Halfview", tent: 1, table: 2, toilet: 1, chairs: 100, grocery: 1000, programmes: 100, crucifix: 1, flower: 1, airtime: 200 },
-  Platinum: { casket: "4-Tier", tent: 1, table: 2, toilet: "VIP", chairs: 100, grocery: 1000, programmes: 100, crucifix: 1, flower: 1, airtime: 200 },
-  Black: { casket: "Princeton Dome", tombstone: "1/cow", tent: 1, table: 2, toilet: "VIP", chairs: 150, grocery: 1000, programmes: 100, crucifix: 1, flower: 1, airtime: 200 },
-  Pearl: { casket: "Four Cnr Figurine Cas", tombstone: "1/cow", tent: 1, table: 2, toilet: "VIP", chairs: 200, grocery: 1000, programmes: 150, airtime: 200 },
-  Ivory: { casket: "Royal Dome Casket", tombstone: 1, cow: 1, tent: 1, table: 2, toilet: "VIP", chairs: 200, grocery: 100, programmes: 150, airtime: 200 },
+  // Color-graded plans (latest plans with color grading)
+  Green: { 
+    casket: "15L Juice, 40 Lt Cakes, Groceries or Vegetables", 
+    cover: 5000,
+    tent: 1, 
+    table: 1, 
+    toilet: 1, 
+    chairs: 50, 
+    programmes: 50, 
+    service: "1 Service (Incl. Hearse & Family Car & Deco)" 
+  },
+  Silver: { 
+    casket: "Economy Casket", 
+    cover: 10000,
+    grocery: "Groceries or Vegetables",
+    tent: 1, 
+    table: 1, 
+    toilet: 1, 
+    chairs: 50, 
+    programmes: 50, 
+    crucifix: 1, 
+    airtime: 100,
+    service: "1 Service (Incl. Hearse & Family Car & Deco)" 
+  },
+  Gold: { 
+    casket: "Pongee Casket", 
+    cover: 15000,
+    grocery: "Groceries or Vegetables",
+    tent: 1, 
+    table: 2, 
+    toilet: 1, 
+    chairs: 100, 
+    programmes: 100, 
+    crucifix: 1, 
+    flower: 1, 
+    airtime: 200,
+    service: "1 Service (Incl. Hearse & Family Cars & Deco)" 
+  },
+  Platinum: { 
+    casket: "Raised HalfView Casket", 
+    cover: 20000,
+    grocery: "Groceries or Vegetables",
+    tent: 1, 
+    table: 2, 
+    toilet: "VIP", 
+    chairs: 100, 
+    programmes: 100, 
+    crucifix: 1, 
+    flower: 1, 
+    airtime: 200,
+    service: "1 Service (Incl. Hearse & Family Cars & Deco)" 
+  },
+  Black: { 
+    casket: "Four Tier Casket", 
+    cover: 30000,
+    grocery: "Groceries or Vegetables",
+    tent: 1, 
+    table: 2, 
+    toilet: "VIP", 
+    chairs: 150, 
+    programmes: 100, 
+    crucifix: 1, 
+    flower: 1, 
+    airtime: 200,
+    service: "1 Service (Incl. Hearse & Family Cars & Deco)" 
+  },
+  Pearl: { 
+    casket: "Princeton Dome Casket", 
+    cover: 40000,
+    grocery: "Groceries or Vegetables",
+    tent: 1, 
+    table: 2, 
+    toilet: "VIP", 
+    chairs: 200, 
+    programmes: 150, 
+    crucifix: 1, 
+    flower: 2, 
+    airtime: 200,
+    service: "1 Service (Incl. Hearse & Family Cars & Deco)" 
+  },
+  Ivory: { 
+    casket: "Four CNR Figurine", 
+    cover: 50000,
+    grocery: "Groceries or Vegetables",
+    tent: 1, 
+    table: 2, 
+    toilet: "VIP", 
+    chairs: 200, 
+    programmes: 150, 
+    crucifix: 1, 
+    flower: 4, 
+    airtime: 200,
+    service: "1 Service (Incl. Hearse & Family Cars & Deco)" 
+  },
 };
 
 const SPECIAL_PLAN_BENEFITS = {
@@ -495,12 +582,18 @@ export default function ConsultationForm() {
                 {/* Show plan benefits if available */}
                 {PLAN_BENEFITS[form.plan_name] && (
                   <div className="mt-3 pt-3 border-t border-blue-200">
+                    {PLAN_BENEFITS[form.plan_name].cover && (
+                      <p className="text-sm font-bold text-blue-900 mb-2">
+                        Cover Amount: R{PLAN_BENEFITS[form.plan_name].cover.toLocaleString()}
+                      </p>
+                    )}
                     <p className="text-xs font-semibold text-blue-800 mb-1">Includes:</p>
                     <p className="text-xs text-blue-700">
                       {PLAN_BENEFITS[form.plan_name].casket}
                       {PLAN_BENEFITS[form.plan_name].tombstone && ` • ${PLAN_BENEFITS[form.plan_name].tombstone}`}
                       {PLAN_BENEFITS[form.plan_name].tent && ` • ${PLAN_BENEFITS[form.plan_name].tent} Tent`}
                       {PLAN_BENEFITS[form.plan_name].chairs && ` • ${PLAN_BENEFITS[form.plan_name].chairs} Chairs`}
+                      {PLAN_BENEFITS[form.plan_name].grocery && ` • ${PLAN_BENEFITS[form.plan_name].grocery}`}
                       {PLAN_BENEFITS[form.plan_name].cashback && ` • R${PLAN_BENEFITS[form.plan_name].cashback} Cashback`}
                     </p>
                   </div>

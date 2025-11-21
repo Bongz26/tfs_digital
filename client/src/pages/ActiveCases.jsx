@@ -308,7 +308,22 @@ export default function ActiveCases() {
 
         <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg border-t-4 border-orange-500">
           <h3 className="text-sm sm:text-base md:text-lg font-semibold text-gray-700">Vehicles Available</h3>
-          <p className="text-3xl sm:text-4xl font-bold text-orange-600 mt-1 sm:mt-2">{vehicles.length}</p>
+          <p className="text-3xl sm:text-4xl font-bold text-orange-600 mt-1 sm:mt-2">
+            {(() => {
+              // Calculate vehicles not assigned to any active case
+              const assignedVehicleIds = new Set();
+              cases.forEach(c => {
+                if (c.roster && c.roster.length > 0) {
+                  c.roster.forEach(r => {
+                    if (r.vehicle_id) {
+                      assignedVehicleIds.add(r.vehicle_id);
+                    }
+                  });
+                }
+              });
+              return vehicles.filter(v => !assignedVehicleIds.has(v.id)).length;
+            })()}
+          </p>
         </div>
 
         <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg border-t-4 border-yellow-500">
@@ -506,7 +521,7 @@ export default function ActiveCases() {
                                 ));
                               })()}
                             </select>
-                            {c.available_vehicles && c.available_vehicles.length < vehicles.length && (
+                            {(!c.roster || c.roster.length === 0) && c.available_vehicles && c.available_vehicles.length < vehicles.length && (
                               <div className="text-xs text-orange-600 mt-1">
                                 ⚠️ Some vehicles unavailable due to time conflicts
                               </div>
