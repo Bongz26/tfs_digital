@@ -23,20 +23,37 @@ const POItemRow = ({ poId, onAddItem }) => {
       }
     };
     fetchInventory();
+    fetchInventory();
   }, []);
+
+  useEffect(() => {
+    if (inventoryItems.length > 0) {
+      console.log("DEBUG: POItemRow inventoryItems:", inventoryItems);
+    }
+  }, [inventoryItems]);
 
   // When item is selected, auto-fill price
   const handleItemSelect = (e) => {
     const itemId = e.target.value;
     setSelectedItemId(itemId);
-    
+
+    console.log("DEBUG: Selected Item ID:", itemId);
+
     if (itemId) {
       const item = inventoryItems.find(i => i.id === parseInt(itemId));
+      console.log("DEBUG: Found Item:", item);
+
       setSelectedItem(item);
       // Auto-fill suggested price (can be adjusted)
-      if (item && item.unit_price) {
-        setUnitCost(item.unit_price.toString());
+      if (item) {
+        // Check for unit_price or unit_cost, handle 0 correctly
+        const price = item.unit_price !== undefined && item.unit_price !== null ? item.unit_price :
+          item.unit_cost !== undefined && item.unit_cost !== null ? item.unit_cost : "";
+
+        console.log("DEBUG: Extracted Price:", price);
+        setUnitCost(price.toString());
       } else {
+        console.log("DEBUG: Item not found in inventoryItems list");
         setUnitCost("");
       }
     } else {
@@ -47,8 +64,8 @@ const POItemRow = ({ poId, onAddItem }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedItemId || !quantity || !unitCost) {
-      return alert("Please select an item, enter quantity, and unit cost");
+    if (!selectedItemId || !quantity) {
+      return alert("Please select an item and enter quantity");
     }
 
     setLoading(true);
@@ -122,9 +139,13 @@ const POItemRow = ({ poId, onAddItem }) => {
               placeholder="0.00"
               value={unitCost}
               onChange={e => setUnitCost(e.target.value)}
-              className="w-full border border-gray-300 p-2.5 sm:p-2 rounded-lg text-base focus:ring-2 focus:ring-red-600 focus:border-red-600"
+              className={`w-full border p-2.5 sm:p-2 rounded-lg text-base focus:ring-2 focus:ring-red-600 focus:border-red-600 ${selectedItemId && !unitCost ? 'border-yellow-500 bg-yellow-50' : 'border-gray-300'
+                }`}
               required
             />
+            {selectedItemId && !unitCost && (
+              <p className="text-xs text-yellow-600 mt-1">⚠️ Please enter unit cost</p>
+            )}
           </div>
         </div>
 
@@ -134,15 +155,15 @@ const POItemRow = ({ poId, onAddItem }) => {
           </p>
         )}
 
-        <button 
-          type="submit" 
+        <button
+          type="submit"
           disabled={loading}
           className="w-full bg-red-800 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-red-600 disabled:bg-gray-400 disabled:cursor-not-allowed font-semibold text-base transition-colors"
         >
           {loading ? "Adding..." : "+ Add Item"}
         </button>
       </form>
-      
+
       {inventoryItems.length === 0 && (
         <p className="text-xs text-gray-500 mt-2">
           No inventory items found. Add items to inventory first.

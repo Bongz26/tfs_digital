@@ -1,7 +1,7 @@
 // src/pages/CaseDetails.jsx
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { API_HOST } from '../api/config';
+import { fetchCaseById } from '../api/cases';
 
 export default function CaseDetails() {
   const { id } = useParams(); // get case id from route
@@ -9,18 +9,11 @@ export default function CaseDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const API_URL = API_HOST;
-
   useEffect(() => {
-    const fetchCase = async () => {
+    const loadCase = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/cases/${id}`);
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(`HTTP ${res.status}: ${text}`);
-        }
-        const json = await res.json();
-        setCaseData(json.case);
+        const data = await fetchCaseById(id);
+        setCaseData(data);
       } catch (err) {
         console.error('Error fetching case:', err);
         setError('Failed to load case details.');
@@ -29,7 +22,7 @@ export default function CaseDetails() {
       }
     };
 
-    fetchCase();
+    loadCase();
   }, [id]);
 
   if (loading) return <div className="p-3 sm:p-4 md:p-6 lg:p-8 text-center text-red-600">Loading case details...</div>;

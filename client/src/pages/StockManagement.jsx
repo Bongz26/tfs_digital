@@ -52,8 +52,11 @@ export default function StockManagement() {
     stock_quantity: 0,
     unit_price: 0,
     low_stock_threshold: 2,
-    location: 'Manekeng Showroom'
+    location: 'Manekeng Showroom',
+    notes: ''
   });
+  const [editItem, setEditItem] = useState(null);
+  const [showEditForm, setShowEditForm] = useState(false);
 
   const API_URL = API_HOST;
 
@@ -144,7 +147,8 @@ export default function StockManagement() {
           stock_quantity: 0,
           unit_price: 0,
           low_stock_threshold: 2,
-          location: 'Manekeng Showroom'
+          location: 'Manekeng Showroom',
+          notes: ''
         });
         await fetchInventory(activeTab === 'low' ? 'all' : activeTab);
         await fetchStats();
@@ -153,6 +157,44 @@ export default function StockManagement() {
     } catch (err) {
       return { success: false, error: err.message };
     }
+  };
+
+  // Update inventory item (for editing)
+  const updateInventoryItem = async (itemData) => {
+    try {
+      const response = await fetch(`${API_URL}/api/inventory/${itemData.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(itemData)
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      if (data.success) {
+        setShowEditForm(false);
+        setEditItem(null);
+        await fetchInventory(activeTab === 'low' ? 'all' : activeTab);
+        await fetchStats();
+        return { success: true };
+      } else return { success: false, error: data.error };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Open edit modal
+  const handleEditItem = (item) => {
+    setEditItem({
+      id: item.id,
+      name: item.name || '',
+      category: item.category || 'other',
+      sku: item.sku || '',
+      stock_quantity: item.stock_quantity || 0,
+      unit_price: item.unit_price || 0,
+      low_stock_threshold: item.low_stock_threshold || 2,
+      location: item.location || 'Manekeng',
+      notes: item.notes || ''
+    });
+    setShowEditForm(true);
   };
 
   const lowStockItems = inventory.filter(item => item.is_low_stock);
@@ -363,6 +405,17 @@ export default function StockManagement() {
                   />
                 </div>
               </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Notes</label>
+                <textarea
+                  value={newItem.notes}
+                  onChange={(e) => setNewItem({...newItem, notes: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                  placeholder="Additional notes about this item (optional)"
+                  rows={2}
+                />
+              </div>
             </div>
 
             <div className="flex justify-end space-x-3 mt-6">
@@ -377,6 +430,112 @@ export default function StockManagement() {
                 className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 font-semibold"
               >
                 Add Item
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT ITEM MODAL */}
+      {showEditForm && editItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold text-red-800 mb-4">Edit Inventory Item</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Item Name</label>
+                <input
+                  type="text"
+                  value={editItem.name}
+                  onChange={(e) => setEditItem({...editItem, name: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Category</label>
+                <select
+                  value={editItem.category}
+                  onChange={(e) => setEditItem({...editItem, category: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="coffin">Casket/Coffin</option>
+                  <option value="tent">Tent</option>
+                  <option value="chair">Chair</option>
+                  <option value="grocery">Grocery</option>
+                  <option value="catering">Catering</option>
+                  <option value="tombstone">Tombstone</option>
+                  <option value="livestock">Livestock</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">SKU</label>
+                  <input
+                    type="text"
+                    value={editItem.sku}
+                    onChange={(e) => setEditItem({...editItem, sku: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Location</label>
+                  <input
+                    type="text"
+                    value={editItem.location}
+                    onChange={(e) => setEditItem({...editItem, location: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Unit Price (R)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editItem.unit_price}
+                    onChange={(e) => setEditItem({...editItem, unit_price: parseFloat(e.target.value) || 0})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Low Stock Alert</label>
+                  <input
+                    type="number"
+                    value={editItem.low_stock_threshold}
+                    onChange={(e) => setEditItem({...editItem, low_stock_threshold: parseInt(e.target.value) || 2})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Notes</label>
+                <textarea
+                  value={editItem.notes}
+                  onChange={(e) => setEditItem({...editItem, notes: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                  placeholder="Additional notes about this item"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => { setShowEditForm(false); setEditItem(null); }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => updateInventoryItem(editItem)}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 font-semibold"
+              >
+                Save Changes
               </button>
             </div>
           </div>
@@ -429,6 +588,12 @@ export default function StockManagement() {
                         <span>{item.sku && `SKU: ${item.sku}`}</span>
                       </div>
                       <div className="text-xs text-gray-500 mt-1">{item.location}</div>
+                      {item.notes && (
+                        <div className="text-xs text-gray-600 mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded" title={item.notes}>
+                          <span className="font-medium text-yellow-700">📝 Note:</span>{' '}
+                          {item.notes.length > 60 ? `${item.notes.substring(0, 60)}...` : item.notes}
+                        </div>
+                      )}
                     </td>
 
                     <td className="p-3">
@@ -475,38 +640,46 @@ export default function StockManagement() {
                       </span>
                     </td>
 
-                    <td className="p-3 space-x-2">
-                      <button
-                        onClick={async () => {
-                          const newQty = prompt(`Update stock for "${item.name}" (current: ${item.stock_quantity})`);
-                          if (newQty !== null) {
-                            const parsedQty = parseInt(newQty);
-                            if (!isNaN(parsedQty)) {
-                              const result = await updateStock(item.id, parsedQty);
-                              if (!result.success) alert(`Error: ${result.error}`);
+                    <td className="p-3">
+                      <div className="flex flex-wrap gap-1">
+                        <button
+                          onClick={() => handleEditItem(item)}
+                          className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
+                          title="Edit item details and notes"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const newQty = prompt(`Update stock for "${item.name}" (current: ${item.stock_quantity})`);
+                            if (newQty !== null) {
+                              const parsedQty = parseInt(newQty);
+                              if (!isNaN(parsedQty)) {
+                                const result = await updateStock(item.id, parsedQty);
+                                if (!result.success) alert(`Error: ${result.error}`);
+                              }
                             }
-                          }
-                        }}
-                        className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 text-sm"
-                      >
-                        Update Stock
-                      </button>
-
-                      <button
-                        onClick={async () => {
-                          const addQty = prompt(`Add quantity for "${item.name}" (current: ${item.stock_quantity})`);
-                          if (addQty !== null) {
-                            const parsedAdd = parseInt(addQty);
-                            if (!isNaN(parsedAdd)) {
-                              const result = await updateStock(item.id, item.stock_quantity + parsedAdd, 'Added manually');
-                              if (!result.success) alert(`Error: ${result.error}`);
+                          }}
+                          className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 text-sm"
+                        >
+                          Stock
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const addQty = prompt(`Add quantity for "${item.name}" (current: ${item.stock_quantity})`);
+                            if (addQty !== null) {
+                              const parsedAdd = parseInt(addQty);
+                              if (!isNaN(parsedAdd)) {
+                                const result = await updateStock(item.id, item.stock_quantity + parsedAdd, 'Added manually');
+                                if (!result.success) alert(`Error: ${result.error}`);
+                              }
                             }
-                          }
-                        }}
-                        className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
-                      >
-                        Add Quantity
-                      </button>
+                          }}
+                          className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
+                        >
+                          +Qty
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

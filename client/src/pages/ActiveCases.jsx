@@ -1,8 +1,10 @@
 // src/pages/ActiveCases.jsx
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { API_HOST } from '../api/config';
 import { getStatusConfig, getNextStatuses, suggestStatus, getStatusBadgeProps } from '../utils/caseStatus';
+import { fetchActiveCases } from '../api/activeCases';
+import { fetchDrivers } from '../api/drivers';
+import { assignVehicle, updateCaseStatus, updateFuneralTime as apiUpdateFuneralTime } from '../api/cases';
 
 export default function ActiveCases() {
   const [cases, setCases] = useState([]);
@@ -16,66 +18,28 @@ export default function ActiveCases() {
   const [editingFuneralTime, setEditingFuneralTime] = useState({});
   const [funeralTimeValues, setFuneralTimeValues] = useState({});
 
-  const API_URL = API_HOST;
-
   // Fetch active cases and vehicles in one call
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
         setError('');
-        
+
         console.log('Fetching active cases data...');
-        const response = await fetch(`${API_URL}/api/active-cases`);
-        
-        // Check if response is OK before parsing as JSON
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Server response:', errorText);
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        console.log('Active cases data received:', data);
-        
-        if (data.success) {
-          setCases(data.cases || []);
-          setVehicles(data.vehicles || []);
-        } else {
-          throw new Error(data.error || 'Failed to load data');
-        }
+        const { cases: casesData, vehicles: vehiclesData } = await fetchActiveCases();
+        console.log('Active cases data received:', { cases: casesData, vehicles: vehiclesData });
+
+        setCases(casesData);
+        setVehicles(vehiclesData);
 
         // Fetch drivers separately
         try {
-          console.log('🔍 Fetching drivers from:', `${API_URL}/api/drivers`);
-          const driversResponse = await fetch(`${API_URL}/api/drivers`);
-          console.log('📡 Drivers response status:', driversResponse.status);
-          
-          if (driversResponse.ok) {
-            const driversData = await driversResponse.json();
-            console.log('📦 Drivers API response:', driversData);
-            
-            if (driversData.success) {
-              const driverCount = driversData.drivers?.length || 0;
-              console.log(`✅ Drivers loaded: ${driverCount} drivers`);
-              if (driverCount > 0) {
-                console.log('📋 Driver names:', driversData.drivers.map(d => d.name));
-              }
-              setDrivers(driversData.drivers || []);
-            } else {
-              console.warn('⚠️ Drivers API returned success=false:', driversData.error || driversData.message);
-              if (driversData.message) {
-                console.warn('💡 Message:', driversData.message);
-              }
-            }
-          } else {
-            const errorText = await driversResponse.text();
-            console.error('❌ Failed to fetch drivers:', driversResponse.status, driversResponse.statusText);
-            console.error('Error response:', errorText);
-          }
+          console.log('🔍 Fetching drivers...');
+          const driversData = await fetchDrivers();
+          console.log(`✅ Drivers loaded: ${driversData.length} drivers`);
+          setDrivers(driversData);
         } catch (driversError) {
           console.error('❌ Error fetching drivers:', driversError);
-          console.error('Error details:', driversError.message);
           // Don't fail the whole page if drivers fail to load
         }
       } catch (err) {
@@ -87,14 +51,14 @@ export default function ActiveCases() {
     };
 
     fetchData();
-  }, [API_URL]);
+  }, []);
 
-  const assignVehicle = async (caseId) => {
+  const handleAssignVehicle = async (caseId) => {
     if (!selectedVehicle[caseId]) {
       alert('Please select a vehicle first');
       return;
     }
-    
+
     const vehicle = selectedVehicle[caseId];
     const driver = selectedDriver[caseId];
 
@@ -104,75 +68,50 @@ export default function ActiveCases() {
     }
 
     try {
-      const res = await fetch(`${API_URL}/api/cases/assign/${caseId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vehicle_id: vehicle.id,
-          driver_name: driver.name
-          // pickup_time will be calculated on backend (1.5 hours before funeral time)
-        })
+      await assignVehicle(caseId, {
+        vehicle_id: vehicle.id,
+        driver_name: driver.name
+        // pickup_time will be calculated on backend (1.5 hours before funeral time)
       });
-      
-      const data = await res.json();
-      
-      if (!data.success) {
-        throw new Error(data.error);
-      }
-      
+
       alert('Vehicle assigned successfully!');
       // Refresh data instead of full page reload
-      const refreshResponse = await fetch(`${API_URL}/api/active-cases`);
-      const refreshData = await refreshResponse.json();
-      if (refreshData.success) {
-        setCases(refreshData.cases || []);
-        setVehicles(refreshData.vehicles || []);
-        // Clear selection for this case
-        setSelectedVehicle(prev => {
-          const newState = { ...prev };
-          delete newState[caseId];
-          return newState;
-        });
-        setSelectedDriver(prev => {
-          const newState = { ...prev };
-          delete newState[caseId];
-          return newState;
-        });
-      }
+      const { cases: casesData, vehicles: vehiclesData } = await fetchActiveCases();
+      setCases(casesData);
+      setVehicles(vehiclesData);
+
+      // Clear selection for this case
+      setSelectedVehicle(prev => {
+        const newState = { ...prev };
+        delete newState[caseId];
+        return newState;
+      });
+      setSelectedDriver(prev => {
+        const newState = { ...prev };
+        delete newState[caseId];
+        return newState;
+      });
     } catch (err) {
       console.error('Assign error:', err);
-      alert(`Failed to assign vehicle: ${err.message}`);
+      alert(`Failed to assign vehicle: ${err.message || err.response?.data?.error}`);
     }
   };
 
-  const changeCaseStatus = async (caseId, newStatus) => {
+  const handleChangeCaseStatus = async (caseId, newStatus) => {
     setChangingStatus(prev => ({ ...prev, [caseId]: true }));
-    
+
     try {
-      const res = await fetch(`${API_URL}/api/cases/${caseId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
-      });
-      
-      const data = await res.json();
-      
-      if (!data.success) {
-        throw new Error(data.error);
-      }
-      
+      await updateCaseStatus(caseId, newStatus);
+
       // Refresh data
-      const refreshResponse = await fetch(`${API_URL}/api/active-cases`);
-      const refreshData = await refreshResponse.json();
-      if (refreshData.success) {
-        setCases(refreshData.cases || []);
-        setVehicles(refreshData.vehicles || []);
-      }
-      
+      const { cases: casesData, vehicles: vehiclesData } = await fetchActiveCases();
+      setCases(casesData);
+      setVehicles(vehiclesData);
+
       alert(`Status updated to: ${getStatusConfig(newStatus).label}`);
     } catch (err) {
       console.error('Status change error:', err);
-      alert(`Failed to update status: ${err.message}`);
+      alert(`Failed to update status: ${err.message || err.response?.data?.error}`);
     } finally {
       setChangingStatus(prev => {
         const newState = { ...prev };
@@ -182,30 +121,17 @@ export default function ActiveCases() {
     }
   };
 
-  const updateFuneralTime = async (caseId, funeralTime) => {
+  const handleUpdateFuneralTime = async (caseId, funeralTime) => {
     setEditingFuneralTime(prev => ({ ...prev, [caseId]: true }));
-    
+
     try {
-      const res = await fetch(`${API_URL}/api/cases/${caseId}/funeral-time`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ funeral_time: funeralTime })
-      });
-      
-      const data = await res.json();
-      
-      if (!data.success) {
-        throw new Error(data.error);
-      }
-      
+      await apiUpdateFuneralTime(caseId, funeralTime);
+
       // Refresh data
-      const refreshResponse = await fetch(`${API_URL}/api/active-cases`);
-      const refreshData = await refreshResponse.json();
-      if (refreshData.success) {
-        setCases(refreshData.cases || []);
-        setVehicles(refreshData.vehicles || []);
-      }
-      
+      const { cases: casesData, vehicles: vehiclesData } = await fetchActiveCases();
+      setCases(casesData);
+      setVehicles(vehiclesData);
+
       // Clear editing state
       setEditingFuneralTime(prev => {
         const newState = { ...prev };
@@ -217,11 +143,11 @@ export default function ActiveCases() {
         delete newState[caseId];
         return newState;
       });
-      
+
       alert('Funeral time updated successfully');
     } catch (err) {
       console.error('Funeral time update error:', err);
-      alert(`Failed to update funeral time: ${err.message}`);
+      alert(`Failed to update funeral time: ${err.message || err.response?.data?.error}`);
     } finally {
       setEditingFuneralTime(prev => {
         const newState = { ...prev };
@@ -281,8 +207,8 @@ export default function ActiveCases() {
 
       {/* BACK TO DASHBOARD */}
       <div className="mb-4 sm:mb-6">
-        <Link 
-          to="/dashboard" 
+        <Link
+          to="/dashboard"
           className="inline-flex items-center text-blue-600 hover:text-blue-800 font-medium text-sm sm:text-base"
         >
           ← Back to Dashboard
@@ -387,7 +313,7 @@ export default function ActiveCases() {
                                   className="text-xs border border-gray-300 rounded px-2 py-1 focus:ring-1 focus:ring-red-500 focus:border-red-500"
                                 />
                                 <button
-                                  onClick={() => updateFuneralTime(c.id, funeralTimeValues[c.id] || c.funeral_time)}
+                                  onClick={() => handleUpdateFuneralTime(c.id, funeralTimeValues[c.id] || c.funeral_time)}
                                   className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
                                 >
                                   ✓
@@ -411,7 +337,7 @@ export default function ActiveCases() {
                                 </button>
                               </div>
                             ) : (
-                              <div 
+                              <div
                                 className="text-xs text-blue-600 cursor-pointer hover:underline flex items-center gap-1"
                                 onClick={() => {
                                   setEditingFuneralTime(prev => ({ ...prev, [c.id]: true }));
@@ -435,7 +361,7 @@ export default function ActiveCases() {
                             const statusConfig = getStatusConfig(c.status);
                             const suggestedStatus = suggestStatus(c.funeral_date, c.status);
                             const hasSuggestion = suggestedStatus !== c.status;
-                            
+
                             return (
                               <>
                                 <div className="flex items-center gap-2">
@@ -448,7 +374,7 @@ export default function ActiveCases() {
                                     </span>
                                   )}
                                 </div>
-                                
+
                                 {/* Status Change Dropdown */}
                                 {getNextStatuses(c.status).length > 0 && (
                                   <select
@@ -457,7 +383,7 @@ export default function ActiveCases() {
                                     onChange={(e) => {
                                       if (e.target.value) {
                                         if (window.confirm(`Change status to "${getStatusConfig(e.target.value).label}"?`)) {
-                                          changeCaseStatus(c.id, e.target.value);
+                                          handleChangeCaseStatus(c.id, e.target.value);
                                         }
                                         e.target.value = '';
                                       }
@@ -526,7 +452,7 @@ export default function ActiveCases() {
                                 ⚠️ Some vehicles unavailable due to time conflicts
                               </div>
                             )}
-                            
+
                             <select
                               className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
                               value={selectedDriver[c.id]?.id || ''}
@@ -563,10 +489,10 @@ export default function ActiveCases() {
                                 ⚠️ No drivers found. Run: node database/setup-drivers.js
                               </div>
                             )}
-                            
+
                             <button
                               className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
-                              onClick={() => assignVehicle(c.id)}
+                              onClick={() => handleAssignVehicle(c.id)}
                               disabled={!selectedVehicle[c.id] || !selectedDriver[c.id]}
                             >
                               Assign Vehicle & Driver
@@ -627,7 +553,7 @@ export default function ActiveCases() {
                                 className="text-xs border border-gray-300 rounded px-2 py-1 w-24 focus:ring-1 focus:ring-red-500 focus:border-red-500"
                               />
                               <button
-                                onClick={() => updateFuneralTime(c.id, funeralTimeValues[c.id] || c.funeral_time)}
+                                onClick={() => handleUpdateFuneralTime(c.id, funeralTimeValues[c.id] || c.funeral_time)}
                                 className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
                               >
                                 ✓
@@ -651,7 +577,7 @@ export default function ActiveCases() {
                               </button>
                             </div>
                           ) : (
-                            <span 
+                            <span
                               className="text-blue-600 cursor-pointer hover:underline ml-1"
                               onClick={() => {
                                 setEditingFuneralTime(prev => ({ ...prev, [c.id]: true }));
@@ -686,7 +612,7 @@ export default function ActiveCases() {
                         onChange={(e) => {
                           if (e.target.value) {
                             if (window.confirm(`Change status to "${getStatusConfig(e.target.value).label}"?`)) {
-                              changeCaseStatus(c.id, e.target.value);
+                              handleChangeCaseStatus(c.id, e.target.value);
                             }
                             e.target.value = '';
                           }
@@ -736,7 +662,7 @@ export default function ActiveCases() {
                           ));
                         })()}
                       </select>
-                      
+
                       <select
                         className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
                         value={selectedDriver[c.id]?.id || ''}
@@ -773,10 +699,10 @@ export default function ActiveCases() {
                           ⚠️ No drivers found
                         </div>
                       )}
-                      
+
                       <button
                         className="w-full bg-red-600 text-white px-4 py-2.5 rounded-lg hover:bg-red-700 transition font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
-                        onClick={() => assignVehicle(c.id)}
+                        onClick={() => handleAssignVehicle(c.id)}
                         disabled={!selectedVehicle[c.id] || !selectedDriver[c.id]}
                       >
                         Assign Vehicle & Driver
@@ -796,51 +722,6 @@ export default function ActiveCases() {
             </div>
           </>
         )}
-      </div>
-
-      {/* AVAILABLE VEHICLES SECTION */}
-      {vehicles.length > 0 && (
-        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg border-t-4 border-blue-600 mb-4 sm:mb-6">
-          <h3 className="text-lg sm:text-xl font-bold text-blue-800 mb-3 sm:mb-4 text-center">
-            Available Vehicles ({vehicles.length})
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-            {vehicles.map(vehicle => (
-              <div key={vehicle.id} className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition">
-                <div className="font-semibold text-gray-800 text-sm sm:text-base">{vehicle.reg_number}</div>
-                <div className="text-xs sm:text-sm text-gray-600 capitalize">{vehicle.type ? vehicle.type.replace('_', ' ') : 'Vehicle'}</div>
-                <div className="text-xs text-green-600 font-medium mt-1">● Available</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* AVAILABLE DRIVERS SECTION */}
-      {drivers.length > 0 && (
-        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg border-t-4 border-green-600 mb-4 sm:mb-6">
-          <h3 className="text-lg sm:text-xl font-bold text-green-800 mb-3 sm:mb-4 text-center">
-            Available Drivers ({drivers.length})
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-            {drivers.map(driver => (
-              <div key={driver.id} className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:shadow-md transition">
-                <div className="font-semibold text-gray-800 text-sm sm:text-base">{driver.name}</div>
-                {driver.contact && (
-                  <div className="text-xs sm:text-sm text-gray-600">{driver.contact}</div>
-                )}
-                <div className="text-xs text-green-600 font-medium mt-1">● Active</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* FOOTER */}
-      <div className="mt-6 sm:mt-8 md:mt-12 text-center text-xs sm:text-sm text-gray-600">
-        <p>
-          Toll Free: <span className="font-bold text-red-600">0800 01 4574</span> | Serving with Dignity
-        </p>
       </div>
     </div>
   );

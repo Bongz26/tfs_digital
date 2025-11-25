@@ -24,10 +24,17 @@ export const usePurchaseOrders = () => {
   const createPO = async (poData) => {
     try {
       const newPO = await createPurchaseOrder(poData);
-      setPurchaseOrders(prev => [newPO, ...prev]);
+      await loadPOs(); // Reload all POs to get updated list
       return newPO;
     } catch (err) {
-      throw err;
+      // Re-throw with better error message
+      const errorMsg = err.response?.data?.error || 
+                      err.response?.data?.message || 
+                      err.message || 
+                      "Failed to create purchase order";
+      const enhancedError = new Error(errorMsg);
+      enhancedError.response = err.response;
+      throw enhancedError;
     }
   };
 

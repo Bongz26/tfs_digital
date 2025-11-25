@@ -1,6 +1,6 @@
 // src/components/ConsultationForm.jsx
 import React, { useState } from 'react';
-import { API_HOST } from './api/config';
+import { createCase } from './api/cases';
 
 const PLAN_DATA = {
   motjha: {
@@ -153,98 +153,98 @@ const PLAN_BENEFITS = {
     service: "1 Service (Incl. Hearse & Family Cars & Deco)"
   },
   // Color-graded plans (latest plans with color grading)
-  Green: { 
-    casket: "15L Juice, 40 Lt Cakes, Groceries or Vegetables", 
+  Green: {
+    casket: "15L Juice, 40 Lt Cakes, Groceries or Vegetables",
     cover: 5000,
-    tent: 1, 
-    table: 1, 
-    toilet: 1, 
-    chairs: 50, 
-    programmes: 50, 
-    service: "1 Service (Incl. Hearse & Family Car & Deco)" 
+    tent: 1,
+    table: 1,
+    toilet: 1,
+    chairs: 50,
+    programmes: 50,
+    service: "1 Service (Incl. Hearse & Family Car & Deco)"
   },
-  Silver: { 
-    casket: "Economy Casket", 
+  Silver: {
+    casket: "Economy Casket",
     cover: 10000,
     grocery: "Groceries or Vegetables",
-    tent: 1, 
-    table: 1, 
-    toilet: 1, 
-    chairs: 50, 
-    programmes: 50, 
-    crucifix: 1, 
+    tent: 1,
+    table: 1,
+    toilet: 1,
+    chairs: 50,
+    programmes: 50,
+    crucifix: 1,
     airtime: 100,
-    service: "1 Service (Incl. Hearse & Family Car & Deco)" 
+    service: "1 Service (Incl. Hearse & Family Car & Deco)"
   },
-  Gold: { 
-    casket: "Pongee Casket", 
+  Gold: {
+    casket: "Pongee Casket",
     cover: 15000,
     grocery: "Groceries or Vegetables",
-    tent: 1, 
-    table: 2, 
-    toilet: 1, 
-    chairs: 100, 
-    programmes: 100, 
-    crucifix: 1, 
-    flower: 1, 
+    tent: 1,
+    table: 2,
+    toilet: 1,
+    chairs: 100,
+    programmes: 100,
+    crucifix: 1,
+    flower: 1,
     airtime: 200,
-    service: "1 Service (Incl. Hearse & Family Cars & Deco)" 
+    service: "1 Service (Incl. Hearse & Family Cars & Deco)"
   },
-  Platinum: { 
-    casket: "Raised HalfView Casket", 
+  Platinum: {
+    casket: "Raised HalfView Casket",
     cover: 20000,
     grocery: "Groceries or Vegetables",
-    tent: 1, 
-    table: 2, 
-    toilet: "VIP", 
-    chairs: 100, 
-    programmes: 100, 
-    crucifix: 1, 
-    flower: 1, 
+    tent: 1,
+    table: 2,
+    toilet: "VIP",
+    chairs: 100,
+    programmes: 100,
+    crucifix: 1,
+    flower: 1,
     airtime: 200,
-    service: "1 Service (Incl. Hearse & Family Cars & Deco)" 
+    service: "1 Service (Incl. Hearse & Family Cars & Deco)"
   },
-  Black: { 
-    casket: "Four Tier Casket", 
+  Black: {
+    casket: "Four Tier Casket",
     cover: 30000,
     grocery: "Groceries or Vegetables",
-    tent: 1, 
-    table: 2, 
-    toilet: "VIP", 
-    chairs: 150, 
-    programmes: 100, 
-    crucifix: 1, 
-    flower: 1, 
+    tent: 1,
+    table: 2,
+    toilet: "VIP",
+    chairs: 150,
+    programmes: 100,
+    crucifix: 1,
+    flower: 1,
     airtime: 200,
-    service: "1 Service (Incl. Hearse & Family Cars & Deco)" 
+    service: "1 Service (Incl. Hearse & Family Cars & Deco)"
   },
-  Pearl: { 
-    casket: "Princeton Dome Casket", 
+  Pearl: {
+    casket: "Princeton Dome Casket",
     cover: 40000,
     grocery: "Groceries or Vegetables",
-    tent: 1, 
-    table: 2, 
-    toilet: "VIP", 
-    chairs: 200, 
-    programmes: 150, 
-    crucifix: 1, 
-    flower: 2, 
+    tent: 1,
+    table: 2,
+    toilet: "VIP",
+    chairs: 200,
+    programmes: 150,
+    crucifix: 1,
+    flower: 2,
     airtime: 200,
-    service: "1 Service (Incl. Hearse & Family Cars & Deco)" 
+    service: "1 Service (Incl. Hearse & Family Cars & Deco)"
   },
-  Ivory: { 
-    casket: "Four CNR Figurine", 
+  Ivory: {
+    casket: "Four CNR Figurine",
     cover: 50000,
     grocery: "Groceries or Vegetables",
-    tent: 1, 
-    table: 2, 
-    toilet: "VIP", 
-    chairs: 200, 
-    programmes: 150, 
-    crucifix: 1, 
-    flower: 4, 
+    tent: 1,
+    table: 2,
+    toilet: "VIP",
+    chairs: 200,
+    programmes: 150,
+    crucifix: 1,
+    flower: 4,
     airtime: 200,
-    service: "1 Service (Incl. Hearse & Family Cars & Deco)" 
+    service: "1 Service (Incl. Hearse & Family Cars & Deco)"
   },
 };
 
@@ -285,7 +285,7 @@ const LEGACY_PLAN_MAPPING = {
   "PLAN D (MOTJHA)": { category: "motjha", name: "Plan D", members: 6 },
   "PLAN E (MOTJHA)": { category: "motjha", name: "Plan E", members: 6 },
   "PLAN F (MOTJHA)": { category: "motjha", name: "Plan F", members: 6 },
-  
+
   // MOTJHA with 10 members
   "BUDGET BUSTER (MOTJHA 10)": { category: "motjha", name: "Budget Buster", members: 10 },
   "PLAN A (MOTJHA 10)": { category: "motjha", name: "Plan A", members: 10 },
@@ -337,6 +337,9 @@ export default function ConsultationForm() {
     venue_address: '',
     requires_cow: false,
     requires_tombstone: false,
+    requires_catering: false,
+    requires_grocery: false,
+    requires_bus: false,
     intake_day: '',
     service_type: 'book',
     total_price: '',
@@ -346,7 +349,6 @@ export default function ConsultationForm() {
 
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const API_URL = API_HOST;
 
   const getAutoPrice = () => {
     if (form.plan_category === 'colour_grade') return 0;
@@ -390,9 +392,9 @@ export default function ConsultationForm() {
     return Object.keys(LEGACY_PLAN_MAPPING).find(key => {
       const m = LEGACY_PLAN_MAPPING[key];
       return m.category === form.plan_category &&
-             m.name === form.plan_name &&
-             (!m.age || m.age === form.plan_age_bracket) &&
-             (!m.members || m.members === form.plan_members);
+        m.name === form.plan_name &&
+        (!m.age || m.age === form.plan_age_bracket) &&
+        (!m.members || m.members === form.plan_members);
     }) || null;
   };
 
@@ -412,18 +414,7 @@ export default function ConsultationForm() {
     };
 
     try {
-      const res = await fetch(`${API_URL}/api/cases`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ error: 'Server error' }));
-        throw new Error(errorData.details || errorData.error || `HTTP ${res.status}`);
-      }
-
-      await res.json();
+      await createCase(data);
       setMessage('Case submitted successfully!');
       // Reset form (keep defaults)
       setForm(prev => ({
@@ -431,10 +422,12 @@ export default function ConsultationForm() {
         deceased_name: '', deceased_id: '', nok_name: '', nok_contact: '', nok_relation: '',
         funeral_date: '', funeral_time: '', delivery_date: '', delivery_time: '',
         venue_name: '', venue_address: '', intake_day: '',
+        requires_cow: false, requires_tombstone: false,
+        requires_catering: false, requires_grocery: false, requires_bus: false,
         total_price: '', casket_type: '', casket_colour: ''
       }));
     } catch (err) {
-      setMessage(`Failed to submit: ${err.message}`);
+      setMessage(`Failed to submit: ${err.message || err.response?.data?.error || 'Unknown error'}`);
     } finally {
       setSubmitting(false);
     }
@@ -523,10 +516,10 @@ export default function ConsultationForm() {
                 <select value={form.plan_category} onChange={(e) => {
                   const cat = e.target.value;
                   // Set default plan name based on category
-                  const defaultName = cat === 'specials' ? 'Spring A' : 
-                                     cat === 'motjha' ? 'Budget Buster' :
-                                     cat === 'single' ? 'Budget Buster' :
-                                     'Budget Buster'; // family default
+                  const defaultName = cat === 'specials' ? 'Spring A' :
+                    cat === 'motjha' ? 'Budget Buster' :
+                      cat === 'single' ? 'Budget Buster' :
+                        'Budget Buster'; // family default
                   setForm(prev => ({ ...prev, plan_category: cat, plan_name: defaultName }));
                 }} className="w-full px-4 py-3 border rounded-lg">
                   <option value="motjha">Motjha O Tlhele</option>
@@ -677,6 +670,9 @@ export default function ConsultationForm() {
             <div className="space-y-4">
               <label className="flex items-center"><input type="checkbox" checked={form.requires_cow} onChange={e => handleInputChange('requires_cow', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Requires Cow (Kgomo)</span></label>
               <label className="flex items-center"><input type="checkbox" checked={form.requires_tombstone} onChange={e => handleInputChange('requires_tombstone', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Requires Tombstone</span></label>
+              <label className="flex items-center"><input type="checkbox" checked={form.requires_catering} onChange={e => handleInputChange('requires_catering', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Catering</span></label>
+              <label className="flex items-center"><input type="checkbox" checked={form.requires_grocery} onChange={e => handleInputChange('requires_grocery', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Grocery</span></label>
+              <label className="flex items-center"><input type="checkbox" checked={form.requires_bus} onChange={e => handleInputChange('requires_bus', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Bus</span></label>
               <div><label>Intake Day</label><input type="date" value={form.intake_day} onChange={e => handleInputChange('intake_day', e.target.value)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
             </div>
           </div>

@@ -3,6 +3,7 @@ import { receiveGRV } from "../../api/purchaseOrders";
 
 const GRVReceiveForm = ({ poId, items, onSuccess, onCancel }) => {
   const [receivedQuantities, setReceivedQuantities] = useState({});
+  const [unitCosts, setUnitCosts] = useState({});
   const [receivedBy, setReceivedBy] = useState("");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -10,10 +11,19 @@ const GRVReceiveForm = ({ poId, items, onSuccess, onCancel }) => {
   // Initialize received quantities with current received_quantity or 0
   React.useEffect(() => {
     const initial = {};
+    const initialCosts = {};
     items.forEach(item => {
       initial[item.inventory_id] = item.received_quantity || 0;
+      // Use PO cost if available, otherwise fallback to current inventory price
+      const defaultCost = item.unit_cost && parseFloat(item.unit_cost) > 0
+        ? item.unit_cost
+        : item.current_inventory_price || 0;
+      initialCosts[item.inventory_id] = defaultCost;
     });
     setReceivedQuantities(initial);
+    setUnitCosts(initialCosts);
+    console.log("DEBUG: GRVReceiveForm items:", items);
+    console.log("DEBUG: GRVReceiveForm initialCosts:", initialCosts);
   }, [items]);
 
   const handleQuantityChange = (inventoryId, value) => {
@@ -32,9 +42,16 @@ const GRVReceiveForm = ({ poId, items, onSuccess, onCancel }) => {
     }
   };
 
+  const handleCostChange = (inventoryId, value) => {
+    setUnitCosts(prev => ({
+      ...prev,
+      [inventoryId]: value
+    }));
+  };
+
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!receivedBy.trim()) {
       newErrors.receivedBy = "Please enter your name";
     }
@@ -63,7 +80,7 @@ const GRVReceiveForm = ({ poId, items, onSuccess, onCancel }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -76,7 +93,8 @@ const GRVReceiveForm = ({ poId, items, onSuccess, onCancel }) => {
       })
       .map(item => ({
         inventory_id: item.inventory_id,
-        quantity_received: receivedQuantities[item.inventory_id] || 0
+        quantity_received: receivedQuantities[item.inventory_id] || 0,
+        new_unit_cost: unitCosts[item.inventory_id]
       }));
 
     if (receivedItems.length === 0) {
@@ -130,9 +148,8 @@ const GRVReceiveForm = ({ poId, items, onSuccess, onCancel }) => {
               }
             }}
             placeholder="Enter your name"
-            className={`w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 ${
-              errors.receivedBy ? 'border-red-500' : 'border-gray-300'
-            }`}
+            className={`w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-blue-600 focus:border-blue-600 ${errors.receivedBy ? 'border-red-500' : 'border-gray-300'
+              }`}
             required
           />
           {errors.receivedBy && (
@@ -149,16 +166,14 @@ const GRVReceiveForm = ({ poId, items, onSuccess, onCancel }) => {
             {items.map((item) => {
               const orderedQty = item.quantity_ordered || 0;
               const currentReceived = item.received_quantity || 0;
-              const newReceived = receivedQuantities[item.inventory_id] || 0;
               const remaining = orderedQty - currentReceived;
               const isFullyReceived = currentReceived >= orderedQty;
 
               return (
                 <div
                   key={item.id}
-                  className={`bg-white border rounded-lg p-3 ${
-                    errors[item.inventory_id] ? 'border-red-500' : 'border-gray-200'
-                  }`}
+                  className={`bg-white border rounded-lg p-3 ${errors[item.inventory_id] ? 'border-red-500' : 'border-gray-200'
+                    }`}
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
                     <div className="flex-1">
@@ -176,18 +191,31 @@ const GRVReceiveForm = ({ poId, items, onSuccess, onCancel }) => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <label className="text-xs text-gray-600 whitespace-nowrap">Qty Received:</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max={orderedQty}
-                        value={receivedQuantities[item.inventory_id] || 0}
-                        onChange={(e) => handleQuantityChange(item.inventory_id, e.target.value)}
-                        disabled={isFullyReceived}
-                        className={`w-20 border rounded p-2 text-center focus:ring-2 focus:ring-blue-600 focus:border-blue-600 ${
-                          errors[item.inventory_id] ? 'border-red-500' : 'border-gray-300'
-                        } ${isFullyReceived ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                      />
+                      <div className="flex flex-col">
+                        <label className="text-xs text-gray-600 whitespace-nowrap">Unit Cost (R):</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={unitCosts[item.inventory_id] || ''}
+                          onChange={(e) => handleCostChange(item.inventory_id, e.target.value)}
+                          className="w-24 border rounded p-2 text-center focus:ring-2 focus:ring-blue-600 focus:border-blue-600 border-gray-300"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div className="flex flex-col">
+                        <label className="text-xs text-gray-600 whitespace-nowrap">Qty Received:</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={orderedQty}
+                          value={receivedQuantities[item.inventory_id] || 0}
+                          onChange={(e) => handleQuantityChange(item.inventory_id, e.target.value)}
+                          disabled={isFullyReceived}
+                          className={`w-20 border rounded p-2 text-center focus:ring-2 focus:ring-blue-600 focus:border-blue-600 ${errors[item.inventory_id] ? 'border-red-500' : 'border-gray-300'
+                            } ${isFullyReceived ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                        />
+                      </div>
                     </div>
                   </div>
                   {errors[item.inventory_id] && (
