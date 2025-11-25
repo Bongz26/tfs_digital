@@ -15,13 +15,29 @@ router.get('/', async (req, res) => {
 
     if (casesError) throw casesError;
 
-    // 2️⃣ Vehicles Available
-    const { count: vehiclesAvailable, error: vehiclesError } = await supabase
+    // 2️⃣ Vehicles Available - Count vehicles NOT assigned to any active case
+    // Get all vehicles
+    const { data: allVehicles, error: vehiclesError } = await supabase
       .from('vehicles')
-      .select('*', { count: 'exact', head: true })
-      .eq('available', true);
+      .select('id');
 
     if (vehiclesError) throw vehiclesError;
+
+    // Get all active roster assignments (non-completed)
+    const { data: activeAssignments, error: rosterError } = await supabase
+      .from('roster')
+      .select('vehicle_id')
+      .neq('status', 'completed');
+
+    if (rosterError) throw rosterError;
+
+    // Find vehicles that are assigned
+    const assignedVehicleIds = new Set(
+      (activeAssignments || []).map(a => a.vehicle_id).filter(id => id !== null)
+    );
+
+    // Count vehicles not assigned to any active case
+    const vehiclesAvailable = (allVehicles || []).filter(v => !assignedVehicleIds.has(v.id)).length;
 
     // 3️⃣ Low Stock Items
     const { data: lowStock, error: inventoryError } = await supabase
@@ -52,7 +68,7 @@ router.get('/', async (req, res) => {
       upcoming: funeralsCount || 0,
       vehiclesNeeded: funeralsCount || 0,
       vehiclesAvailable: vehiclesAvailable || 0,
-      conflicts: (vehiclesAvailable || 0) < (funeralsCount || 0),
+      conflicts: false, // No longer using conflict alerts
       lowStock: Array.isArray(lowStock) ? lowStock : [],
       cowsAssigned: cowsAssigned || 0,
       recentCases: recentCases || []

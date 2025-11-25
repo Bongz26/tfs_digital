@@ -1,9 +1,10 @@
 // server/routes/vehicles.js
 const express = require('express');
 const router = express.Router();
+const { requireAuth, requireMinRole, ROLES } = require('../middleware/auth');
 
 // GET /api/vehicles/available
-router.get('/available', async (req, res) => {
+router.get('/available', requireAuth, requireMinRole(ROLES.STAFF), async (req, res) => {
   try {
     const supabase = req.app.locals.supabase;
 

@@ -4,11 +4,14 @@
   "description": "TFS Digital Server",
   "main": "index.js",
   "scripts": {
+    "test": "jest",
+    "test:ci": "jest --ci",
     "start": "node index.js",
     "dev": "nodemon index.js",
     "init-db": "node database/init.js",
     "insert-vehicles": "node database/insert-vehicles.js",
-    "insert-test-data": "node database/insert-test-data.js"
+    "insert-test-data": "node database/insert-test-data.js",
+    "lint": "eslint . --ext .js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.81.0",
@@ -16,11 +19,18 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.2.1",
+    "express-validator": "^7.3.1",
+    "helmet": "^8.1.0",
+    "morgan": "^1.10.1",
     "nodemailer": "^6.9.8",
     "pg": "^8.16.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "eslint": "^9.39.1",
+    "jest": "^30.2.0",
+    "nodemon": "^3.1.10",
+    "supertest": "^7.1.4"
   },
   "keywords": [],
   "author": "",

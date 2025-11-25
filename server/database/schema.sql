@@ -151,6 +151,11 @@ CREATE TABLE IF NOT EXISTS suppliers (
     phone VARCHAR(20),
     email VARCHAR(120),
     address TEXT,
+    -- Supplier system integration fields
+    supplier_system_type VARCHAR(50), -- e.g., '4POS', 'MANUAL', 'OTHER'
+    supplier_system_id VARCHAR(100), -- Supplier ID in their system
+    supplier_api_endpoint VARCHAR(255), -- API endpoint to fetch supplier data
+    supplier_api_key VARCHAR(255), -- API key for authentication (encrypted)
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -164,6 +169,8 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     status VARCHAR(20) DEFAULT 'draft',
     created_by VARCHAR(100),
     total_amount DECIMAL(12,2) DEFAULT 0,
+    -- Manual email override (if different from supplier email in database)
+    manual_supplier_email VARCHAR(120),
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );

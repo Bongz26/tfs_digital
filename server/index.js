@@ -3,6 +3,9 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const morgan = require('morgan');
 const { createClient } = require('@supabase/supabase-js');
 
 const inventoryRoutes = require('./routes/inventory');
@@ -16,6 +19,8 @@ const livestockRoutes = require('./routes/livestock');
 const checklistRoutes = require('./routes/checklist');
 const smsRoutes = require('./routes/sms');
 const driversRoutes = require('./routes/drivers');
+const directionsRoutes = require('./routes/directions');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 
@@ -41,10 +46,47 @@ app.use(cors({
   credentials: true
 }));
 
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+
+// Security headers
+app.use(helmet());
+if (process.env.NODE_ENV === 'production') {
+  app.use(
+    helmet.contentSecurityPolicy({
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'", process.env.FRONTEND_URL || 'https://admintfs.onrender.com'],
+        frameAncestors: ["'none'"],
+        formAction: ["'self'"]
+      }
+    })
+  );
+}
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // Routes
+// Rate limit authentication endpoints to prevent abuse
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use('/api/auth', authLimiter, authRoutes);  // Auth routes (public)
+
+// General API rate limit
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use('/api', generalLimiter);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/cases', casesRoutes);
 app.use('/api/purchase-orders', purchaseOrdersRouter);
@@ -56,6 +98,7 @@ app.use('/api/livestock', livestockRoutes);
 app.use('/api/checklist', checklistRoutes);
 app.use('/api/sms', smsRoutes);
 app.use('/api/drivers', driversRoutes);
+app.use('/api/directions', directionsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -67,13 +110,22 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found' });
 });
 
-// Start server
-const port = process.env.PORT || 5000;
-app.listen(port, () => {
-  console.log(`🚀 Server running on port ${port}`);
-  console.log(`📍 API endpoints: http://localhost:${port}/api`);
-  console.log(`🧪 Test endpoint: http://localhost:${port}/api/purchase-orders/test`);
-  console.log(`🏥 Health check: http://localhost:${port}/api/health`);
+// Global error handler
+app.use((err, req, res, next) => {
+  const status = err.status || 500;
+  const message = err.message || 'Internal Server Error';
+  res.status(status).json({ success: false, error: message });
 });
+
+// Start server only when executed directly
+if (require.main === module) {
+  const port = process.env.PORT || 5000;
+  app.listen(port, () => {
+    console.log(`🚀 Server running on port ${port}`);
+    console.log(`📍 API endpoints: http://localhost:${port}/api`);
+    console.log(`🧪 Test endpoint: http://localhost:${port}/api/purchase-orders/test`);
+    console.log(`🏥 Health check: http://localhost:${port}/api/health`);
+  });
+}
 
 module.exports = app;
