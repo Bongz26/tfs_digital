@@ -1,0 +1,57 @@
+[
+  {
+    "reg_number": "HVR 607 FS",
+    "type": "fortuner",
+    "driver_name": "Sipho",
+    "driver_contact": "",
+    "available": true,
+    "current_location": "",
+    "last_service": ""
+  },
+  {
+    "reg_number": "TSF 145 FS",
+    "type": "vito",
+    "driver_name": "Thabo",
+    "driver_contact": "",
+    "available": true,
+    "current_location": "",
+    "last_service": ""
+  },
+  {
+    "reg_number": "THS 001 FS",
+    "type": "v_class",
+    "driver_name": "Moses",
+    "driver_contact": "",
+    "available": true,
+    "current_location": "",
+    "last_service": ""
+  },
+  {
+    "reg_number": "THS 002 FS",
+    "type": "truck",
+    "driver_name": "Anna",
+    "driver_contact": "",
+    "available": true,
+    "current_location": "",
+    "last_service": ""
+  },
+  {
+    "reg_number": "THS 003 FS",
+    "type": "q7",
+    "driver_name": "Jacob",
+    "driver_contact": "",
+    "available": true,
+    "current_location": "",
+    "last_service": ""
+  },
+  {
+    "reg_number": "THS 004 FS",
+    "type": "hilux",
+    "driver_name": "Peter",
+    "driver_contact": "",
+    "available": true,
+    "current_location": "",
+    "last_service": ""
+  }
+]
+

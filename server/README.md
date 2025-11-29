@@ -1,86 +1,70 @@
-# TFS Digital Server
+# Getting Started with Create React App
 
-Express.js backend server for Thusanang Funeral Services digital system.
+This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
-## Quick Start
+## Available Scripts
 
-### 1. Install Dependencies
-```bash
-npm install
-```
+In the project directory, you can run:
 
-### 2. Configure Environment
-Create a `.env` file in the server directory:
-```env
-DATABASE_URL=postgresql://postgres:[YOUR_PASSWORD]@db.uucjdcbtpunfsyuixsmc.supabase.co:5432/postgres
-PORT=5000
-NODE_ENV=development
-```
+### `npm start`
 
-**Replace `[YOUR_PASSWORD]` with your actual Supabase database password.**
+Runs the app in the development mode.\
+Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
-### 3. Run the Server
+The page will reload when you make changes.\
+You may also see any lint errors in the console.
 
-**Development mode (with auto-reload):**
-```bash
-npm run dev
-```
+### `npm test`
 
-**Production mode:**
-```bash
-npm start
-```
+Launches the test runner in the interactive watch mode.\
+See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
 
-## API Endpoints
+### `npm run build`
 
-### Cases
-- `GET /api/cases` - Get all cases
-- `GET /api/cases/:id` - Get single case
-- `POST /api/cases` - Create new case
-- `PUT /api/cases/:id` - Update case
-- `DELETE /api/cases/:id` - Delete case
+Builds the app for production to the `build` folder.\
+It correctly bundles React in production mode and optimizes the build for the best performance.
 
-### Dashboard
-- `GET /api/dashboard` - Get dashboard statistics
+The build is minified and the filenames include the hashes.\
+Your app is ready to be deployed!
 
-### Vehicles
-- `GET /api/vehicles` - Get all vehicles
-- `GET /api/vehicles/available` - Get available vehicles
-- `GET /api/vehicles/:id` - Get single vehicle
-- `PATCH /api/vehicles/:id/availability` - Update vehicle availability
-- `PUT /api/vehicles/:id` - Update vehicle
+See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
 
-### Inventory
-- `GET /api/inventory` - Get all inventory items
-- `GET /api/inventory/low-stock` - Get low stock items
-- `GET /api/inventory/:id` - Get single inventory item
-- `PATCH /api/inventory/:id/stock` - Update inventory stock
-- `POST /api/inventory/:id/reserve` - Create reservation
+### `npm run eject`
 
-### Health Check
-- `GET /api/health` - Check server status
+**Note: this is a one-way operation. Once you `eject`, you can't go back!**
 
-## Database
+If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
 
-The server connects to a PostgreSQL database hosted on Supabase. Make sure all tables are created using the provided SQL schema.
+Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
 
-## Project Structure
+You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
 
-```
-server/
-├── config/
-│   └── db.js          # Database connection configuration
-├── routes/
-│   ├── cases.js       # Case management routes
-│   ├── dashboard.js   # Dashboard data routes
-│   ├── vehicles.js    # Vehicle management routes
-│   └── inventory.js   # Inventory management routes
-├── index.js           # Server entry point
-├── package.json       # Dependencies
-└── .env               # Environment variables (create this)
-```
+## Learn More
 
-## Troubleshooting
+You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
 
-See `SETUP.md` for detailed setup instructions and troubleshooting guide.
+To learn React, check out the [React documentation](https://reactjs.org/).
 
+### Code Splitting
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+
+### Analyzing the Bundle Size
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+
+### Making a Progressive Web App
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+
+### Advanced Configuration
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+
+### Deployment
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+
+### `npm run build` fails to minify
+
+This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)

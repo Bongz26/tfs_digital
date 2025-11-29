@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: tfs-digital-backend
+    env: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      # The following environment variables must be set in Render Dashboard:
+      # - DATABASE_URL (required)
+      # - SUPABASE_URL (optional, for dashboard/activeCases features)
+      # - SUPABASE_ANON_KEY (optional, for dashboard/activeCases features)
+      # - FRONTEND_URL (optional, for CORS)
+      # - SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (optional, for email)
+

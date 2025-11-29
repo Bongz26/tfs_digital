@@ -1,0 +1,31 @@
+/* src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* TFS COLOURS */
+:root {
+  --tfs-red: #8B0000;
+  --tfs-gold: #DAA520;
+  --tfs-dark: #2F2F2F;
+  --tfs-light: #F8F8F8;
+  --tfs-white: #FFFFFF;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #F8F8F8;
+  color: #2F2F2F;
+}
+
+/* BUTTONS */
+.btn-red {
+  @apply bg-red-700 text-white px-6 py-3 rounded-lg font-bold hover:bg-red-800 transition;
+}
+.btn-gold {
+  @apply bg-yellow-600 text-gray-900 px-6 py-3 rounded-lg font-bold hover:bg-yellow-500 transition;
+}
+.card {
+  @apply bg-white p-6 rounded-xl shadow-md border border-gray-200;
+}
