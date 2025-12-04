@@ -136,12 +136,52 @@ async function migrate() {
       console.log('⏭️  requires_bus column already exists\n');
     }
 
+    // Additional frontend-aligned fields
+    const columnsToAdd = [
+      { name: 'claim_date', type: 'DATE' },
+      { name: 'policy_number', type: 'VARCHAR(50)' },
+      { name: 'benefit_mode', type: "VARCHAR(20)" },
+      { name: 'cleansing_date', type: 'DATE' },
+      { name: 'cleansing_time', type: 'TIME' },
+      { name: 'service_date', type: 'DATE' },
+      { name: 'service_time', type: 'TIME' },
+      { name: 'church_date', type: 'DATE' },
+      { name: 'church_time', type: 'TIME' },
+      { name: 'programs', type: 'INT' },
+      { name: 'top_up_amount', type: 'DECIMAL(12,2) DEFAULT 0' },
+      { name: 'airtime', type: 'BOOLEAN DEFAULT FALSE' },
+      { name: 'airtime_network', type: 'VARCHAR(50)' },
+      { name: 'airtime_number', type: 'VARCHAR(20)' },
+      { name: 'cover_amount', type: 'DECIMAL(12,2) DEFAULT 0' },
+      { name: 'cashback_amount', type: 'DECIMAL(12,2) DEFAULT 0' },
+      { name: 'amount_to_bank', type: 'DECIMAL(12,2) DEFAULT 0' },
+      { name: 'requires_sheep', type: 'BOOLEAN DEFAULT FALSE' },
+      { name: 'legacy_plan_name', type: 'VARCHAR(100)' }
+    ];
+
+    for (const col of columnsToAdd) {
+      const exists = await query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'cases' AND column_name = '${col.name}'
+      `);
+      if (exists.rows.length === 0) {
+        console.log(`📝 Adding ${col.name} column...`);
+        await query(`ALTER TABLE cases ADD COLUMN ${col.name} ${col.type}`);
+        console.log(`✅ Added ${col.name} column\n`);
+      } else {
+        console.log(`⏭️  ${col.name} column already exists\n`);
+      }
+    }
+
     // Verify columns were added
     const verify = await query(`
       SELECT column_name, data_type 
       FROM information_schema.columns 
       WHERE table_name = 'cases' 
-        AND column_name IN ('delivery_date', 'delivery_time', 'service_type', 'total_price', 'casket_type', 'casket_colour', 'requires_catering', 'requires_grocery', 'requires_bus')
+        AND column_name IN (
+          'delivery_date', 'delivery_time', 'service_type', 'total_price', 'casket_type', 'casket_colour', 'requires_catering', 'requires_grocery', 'requires_bus',
+          'claim_date','policy_number','benefit_mode','cleansing_date','cleansing_time','service_date','service_time','church_date','church_time','programs','top_up_amount','airtime','airtime_network','airtime_number','cover_amount','cashback_amount','amount_to_bank','requires_sheep','legacy_plan_name'
+        )
       ORDER BY column_name
     `);
 

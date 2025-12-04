@@ -1,5 +1,5 @@
 // src/components/ConsultationForm.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createCase } from './api/cases';
 
 const PLAN_DATA = {
@@ -154,19 +154,15 @@ const PLAN_BENEFITS = {
   },
   // Color-graded plans (latest plans with color grading)
   Green: {
-    casket: "15L Juice, 40 Lt Cakes, Groceries or Vegetables",
     cover: 5000,
-    tent: 1,
-    table: 1,
-    toilet: 1,
-    chairs: 50,
-    programmes: 50,
-    service: "1 Service (Incl. Hearse & Family Car & Deco)"
+    juice_liters: 15,
+    cakes_liters: 40,
+    grocery_items: ["Rice", "Maize", "Sugar", "Oil", "Tea", "Cremora"]
   },
   Silver: {
     casket: "Economy Casket",
     cover: 10000,
-    grocery: "Groceries or Vegetables",
+    grocery_items: ["Rice", "Maize", "Sugar", "Oil", "Tea", "Cremora"],
     tent: 1,
     table: 1,
     toilet: 1,
@@ -174,12 +170,12 @@ const PLAN_BENEFITS = {
     programmes: 50,
     crucifix: 1,
     airtime: 100,
-    service: "1 Service (Incl. Hearse & Family Car & Deco)"
+    service: "1 Service (Incl. Hearse & Family Car)"
   },
   Gold: {
     casket: "Pongee Casket",
     cover: 15000,
-    grocery: "Groceries or Vegetables",
+    grocery_items: ["Rice", "Maize", "Sugar", "Oil", "Tea", "Cremora"],
     tent: 1,
     table: 2,
     toilet: 1,
@@ -188,12 +184,13 @@ const PLAN_BENEFITS = {
     crucifix: 1,
     flower: 1,
     airtime: 200,
-    service: "1 Service (Incl. Hearse & Family Cars & Deco)"
+    service: "1 Service (Incl. Hearse & Family Cars)"
+
   },
   Platinum: {
     casket: "Raised HalfView Casket",
     cover: 20000,
-    grocery: "Groceries or Vegetables",
+    grocery_items: ["Rice", "Maize", "Sugar", "Oil", "Tea", "Cremora"],
     tent: 1,
     table: 2,
     toilet: "VIP",
@@ -202,54 +199,57 @@ const PLAN_BENEFITS = {
     crucifix: 1,
     flower: 1,
     airtime: 200,
-    service: "1 Service (Incl. Hearse & Family Cars & Deco)"
+    service: "1 Service (Incl. Hearse & Family Cars)"
   },
   Black: {
     casket: "Four Tier Casket",
     cover: 30000,
-    grocery: "Groceries or Vegetables",
+    grocery_items: ["Rice", "Maize", "Sugar", "Oil", "Tea", "Cremora"],
     tent: 1,
     table: 2,
     toilet: "VIP",
     chairs: 150,
-    programmes: 100,
+    programmes: 150,
     crucifix: 1,
     flower: 1,
     airtime: 200,
-    service: "1 Service (Incl. Hearse & Family Cars & Deco)"
+    service: "1 Service (Incl. Hearse & Family Car)"
   },
   Pearl: {
     casket: "Princeton Dome Casket",
     cover: 40000,
-    grocery: "Groceries or Vegetables",
+    grocery_items: ["Rice", "Maize", "Sugar", "Oil", "Tea", "Cremora"],
     tent: 1,
     table: 2,
     toilet: "VIP",
     chairs: 200,
     programmes: 150,
     crucifix: 1,
-    flower: 2,
+    flower: 1,
     airtime: 200,
     service: "1 Service (Incl. Hearse & Family Cars & Deco)"
   },
   Ivory: {
     casket: "Four CNR Figurine",
     cover: 50000,
-    grocery: "Groceries or Vegetables",
+    grocery_items: ["Rice", "Maize", "Sugar", "Oil", "Tea", "Cremora"],
     tent: 1,
     table: 2,
     toilet: "VIP",
     chairs: 200,
     programmes: 150,
     crucifix: 1,
-    flower: 4,
+    flower: 1,
     airtime: 200,
+    tombstone:1,
+    cow:1,
     service: "1 Service (Incl. Hearse & Family Cars & Deco)"
   },
 };
 
 const SPECIAL_PLAN_BENEFITS = {
   'Spring A': {
+    cover: 6500,
     casket: "3-Tier Coffin",
     benefits: [
       "Full Service (Includes Fleet & Graveyard Setup)",
@@ -261,6 +261,7 @@ const SPECIAL_PLAN_BENEFITS = {
     ]
   },
   'Spring B': {
+    cover: 6500,
     casket: "Econo Casket",
     benefits: [
       "Full Service (Includes Fleet & Graveyard Setup)",
@@ -321,34 +322,83 @@ const LEGACY_PLAN_MAPPING = {
 export default function ConsultationForm() {
   const [form, setForm] = useState({
     plan_category: 'family',
-    plan_name: 'Budget Buster', // Updated to match brochure plan names
+    plan_name: 'Budget Buster',
     plan_members: 6,
     plan_age_bracket: '18-65',
+    benefit_mode: 'benefits',
+    pearl_bonus: '',
+    claim_date: '',
+    policy_number: '',
     deceased_name: '',
     deceased_id: '',
     nok_name: '',
     nok_contact: '',
     nok_relation: '',
-    funeral_date: '',
-    funeral_time: '',
+    cleansing_date: '',
+    cleansing_time: '',
     delivery_date: '',
     delivery_time: '',
+    service_date: '',
+    service_time: '',
+    church_date: '',
+    church_time: '',
     venue_name: '',
     venue_address: '',
     requires_cow: false,
+    requires_sheep: false,
     requires_tombstone: false,
+    requires_flower: false,
     requires_catering: false,
     requires_grocery: false,
     requires_bus: false,
+    programs: 0,
+    top_up_amount: 0,
+    airtime: false,
+    airtime_network: '',
+    airtime_number: '',
+    cover_amount: 0,
+    cashback_amount: 0,
+    amount_to_bank: 0,
     intake_day: '',
     service_type: 'book',
     total_price: '',
     casket_type: '',
-    casket_colour: ''
+    casket_colour: '',
+    office_personnel1: '',
+    client_name1: '',
+    date1: '',
+    office_personnel2: '',
+    client_name2: '',
+    date2: ''
   });
 
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [printMode, setPrintMode] = useState('');
+  const [printedData, setPrintedData] = useState(null);
+  const [extrasOpen, setExtrasOpen] = useState(false);
+  const [draftsOpen, setDraftsOpen] = useState(false);
+  const [draftQuery, setDraftQuery] = useState('');
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+
+  useEffect(() => {
+    const isSpecialPlan = form.plan_category === 'specials';
+    const benefits = isSpecialPlan
+      ? (SPECIAL_PLAN_BENEFITS[form.plan_name] || {})
+      : (PLAN_BENEFITS[form.plan_name] || {});
+    const nextBenefitMode = isSpecialPlan ? 'benefits' : form.benefit_mode;
+    const nextCashbackAmount = isSpecialPlan ? 0 : (form.benefit_mode === 'cashback' ? (benefits.cover || 0) : 0);
+    setForm(prev => ({
+      ...prev,
+      casket_type: benefits.casket || '',
+      casket_colour: isSpecialPlan ? (prev.casket_colour || 'Cherry') : prev.casket_colour,
+      cover_amount: benefits.cover || 0,
+      cashback_amount: nextCashbackAmount,
+      benefit_mode: nextBenefitMode,
+      programs: benefits.programmes || prev.programs,
+      // You can auto-set more fields if needed, e.g., requires_flower: !!benefits.flower
+    }));
+  }, [form.plan_name, form.plan_category, form.benefit_mode]);
 
   const getAutoPrice = () => {
     if (form.plan_category === 'colour_grade') return 0;
@@ -361,18 +411,153 @@ export default function ConsultationForm() {
 
   const displayedPrice = form.service_type === 'book' ? getAutoPrice() : form.total_price || '';
 
+  const isSpecialPlan = form.plan_category === 'specials';
+
   const getAutoCasketType = () => {
-    if (form.plan_category === 'specials') {
+    if (isSpecialPlan) {
       return SPECIAL_PLAN_BENEFITS[form.plan_name]?.casket || '';
     }
-    // Check new plan benefits first, then legacy color grades
     return form.casket_type || PLAN_BENEFITS[form.plan_name]?.casket || '';
   };
 
-  const isSpecialPlan = form.plan_category === 'specials';
+  const getExtrasSummary = () => {
+    const items = [];
+    if (form.requires_cow) items.push('Cow');
+    if (form.requires_sheep) items.push('Sheep');
+    if (form.requires_tombstone) items.push('Tombstone');
+    if (form.requires_flower) items.push('Flower');
+    if (form.requires_catering) items.push('Catering');
+    if (form.requires_grocery) items.push('Grocery');
+    if (form.requires_bus) items.push('Bus');
+    if (form.programs) items.push(`Programs: ${form.programs}`);
+    if (form.top_up_amount) items.push(`Top-Up: R${form.top_up_amount}`);
+    if (form.airtime) items.push(`Airtime: ${form.airtime_network || ''} ${form.airtime_number || ''}`.trim());
+    return items.length ? items.join(', ') : 'None selected';
+  };
+
+  const getScheduleSummary = () => {
+    const parts = [];
+    if (form.cleansing_date || form.cleansing_time) parts.push(`Cleansing: ${form.cleansing_date || '-'} ${form.cleansing_time || ''}`.trim());
+    if (form.delivery_date || form.delivery_time) parts.push(`Delivery: ${form.delivery_date || '-'} ${form.delivery_time || ''}`.trim());
+    if (form.service_date || form.service_time) parts.push(`Service: ${form.service_date || '-'} ${form.service_time || ''}`.trim());
+    if (form.church_date || form.church_time) parts.push(`Church: ${form.church_date || '-'} ${form.church_time || ''}`.trim());
+    return parts.length ? parts.join(' • ') : 'No schedule set';
+  };
+
+  const COLOR_GRADES = ['Green', 'Silver', 'Gold', 'Platinum', 'Black', 'Pearl', 'Ivory'];
+  const isColorGrade = (name) => COLOR_GRADES.includes(name);
+  const getPlanIncludesText = () => {
+    const b = PLAN_BENEFITS[form.plan_name] || {};
+    if (form.plan_name === 'Green') {
+      const groceries = (b.grocery_items || []).join(', ');
+      return `${b.juice_liters || 0}L Juice • ${b.cakes_liters || 0}L Cakes • Grocery (${groceries})`;
+    }
+    const parts = [];
+    if (b.casket) parts.push(`Casket: ${b.casket}`);
+    if (b.tombstone) parts.push(`Tombstone: ${b.tombstone}`);
+    if (typeof b.tent !== 'undefined') parts.push(`${b.tent} Tent`);
+    if (typeof b.table !== 'undefined') parts.push(`${b.table} Table`);
+    if (b.toilet) parts.push(`${String(b.toilet).toUpperCase()} Toilet`);
+    if (typeof b.chairs !== 'undefined') parts.push(`${b.chairs} Chairs`);
+    if (typeof b.programmes !== 'undefined') parts.push(`${b.programmes} Programmes`);
+    if (typeof b.crucifix !== 'undefined') parts.push('Crucifix');
+    if (typeof b.flower !== 'undefined') parts.push(`${b.flower} Flowers`);
+    if (typeof b.airtime !== 'undefined') parts.push(`R${b.airtime} Airtime`);
+    if (Array.isArray(b.grocery_items)) parts.push(`Grocery (${b.grocery_items.join(', ')})`);
+    else if (b.grocery) parts.push(b.grocery);
+    else if (b.groceries) parts.push(b.groceries);
+    if (b.cow) parts.push('Cow');
+    if (b.sheep) parts.push('Sheep');
+    if (b.service) parts.push(b.service);
+    if (isColorGrade(form.plan_name) && form.plan_name !== 'Green') parts.push('Free Repatriation');
+    if (form.plan_name === 'Pearl' && form.benefit_mode === 'benefits') {
+      if (form.pearl_bonus === 'cow') parts.push('Bonus: Cow');
+      if (form.pearl_bonus === 'tombstone') parts.push('Bonus: Tombstone');
+    }
+    return parts.join(' • ');
+  };
+
+  const formatCategory = (cat) => {
+    switch (cat) {
+      case 'motjha': return 'MOTJHA';
+      case 'family': return 'FAMILY';
+      case 'single': return 'SINGLE';
+      case 'specials': return 'SPRING SPECIALS';
+      default: return String(cat || '').toUpperCase();
+    }
+  };
+  const formatPlanTitle = (data) => `${formatCategory(data.plan_category)} - ${String(data.plan_name || '').toUpperCase()}`;
 
   const handleInputChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const getDraftKeys = () => {
+    try {
+      return Object.keys(window.localStorage).filter(k => k.startsWith('tfs_claim_draft_'));
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const getDrafts = () => {
+    const keys = getDraftKeys();
+    const arr = [];
+    for (const key of keys) {
+      try {
+        const raw = window.localStorage.getItem(key);
+        const data = JSON.parse(raw);
+        if (data && typeof data === 'object') arr.push({ key, data });
+      } catch (e) {}
+    }
+    return arr.sort((a, b) => String(b.data?.saved_at || '').localeCompare(String(a.data?.saved_at || '')));
+  };
+
+  const loadDraftKey = (key) => {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) {
+        setMessage('Draft not found');
+        return;
+      }
+      const data = JSON.parse(raw);
+      setForm(prev => ({ ...prev, ...data }));
+      setMessage('Draft loaded');
+    } catch (e) {
+      setMessage('Failed to load draft');
+    }
+  };
+
+  const loadDraftByPolicy = () => {
+    const policy = String(draftQuery || '').trim();
+    if (!policy) {
+      setMessage('Enter policy number to load draft');
+      return;
+    }
+    const key = `tfs_claim_draft_${policy}`;
+    loadDraftKey(key);
+  };
+
+  const loadLastDraft = () => {
+    try {
+      const key = window.localStorage.getItem('tfs_claim_draft_last');
+      if (!key) {
+        setMessage('No last draft found');
+        return;
+      }
+      loadDraftKey(key);
+    } catch (e) {
+      setMessage('Failed to load last draft');
+    }
+  };
+
+  const deleteDraftKey = (key) => {
+    try {
+      window.localStorage.removeItem(key);
+      setMessage('Draft deleted');
+    } catch (e) {
+      setMessage('Failed to delete draft');
+    }
   };
 
   const handleLegacyPlanSelect = (legacyName) => {
@@ -398,7 +583,79 @@ export default function ConsultationForm() {
     }) || null;
   };
 
-  const handleSubmit = async (e) => {
+  const formatDateForBoxes = (dateStr) => {
+    if (!dateStr) return Array(8).fill(' ');
+    const [y, m, d] = dateStr.split('-');
+    return [d[0] || ' ', d[1] || ' ', m[0] || ' ', m[1] || ' ', y[0] || ' ', y[1] || ' ', y[2] || ' ', y[3] || ' '];
+  };
+
+  const handleSaveDraft = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setMessage('');
+
+    // Validate minimum required to save a draft
+    if (!form.claim_date || !form.policy_number || !form.deceased_name || !form.nok_name || !form.nok_contact) {
+      setMessage('Please fill required claim details: Claim Date, Policy Number, Deceased Name, Claimant Name, Contact Details.');
+      setSubmitting(false);
+      return;
+    }
+
+    // Require service type and pricing to be resolved
+    const autoPrice = getAutoPrice();
+    if (!form.service_type) {
+      setMessage('Please select Service Type (Book or Private)');
+      setSubmitting(false);
+      return;
+    }
+    if (form.service_type === 'book' && (!autoPrice || autoPrice <= 0)) {
+      setMessage('Selected plan must have a valid price');
+      setSubmitting(false);
+      return;
+    }
+    if (form.service_type === 'private' && (!form.total_price || parseFloat(form.total_price) <= 0)) {
+      setMessage('Please provide a manual Total Price for Private service');
+      setSubmitting(false);
+      return;
+    }
+
+    // Require cleansing details
+    if (!form.cleansing_date || !form.cleansing_time) {
+      setMessage('Please fill Cleansing (Ho Hlapisa) date and time');
+      setSubmitting(false);
+      return;
+    }
+
+    const data = {
+      ...form,
+      total_price: form.service_type === 'book' ? getAutoPrice() : parseFloat(form.total_price) || 0,
+      casket_type: getAutoCasketType(),
+      venue_lat: null,
+      venue_lng: null,
+      status: 'claim_draft',
+      legacy_plan_name: getLegacyPlanName() || null
+    };
+
+    try {
+      // Save locally as draft using policy number as key
+      const key = `tfs_claim_draft_${data.policy_number}`;
+      const stamped = { ...data, saved_at: new Date().toISOString() };
+      window.localStorage.setItem(key, JSON.stringify(stamped));
+      window.localStorage.setItem('tfs_claim_draft_last', key);
+      setMessage('Claim draft saved locally! Printing receipt...');
+      setPrintedData(data);
+      setPrintMode('receipt');
+      setTimeout(() => window.print(), 500);
+    } catch (err) {
+      const serverErr = err.response?.data;
+      const detail = serverErr?.details || serverErr?.hint || serverErr?.error;
+      setMessage(`Failed to save draft: ${detail || err.message || 'Unknown error'}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleFinalSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     setMessage('');
@@ -409,7 +666,7 @@ export default function ConsultationForm() {
       casket_type: getAutoCasketType(),
       venue_lat: null,
       venue_lng: null,
-      status: 'intake',
+      status: 'confirmed',
       legacy_plan_name: getLegacyPlanName() || null
     };
 
@@ -425,65 +682,319 @@ export default function ConsultationForm() {
         setSubmitting(false);
         return;
       }
-      if (!form.delivery_date || !form.delivery_time) {
-        setMessage('Delivery date and time are required');
+      if (!form.delivery_date || !form.delivery_time || !form.service_date || !form.service_time) {
+        setMessage('Delivery and service date/time are required');
         setSubmitting(false);
         return;
       }
       await createCase(data);
-      setMessage('Case submitted successfully!');
-      // Reset form (keep defaults)
+      setMessage('Case confirmed successfully! Printing full checklist...');
+      setPrintedData(data);
+      setPrintMode('full');
+      setTimeout(() => window.print(), 500);
+      // Reset form after confirmation
       setForm(prev => ({
         ...prev,
         deceased_name: '', deceased_id: '', nok_name: '', nok_contact: '', nok_relation: '',
-        funeral_date: '', funeral_time: '', delivery_date: '', delivery_time: '',
+        claim_date: '', policy_number: '',
+        cleansing_date: '', cleansing_time: '', delivery_date: '', delivery_time: '',
+        service_date: '', service_time: '', church_date: '', church_time: '',
         venue_name: '', venue_address: '', intake_day: '',
-        requires_cow: false, requires_tombstone: false,
+        requires_cow: false, requires_sheep: false, requires_tombstone: false, requires_flower: false,
         requires_catering: false, requires_grocery: false, requires_bus: false,
-        total_price: '', casket_type: '', casket_colour: ''
+        programs: 0, top_up_amount: 0, airtime: false, airtime_network: '', airtime_number: '',
+        cover_amount: 0, cashback_amount: 0, amount_to_bank: 0,
+        total_price: '', casket_type: '', casket_colour: '',
+        office_personnel1: '', client_name1: '', date1: '',
+        office_personnel2: '', client_name2: '', date2: ''
       }));
     } catch (err) {
       const serverErr = err.response?.data;
       const detail = serverErr?.details || serverErr?.hint || serverErr?.error;
-      setMessage(`Failed to submit: ${detail || err.message || 'Unknown error'}`);
+      setMessage(`Failed to confirm: ${detail || err.message || 'Unknown error'}`);
     } finally {
       setSubmitting(false);
     }
   };
 
+  const renderBenefitsList = (data) => {
+    const isSpecial = data.plan_category === 'specials';
+    const benefits = isSpecial
+      ? (SPECIAL_PLAN_BENEFITS[data.plan_name] || {})
+      : (PLAN_BENEFITS[data.plan_name] || {});
+    const isMotjhaGreen = data.plan_category === 'motjha' && data.plan_name === 'Green';
+    if (isSpecial) {
+      return (
+        <div className="space-y-2">
+          <div className="font-semibold">{formatPlanTitle(data)} Package</div>
+          <ul className="list-disc pl-5">
+            {benefits.casket && <li>Casket: {benefits.casket}</li>}
+            {Array.isArray(benefits.benefits) && benefits.benefits.map((b, i) => (
+              <li key={i}>{b}</li>
+            ))}
+            {(() => {
+              const extras = ['Flower','Grocery','Catering','Tombstone','Bus','Cow','Sheep','Airtime'];
+              const map = {
+                Flower: data.requires_flower,
+                Grocery: data.requires_grocery,
+                Catering: data.requires_catering,
+                Tombstone: data.requires_tombstone,
+                Bus: data.requires_bus,
+                Cow: data.requires_cow,
+                Sheep: data.requires_sheep,
+                Airtime: data.airtime,
+              };
+              const selected = extras.filter(n => map[n]);
+              const notSelected = extras.filter(n => !map[n]);
+              return (
+                <>
+                  <li>Additional Selected: {selected.length ? selected.join(', ') : 'None'}</li>
+                  <li>Not Selected: {notSelected.length ? notSelected.join(', ') : 'None'}</li>
+                  <li>Programs: {data.programs || 'None'}</li>
+                  <li>Airtime Details: {data.airtime ? `${data.airtime_network || ''} ${data.airtime_number || ''}`.trim() || 'Provided' : 'None'}</li>
+                  <li>Top-Up Amount: {data.top_up_amount || 'None'}</li>
+                  <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
+                </>
+              );
+            })()}
+          </ul>
+        </div>
+      );
+    }
+    if (data.benefit_mode === 'cashback') {
+      return (
+        <div className="space-y-2">
+          <div className="font-semibold">Plan Package: {formatPlanTitle(data)}</div>
+          <ul className="list-disc pl-5">
+            <li>Cashback: R{(data.cover_amount || 0).toLocaleString()}</li>
+          </ul>
+        </div>
+      );
+    }
+    if (isMotjhaGreen) {
+      return (
+        <div className="space-y-2">
+          <div className="font-semibold">{formatPlanTitle(data)} Package</div>
+          <ul className="list-disc pl-5">
+            <li>Included: {benefits.juice_liters || 0}L Juice, {benefits.cakes_liters || 0}L Cakes</li>
+            <li>Grocery Items: {(benefits.grocery_items || []).join(', ')}</li>
+            <li>Cover Amount: R{data.cover_amount.toLocaleString()}</li>
+            {data.benefit_mode === 'cashback' && (
+              <li>Cashback: R{(data.cover_amount || 0).toLocaleString()}</li>
+            )}
+            {(() => {
+              const extras = ['Flower','Grocery','Catering','Tombstone','Bus','Cow','Sheep','Airtime'];
+              const map = {
+                Flower: data.requires_flower,
+                Grocery: data.requires_grocery,
+                Catering: data.requires_catering,
+                Tombstone: data.requires_tombstone,
+                Bus: data.requires_bus,
+                Cow: data.requires_cow,
+                Sheep: data.requires_sheep,
+                Airtime: data.airtime,
+              };
+              const selected = extras.filter(n => map[n]);
+              const notSelected = extras.filter(n => !map[n]);
+              return (
+                <>
+                  <li>Additional Selected: {selected.length ? selected.join(', ') : 'None'}</li>
+                  <li>Not Selected: {notSelected.length ? notSelected.join(', ') : 'None'}</li>
+                  <li>Programs: {data.programs || 'None'}</li>
+                  <li>Airtime Details: {data.airtime ? `${data.airtime_network || ''} ${data.airtime_number || ''}`.trim() || 'Provided' : 'None'}</li>
+                  <li>Top-Up Amount: {data.top_up_amount || 'None'}</li>
+                  <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
+                </>
+              );
+            })()}
+          </ul>
+        </div>
+      );
+    }
+    if (isColorGrade(data.plan_name)) {
+      return (
+        <div className="space-y-2">
+          <div className="font-semibold">{formatPlanTitle(data)} Package</div>
+          <ul className="list-disc pl-5">
+            {benefits.casket && <li>Casket: {benefits.casket}</li>}
+            {benefits.tombstone && <li>Tombstone: {benefits.tombstone}</li>}
+            {typeof benefits.tent !== 'undefined' && <li>{benefits.tent} Tent</li>}
+            {typeof benefits.table !== 'undefined' && <li>{benefits.table} Table</li>}
+            {benefits.toilet && <li>{String(benefits.toilet).toUpperCase()} Toilet</li>}
+            {typeof benefits.chairs !== 'undefined' && <li>{benefits.chairs} Chairs</li>}
+            {typeof benefits.programmes !== 'undefined' && <li>{benefits.programmes} Programmes</li>}
+            {typeof benefits.crucifix !== 'undefined' && <li>Crucifix</li>}
+            {typeof benefits.flower !== 'undefined' && <li>{benefits.flower} Flowers</li>}
+            {typeof benefits.airtime !== 'undefined' && <li>R{benefits.airtime} Airtime</li>}
+            {Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0 && (
+              <li>Grocery Items: {benefits.grocery_items.join(', ')}</li>
+            )}
+            {benefits.grocery && <li>{benefits.grocery}</li>}
+            {benefits.groceries && <li>{benefits.groceries}</li>}
+            {benefits.service && <li>{benefits.service}</li>}
+            {data.plan_name !== 'Green' && <li>Free Repatriation</li>}
+            {data.plan_name === 'Pearl' && data.benefit_mode === 'benefits' && data.pearl_bonus && (
+              <li>Bonus: {data.pearl_bonus === 'cow' ? 'Cow' : 'Tombstone'}</li>
+            )}
+            {data.benefit_mode === 'cashback' && (
+              <li>Cashback: R{(data.cover_amount || 0).toLocaleString()}</li>
+            )}
+            {(() => {
+              const extras = ['Flower','Grocery','Catering','Tombstone','Bus','Cow','Sheep','Airtime'];
+              const map = {
+                Flower: data.requires_flower,
+                Grocery: data.requires_grocery,
+                Catering: data.requires_catering,
+                Tombstone: data.requires_tombstone,
+                Bus: data.requires_bus,
+                Cow: data.requires_cow,
+                Sheep: data.requires_sheep,
+                Airtime: data.airtime,
+              };
+              const selected = extras.filter(n => map[n]);
+              const notSelected = extras.filter(n => !map[n]);
+              return (
+                <>
+                  <li>Additional Selected: {selected.length ? selected.join(', ') : 'None'}</li>
+                  <li>Not Selected: {notSelected.length ? notSelected.join(', ') : 'None'}</li>
+                  <li>Programs: {data.programs || 'None'}</li>
+                  <li>Airtime Details: {data.airtime ? `${data.airtime_network || ''} ${data.airtime_number || ''}`.trim() || 'Provided' : 'None'}</li>
+                  <li>Top-Up Amount: {data.top_up_amount || 'None'}</li>
+                  <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
+                </>
+              );
+            })()}
+          </ul>
+        </div>
+      );
+    }
+    return (
+      <ul className="list-disc pl-5">
+        {benefits.casket && <li>Casket: {benefits.casket}</li>}
+        {benefits.tombstone && <li>Tombstone: {benefits.tombstone}</li>}
+        {typeof benefits.tent !== 'undefined' && <li>{benefits.tent} Tent</li>}
+        {typeof benefits.table !== 'undefined' && <li>{benefits.table} Table</li>}
+        {benefits.toilet && <li>{String(benefits.toilet).toUpperCase()} Toilet</li>}
+        {typeof benefits.chairs !== 'undefined' && <li>{benefits.chairs} Chairs</li>}
+        {typeof benefits.programmes !== 'undefined' && <li>{benefits.programmes} Programmes</li>}
+        {typeof benefits.crucifix !== 'undefined' && <li>Crucifix</li>}
+        {typeof benefits.flower !== 'undefined' && <li>{benefits.flower} Flowers</li>}
+        {typeof benefits.airtime !== 'undefined' && <li>R{benefits.airtime} Airtime</li>}
+        {Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0 && (
+          <li>Grocery Items: {benefits.grocery_items.join(', ')}</li>
+        )}
+        {benefits.grocery && <li>{benefits.grocery}</li>}
+        {benefits.groceries && <li>{benefits.groceries}</li>}
+        {benefits.service && <li>{benefits.service}</li>}
+        <li>Cover Amount: R{data.cover_amount.toLocaleString()}</li>
+        <li>Cashback: R{(data.cashback_amount || 0).toLocaleString()}</li>
+        <li>Programmes Selected: {data.programs}</li>
+        {(() => {
+          const extras = ['Flower','Grocery','Catering','Tombstone','Bus','Cow','Sheep','Airtime'];
+          const map = {
+            Flower: data.requires_flower,
+            Grocery: data.requires_grocery,
+            Catering: data.requires_catering,
+            Tombstone: data.requires_tombstone,
+            Bus: data.requires_bus,
+            Cow: data.requires_cow,
+            Sheep: data.requires_sheep,
+            Airtime: data.airtime,
+          };
+          const selected = extras.filter(n => map[n]);
+          const notSelected = extras.filter(n => !map[n]);
+          return (
+            <>
+              <li>Additional Selected: {selected.length ? selected.join(', ') : 'None'}</li>
+              <li>Not Selected: {notSelected.length ? notSelected.join(', ') : 'None'}</li>
+              <li>Airtime Details: {data.airtime ? `${data.airtime_network || ''} ${data.airtime_number || ''}`.trim() || 'Provided' : 'None'}</li>
+              <li>Top-Up Amount: {data.top_up_amount || 'None'}</li>
+              <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
+            </>
+          );
+        })()}
+      </ul>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-4 sm:py-6 md:py-8">
-      <div className="max-w-6xl mx-auto px-3 sm:px-4 md:px-6">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 md:px-6 print:hidden">
         <div className="text-center mb-8">
-          {/* <h1 className="text-5xl font-bold text-red-800 mb-2">THUSANANG FUNERAL SERVICES</h1> */}
           <p className="text-yellow-600 text-xl font-semibold mb-6">Live from QwaQwa • Re tšotella sechaba sa rona</p>
-          <h2 className="text-3xl font-bold text-red-700">Wednesday Family Consultation</h2>
-          <p className="text-gray-600 mt-2">Complete the form below to create a new case</p>
+          <h2 className="text-3xl font-bold text-red-700">Family Consultation & Claim Form</h2>
+          <p className="text-gray-600 mt-2">Complete the form below to process a claim or consultation</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-
-          {/* DECEASED & NEXT OF KIN */}
+        <form className="bg-white rounded-2xl shadow-2xl overflow-hidden">
+          {/* CLAIM & DECEASED INFO */}
           <div className="p-8 border-b border-gray-200">
             <h3 className="text-xl font-bold text-red-800 mb-6 flex items-center">
               <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">1</span>
-              Deceased & Next of Kin Information
+              Claim & Deceased Information
             </h3>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6">
+              <div className="flex flex-col md:flex-row gap-3 md:items-center">
+                <input
+                  placeholder="Policy Number"
+                  value={draftQuery}
+                  onChange={e => setDraftQuery(e.target.value)}
+                  className="flex-1 px-4 py-2 border-2 border-yellow-300 rounded-lg"
+                />
+                <div className="flex gap-2">
+                  <button type="button" onClick={loadDraftByPolicy} className="px-4 py-2 rounded-lg bg-yellow-600 text-white font-semibold">Load Draft</button>
+                  <button type="button" onClick={loadLastDraft} className="px-4 py-2 rounded-lg border font-semibold">Load Last</button>
+                  <button type="button" onClick={() => setDraftsOpen(v => !v)} className="px-4 py-2 rounded-lg border font-semibold">{draftsOpen ? 'Hide List' : 'View Saved Drafts'}</button>
+                </div>
+              </div>
+              {draftsOpen && (
+                <div className="mt-4 max-h-56 overflow-auto bg-white border border-yellow-200 rounded-lg">
+                  {getDrafts().length === 0 ? (
+                    <div className="p-4 text-sm text-gray-600">No drafts found</div>
+                  ) : (
+                    getDrafts().map(({ key, data }) => (
+                      <div key={key} className="flex items-center justify-between p-3 border-b last:border-b-0">
+                        <div className="text-sm">
+                          <span className="font-bold">{data.policy_number}</span>
+                          <span className="ml-2">{data.deceased_name || ''}</span>
+                          <span className="ml-2 text-gray-500">{data.saved_at ? new Date(data.saved_at).toLocaleString() : ''}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => loadDraftKey(key)} className="px-3 py-1 rounded bg-green-600 text-white text-sm">Load</button>
+                          <button type="button" onClick={() => deleteDraftKey(key)} className="px-3 py-1 rounded bg-red-600 text-white text-sm">Delete</button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div><label>Claim Date <span className="text-red-600">*</span></label><input type="date" required value={form.claim_date} onChange={e => handleInputChange('claim_date', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+              <div><label>Policy Number <span className="text-red-600">*</span></label><input required value={form.policy_number} onChange={e => handleInputChange('policy_number', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder="Enter policy number" /></div>
               <div><label>Deceased Full Name <span className="text-red-600">*</span></label><input required value={form.deceased_name} onChange={e => handleInputChange('deceased_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder="Enter deceased name" /></div>
               <div><label>ID Number</label><input value={form.deceased_id} onChange={e => handleInputChange('deceased_id', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
-              <div><label>Next of Kin Name <span className="text-red-600">*</span></label><input required value={form.nok_name} onChange={e => handleInputChange('nok_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
-              <div><label>Contact Number <span className="text-red-600">*</span></label><input required value={form.nok_contact} onChange={e => handleInputChange('nok_contact', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+              <div><label>Claimant Name <span className="text-red-600">*</span></label><input required value={form.nok_name} onChange={e => handleInputChange('nok_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+              <div><label>Contact Details <span className="text-red-600">*</span></label><input required value={form.nok_contact} onChange={e => handleInputChange('nok_contact', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
               <div><label>Relationship</label><input value={form.nok_relation} onChange={e => handleInputChange('nok_relation', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder="e.g., Spouse, Child" /></div>
             </div>
           </div>
 
-          {/* PLAN SELECTION — SMART WITH LEGACY SUPPORT */}
+          {/* PLAN SELECTION */}
           <div className="p-8 border-b border-gray-200">
             <h3 className="text-xl font-bold text-red-800 mb-6 flex items-center">
               <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">2</span>
               Plan Selection & Pricing
             </h3>
+
+            {/* Service Type (at top) */}
+            <div className="bg-gray-50 p-6 rounded-xl mb-8">
+              <label className="block font-semibold mb-4">Service Type:</label>
+              <div className="flex gap-8 mb-6">
+                <label className="flex items-center"><input type="radio" name="service_type" value="book" checked={form.service_type === 'book'} onChange={e => handleInputChange('service_type', e.target.value)} className="mr-3" /><span className="font-medium">Book (Plan Price)</span></label>
+                <label className="flex items-center"><input type="radio" name="service_type" value="private" checked={form.service_type === 'private'} onChange={e => handleInputChange('service_type', e.target.value)} className="mr-3" /><span className="font-medium">Private (Manual Price)</span></label>
+              </div>
+            </div>
 
             {/* Quick Legacy Plan Selector */}
             <div className="mb-8 bg-amber-50 border border-amber-200 rounded-xl p-6">
@@ -494,7 +1005,7 @@ export default function ConsultationForm() {
                 onChange={(e) => {
                   if (e.target.value) {
                     handleLegacyPlanSelect(e.target.value);
-                    e.target.value = ''; // Reset dropdown after selection
+                    e.target.value = '';
                   }
                 }}
                 className="w-full px-4 py-3 border-2 border-amber-300 rounded-lg text-lg font-medium focus:ring-4 focus:ring-amber-300"
@@ -533,12 +1044,19 @@ export default function ConsultationForm() {
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Category</label>
                 <select value={form.plan_category} onChange={(e) => {
                   const cat = e.target.value;
-                  // Set default plan name based on category
                   const defaultName = cat === 'specials' ? 'Spring A' :
                     cat === 'motjha' ? 'Budget Buster' :
                       cat === 'single' ? 'Budget Buster' :
-                        'Budget Buster'; // family default
-                  setForm(prev => ({ ...prev, plan_category: cat, plan_name: defaultName }));
+                        'Budget Buster';
+                  const defaultsForMembers = (cat === 'motjha' || cat === 'specials') ? 6 : form.plan_members;
+                  const defaultsForAge = (cat === 'family' || cat === 'single') ? '18-65' : '';
+                  setForm(prev => ({
+                    ...prev,
+                    plan_category: cat,
+                    plan_name: defaultName,
+                    plan_members: defaultsForMembers,
+                    plan_age_bracket: defaultsForAge
+                  }));
                 }} className="w-full px-4 py-3 border rounded-lg">
                   <option value="motjha">Motjha O Tlhele</option>
                   <option value="single">Single Plan</option>
@@ -599,38 +1117,56 @@ export default function ConsultationForm() {
                       </p>
                     )}
                     <p className="text-xs font-semibold text-blue-800 mb-1">Includes:</p>
-                    <p className="text-xs text-blue-700">
-                      {PLAN_BENEFITS[form.plan_name].casket}
-                      {PLAN_BENEFITS[form.plan_name].tombstone && ` • ${PLAN_BENEFITS[form.plan_name].tombstone}`}
-                      {PLAN_BENEFITS[form.plan_name].tent && ` • ${PLAN_BENEFITS[form.plan_name].tent} Tent`}
-                      {PLAN_BENEFITS[form.plan_name].chairs && ` • ${PLAN_BENEFITS[form.plan_name].chairs} Chairs`}
-                      {PLAN_BENEFITS[form.plan_name].grocery && ` • ${PLAN_BENEFITS[form.plan_name].grocery}`}
-                      {PLAN_BENEFITS[form.plan_name].cashback && ` • R${PLAN_BENEFITS[form.plan_name].cashback} Cashback`}
-                    </p>
+                    <p className="text-xs text-blue-700">{getPlanIncludesText()}</p>
                   </div>
                 )}
               </div>
             )}
 
             {/* Special Benefits */}
-            {isSpecialPlan && (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-6 mb-6">
-                <h4 className="font-bold text-green-800 text-lg mb-3">{form.plan_name} Benefits:</h4>
-                <ul className="text-sm text-green-700 space-y-1">
-                  <li>• {SPECIAL_PLAN_BENEFITS[form.plan_name].casket}</li>
-                  {SPECIAL_PLAN_BENEFITS[form.plan_name].benefits.map((b, i) => <li key={i}>• {b}</li>)}
-                </ul>
-              </div>
+            {isSpecialPlan && SPECIAL_PLAN_BENEFITS[form.plan_name] && (
+              (() => {
+                const special = SPECIAL_PLAN_BENEFITS[form.plan_name];
+                return (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-6 mb-6">
+                    <h4 className="font-bold text-green-800 text-lg mb-3">{form.plan_name} Benefits:</h4>
+                    <ul className="text-sm text-green-700 space-y-1">
+                      {special.casket && <li>• {special.casket}</li>}
+                      {Array.isArray(special.benefits) && special.benefits.map((b, i) => <li key={i}>• {b}</li>)}
+                    </ul>
+                  </div>
+                );
+              })()
             )}
 
-            {/* Service Type & Price */}
-            <div className="bg-gray-50 p-6 rounded-xl">
-              <label className="block font-semibold mb-4">Service Type:</label>
-              <div className="flex gap-8 mb-6">
-                <label className="flex items-center"><input type="radio" name="service_type" value="book" checked={form.service_type === 'book'} onChange={e => handleInputChange('service_type', e.target.value)} className="mr-3" /><span className="font-medium">Book (Plan Price)</span></label>
-                <label className="flex items-center"><input type="radio" name="service_type" value="private" checked={form.service_type === 'private'} onChange={e => handleInputChange('service_type', e.target.value)} className="mr-3" /><span className="font-medium">Private (Manual Price)</span></label>
+            {/* Cover Option: Cashback vs Benefits */}
+            <div className="bg-gray-50 p-6 rounded-xl mb-6">
+              <label className="block font-semibold mb-4">Cover Option:</label>
+              <div className="flex gap-8 mb-3">
+                {!isSpecialPlan && (
+                  <label className="flex items-center"><input type="radio" name="benefit_mode" value="cashback" checked={form.benefit_mode === 'cashback'} onChange={e => handleInputChange('benefit_mode', e.target.value)} className="mr-3" /><span className="font-medium">Cashback (R{(PLAN_BENEFITS[form.plan_name]?.cover || form.cover_amount).toLocaleString()})</span></label>
+                )}
+                <label className="flex items-center"><input type="radio" name="benefit_mode" value="benefits" checked={form.benefit_mode === 'benefits'} onChange={e => handleInputChange('benefit_mode', e.target.value)} className="mr-3" /><span className="font-medium">Benefits per plan</span></label>
               </div>
+              {form.plan_category === 'motjha' && form.plan_name === 'Green' && form.benefit_mode === 'benefits' && (
+                <p className="text-sm text-gray-700">Includes: {PLAN_BENEFITS.Green.juice_liters}L Juice, {PLAN_BENEFITS.Green.cakes_liters}L Cakes, Grocery ({PLAN_BENEFITS.Green.grocery_items.join(', ')})</p>
+              )}
+              {isColorGrade(form.plan_name) && form.plan_name !== 'Green' && form.benefit_mode === 'benefits' && (
+                <p className="text-sm text-gray-700">Includes: {getPlanIncludesText()}</p>
+              )}
+              {form.plan_name === 'Pearl' && form.benefit_mode === 'benefits' && (
+                <div className="mt-4">
+                  <label className="block text-sm font-semibold mb-2">Pearl Bonus (choose one):</label>
+                  <div className="flex gap-6">
+                    <label className="flex items-center"><input type="radio" name="pearl_bonus" value="cow" checked={form.pearl_bonus === 'cow'} onChange={e => handleInputChange('pearl_bonus', e.target.value)} className="mr-2" />Cow</label>
+                    <label className="flex items-center"><input type="radio" name="pearl_bonus" value="tombstone" checked={form.pearl_bonus === 'tombstone'} onChange={e => handleInputChange('pearl_bonus', e.target.value)} className="mr-2" />Tombstone</label>
+                  </div>
+                </div>
+              )}
+            </div>
 
+            {/* Total Price (end of Plan Selection & Pricing) */}
+            <div className="bg-gray-50 p-6 rounded-xl">
               <div className="flex justify-between items-center bg-white p-5 rounded-lg border-2 border-gray-300">
                 <span className="text-xl font-bold">Total Price:</span>
                 {form.service_type === 'book' ? (
@@ -640,13 +1176,76 @@ export default function ConsultationForm() {
                 )}
               </div>
             </div>
+
           </div>
 
-          {/* CASKET & DELIVERY */}
+          {/* SCHEDULE DETAILS */}
+          <div className="p-8 border-b border-gray-200">
+            <div className="flex items-center mb-4">
+              <h3 className="text-xl font-bold text-red-800 flex items-center">
+                <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">3</span>
+                Schedule Details (Cleansing, Delivery, Service, Church)
+              </h3>
+              <button type="button" onClick={() => setScheduleOpen(v => !v)} className="ml-auto px-4 py-2 rounded-lg border text-sm font-semibold hover:bg-gray-100">
+                {scheduleOpen ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            {!scheduleOpen && (
+              <div className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                {getScheduleSummary()}
+              </div>
+            )}
+            {scheduleOpen && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700">Cleansing Date</label>
+                    <input type="date" value={form.cleansing_date} onChange={e => handleInputChange('cleansing_date', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700">Cleansing Time</label>
+                    <input type="time" value={form.cleansing_time} onChange={e => handleInputChange('cleansing_time', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700">Delivery Date</label>
+                    <input type="date" value={form.delivery_date} onChange={e => handleInputChange('delivery_date', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700">Delivery Time</label>
+                    <input type="time" value={form.delivery_time} onChange={e => handleInputChange('delivery_time', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700">Service Date</label>
+                    <input type="date" value={form.service_date} onChange={e => handleInputChange('service_date', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700">Service Time</label>
+                    <input type="time" value={form.service_time} onChange={e => handleInputChange('service_time', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700">Church Date</label>
+                    <input type="date" value={form.church_date} onChange={e => handleInputChange('church_date', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700">Church Time</label>
+                    <input type="time" value={form.church_time} onChange={e => handleInputChange('church_time', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* CASKET & VENUE */}
           <div className="p-8 border-b border-gray-200">
             <h3 className="text-xl font-bold text-red-800 mb-6 flex items-center">
-              <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">3</span>
-              Casket & Delivery Details
+              <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">4</span>
+              Casket & Venue Details
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -659,59 +1258,204 @@ export default function ConsultationForm() {
                   <input value={getAutoCasketType()} onChange={e => handleInputChange('casket_type', e.target.value)} className="w-full px-4 py-3 border rounded-lg" />
                 )}
               </div>
-              <div><label>Casket Colour</label><input value={form.casket_colour} onChange={e => handleInputChange('casket_colour', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
-              <div><label>Delivery Date</label><input type="date" required value={form.delivery_date} onChange={e => handleInputChange('delivery_date', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
-              <div><label>Delivery Time</label><input type="time" required value={form.delivery_time} onChange={e => handleInputChange('delivery_time', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
-            </div>
-          </div>
-
-          {/* FUNERAL DETAILS */}
-          <div className="p-8 border-b border-gray-200">
-            <h3 className="text-xl font-bold text-red-800 mb-6 flex items-center">
-              <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">4</span>
-              Funeral Service Details
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div><label>Funeral Date <span className="text-red-600">*</span></label><input type="date" required value={form.funeral_date} onChange={e => handleInputChange('funeral_date', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
-              <div><label>Funeral Time <span className="text-red-600">*</span></label><input type="time" required value={form.funeral_time} onChange={e => handleInputChange('funeral_time', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
-              <div><label>Venue Name</label><input value={form.venue_name} onChange={e => handleInputChange('venue_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+              <div>
+                <label>Casket Colour</label>
+                <select value={form.casket_colour} onChange={e => handleInputChange('casket_colour', e.target.value)} className="w-full px-4 py-3 border rounded-lg">
+                  <option value="">Select colour</option>
+                  <option value="Cherry">Cherry</option>
+                  <option value="Kiaat">Kiaat</option>
+                  <option value="Redwood">Redwood</option>
+                  <option value="Ash">Ash</option>
+                  <option value="White">White</option>
+                  <option value="Black">Black</option>
+                  <option value="Brown">Brown</option>
+                  <option value="MIDBROWN">MIDBROWN</option>
+                </select>
+              </div>
+              <div><label>Service Venue</label><input value={form.venue_name} onChange={e => handleInputChange('venue_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
               <div><label>Full Address (GPS) <span className="text-red-600">*</span></label><input required value={form.venue_address} onChange={e => handleInputChange('venue_address', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
             </div>
           </div>
 
-          {/* ADDITIONAL OPTIONS */}
-          <div className="p-8">
-            <h3 className="text-xl font-bold text-red-800 mb-6 flex items-center">
-              <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">5</span>
-              Additional Services
-            </h3>
-            <div className="space-y-4">
-              <label className="flex items-center"><input type="checkbox" checked={form.requires_cow} onChange={e => handleInputChange('requires_cow', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Requires Cow (Kgomo)</span></label>
-              <label className="flex items-center"><input type="checkbox" checked={form.requires_tombstone} onChange={e => handleInputChange('requires_tombstone', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Requires Tombstone</span></label>
-              <label className="flex items-center"><input type="checkbox" checked={form.requires_catering} onChange={e => handleInputChange('requires_catering', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Catering</span></label>
-              <label className="flex items-center"><input type="checkbox" checked={form.requires_grocery} onChange={e => handleInputChange('requires_grocery', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Grocery</span></label>
-              <label className="flex items-center"><input type="checkbox" checked={form.requires_bus} onChange={e => handleInputChange('requires_bus', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Bus</span></label>
-              <div><label>Intake Day</label><input type="date" required value={form.intake_day} onChange={e => handleInputChange('intake_day', e.target.value)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
+          <div className="p-8 border-b border-gray-200">
+            <div className="flex items-center mb-4">
+              <h3 className="text-xl font-bold text-red-800 flex items-center">
+                <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">5</span>
+                Additional Services & Benefits
+              </h3>
+              <button type="button" onClick={() => setExtrasOpen(v => !v)} className="ml-auto px-4 py-2 rounded-lg border text-sm font-semibold hover:bg-gray-100">
+                {extrasOpen ? 'Hide' : 'Show'}
+              </button>
             </div>
-          </div>
-
-          {/* SUBMIT */}
-          <div className="p-8 bg-gray-50 border-t">
-            <button type="submit" disabled={submitting} className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-bold py-5 rounded-xl text-xl transition flex items-center justify-center">
-              {submitting ? "Submitting..." : "Submit Case"}
-            </button>
-            {message && (
-              <div className={`mt-4 p-4 rounded-lg text-center font-bold ${message.includes('success') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                {message}
+            {!extrasOpen && (
+              <div className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                {getExtrasSummary()}
+              </div>
+            )}
+            {extrasOpen && (
+              <div className="space-y-4">
+                <label className="flex items-center"><input type="checkbox" checked={form.requires_cow} onChange={e => handleInputChange('requires_cow', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Cow</span></label>
+                <label className="flex items-center"><input type="checkbox" checked={form.requires_sheep} onChange={e => handleInputChange('requires_sheep', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Sheep</span></label>
+                <label className="flex items-center"><input type="checkbox" checked={form.requires_tombstone} onChange={e => handleInputChange('requires_tombstone', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Tombstone</span></label>
+                <label className="flex items-center"><input type="checkbox" checked={form.requires_flower} onChange={e => handleInputChange('requires_flower', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Flower</span></label>
+                <label className="flex items-center"><input type="checkbox" checked={form.requires_catering} onChange={e => handleInputChange('requires_catering', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Catering</span></label>
+                <label className="flex items-center"><input type="checkbox" checked={form.requires_grocery} onChange={e => handleInputChange('requires_grocery', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Grocery</span></label>
+                <label className="flex items-center"><input type="checkbox" checked={form.requires_bus} onChange={e => handleInputChange('requires_bus', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Bus</span></label>
+                <div><label>Programs (Number)</label><input type="number" value={form.programs} onChange={e => handleInputChange('programs', parseInt(e.target.value) || 0)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
+                <div><label>Top-Up Amount R</label><input type="number" value={form.top_up_amount} onChange={e => handleInputChange('top_up_amount', parseFloat(e.target.value) || 0)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
+                <label className="flex items-center"><input type="checkbox" checked={form.airtime} onChange={e => handleInputChange('airtime', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Airtime</span></label>
+                {form.airtime && (
+                  <div className="grid grid-cols-2 gap-4 ml-8">
+                    <div><label>Network</label><input value={form.airtime_network} onChange={e => handleInputChange('airtime_network', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+                    <div><label>Number</label><input value={form.airtime_number} onChange={e => handleInputChange('airtime_number', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+                  </div>
+                )}
+                <div><label>Cashback Amount (Auto)</label><input disabled value={form.cashback_amount} className="w-full px-4 py-3 border rounded-lg bg-gray-100 mt-2" /></div>
+                <div><label>Amount to Bank</label><input type="number" value={form.amount_to_bank} onChange={e => handleInputChange('amount_to_bank', parseFloat(e.target.value) || 0)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
+                <div><label>Cover Amount (Auto)</label><input disabled value={form.cover_amount} className="w-full px-4 py-3 border rounded-lg bg-gray-100 mt-2" /></div>
+                <div><label>Intake Day (Wednesday)</label><input type="date" value={form.intake_day} onChange={e => handleInputChange('intake_day', e.target.value)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
               </div>
             )}
           </div>
+
+          {/* SIGN OFF */}
+          <div className="p-8">
+            <h3 className="text-xl font-bold text-red-800 mb-6 flex items-center">
+              <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">6</span>
+              Sign Off
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <div><label>Office Personnel (Check List)</label><input value={form.office_personnel1} onChange={e => handleInputChange('office_personnel1', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+              <div><label>Client Name (Check List)</label><input value={form.client_name1} onChange={e => handleInputChange('client_name1', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+              <div><label>Date (Check List)</label><input type="date" value={form.date1} onChange={e => handleInputChange('date1', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div><label>Office Personnel (Sign Off)</label><input value={form.office_personnel2} onChange={e => handleInputChange('office_personnel2', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+              <div><label>Client Name (Sign Off)</label><input value={form.client_name2} onChange={e => handleInputChange('client_name2', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+              <div><label>Date (Sign Off)</label><input type="date" value={form.date2} onChange={e => handleInputChange('date2', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+            </div>
+          </div>
+
+          
+
+          {/* SUBMIT BUTTONS */}
+          <div className="p-8 bg-gray-50 border-t flex gap-4">
+            <button type="button" onClick={handleSaveDraft} disabled={submitting} className="flex-1 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-400 text-white font-bold py-5 rounded-xl text-xl transition">
+              {submitting ? "Saving..." : "Save Claim Draft & Print Receipt"}
+            </button>
+            <button type="submit" onClick={handleFinalSubmit} disabled={submitting} className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-bold py-5 rounded-xl text-xl transition">
+              {submitting ? "Submitting..." : "Confirm & Print Full Checklist"}
+            </button>
+          </div>
+          {message && (
+            <div className={`p-4 rounded-lg text-center font-bold ${message.includes('success') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+              {message}
+            </div>
+          )}
         </form>
 
         <div className="mt-8 text-center text-sm text-gray-600">
           <p>Toll Free: <span className="font-bold text-red-600">0800 01 4574</span> | Serving with Dignity</p>
         </div>
       </div>
+
+      {/* Printable Section */}
+      {printedData && printMode && (
+        <>
+          <style>{`@media print { body, html { margin:0; } @page { size: A4; margin: 10mm; } body * { visibility: hidden !important; } #tfs-print-root, #tfs-print-root * { visibility: visible !important; } #tfs-print-root { position: absolute; left: 0; top: 0; width: 100%; } }`}</style>
+          <div id="tfs-print-root" className="hidden print:block" style={{ margin: '0 auto', fontFamily: 'Arial, sans-serif', fontSize: '10pt', padding: '0' }}>
+          <div className="flex justify-between mb-4">
+            <h1 className="text-2xl font-bold text-red-800">THUSANANG FUNERAL SERVICES</h1>
+            <p className="text-right">RESPECTFUL | PROFESSIONAL | DIGNIFIED<br />Head Office Phuthaditjhaba<br />Site 1, Portion 2, Beirut<br />Tel: 08000 145 74 | After Hours: 073 750 0857<br />Cell No / WhatsApp: 071 480 5050 / 073 073 1580<br />info@thusanangfs.co.za<br />www.thusanangfs.co.za<br />AN AUTHORISED SERVICE PROVIDER | FSP: 39701</p>
+          </div>
+
+          {printMode === 'receipt' ? (
+            <>
+              <h2 className="text-xl font-bold text-center bg-red-600 text-white py-2 mb-4">CLAIM RECEIPT</h2>
+              <p><strong>Policy Number:</strong> {printedData.policy_number}</p>
+              <p><strong>Deceased Names:</strong> {printedData.deceased_name}</p>
+              <p><strong>Claimant Names:</strong> {printedData.nok_name}</p>
+              <p><strong>Contact Details:</strong> {printedData.nok_contact}</p>
+              <p><strong>Cleansing:</strong> {printedData.cleansing_date} {printedData.cleansing_time && (`• ${printedData.cleansing_time}`)}</p>
+              {printedData.cover_amount > 0 && (
+                <p><strong>Cover Amount:</strong> R{printedData.cover_amount.toLocaleString()}</p>
+              )}
+              <h3 className="font-bold mt-4">Plan Benefits:</h3>
+              {renderBenefitsList(printedData)}
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <table className="w-full border-collapse">
+                  <tbody>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">CLAIM DATE</td><td className="border p-2">{formatDateForBoxes(printedData.claim_date).map((char, i) => <span key={i} className="inline-block w-6 text-center border border-black mx-1">{char}</span>)}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">POLICY NUMBER</td><td className="border p-2">{printedData.policy_number}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">DECEASED NAMES</td><td className="border p-2">{printedData.deceased_name}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">CLAIMANT NAMES</td><td className="border p-2">{printedData.nok_name}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">CONTACT DETAILS</td><td className="border p-2">{printedData.nok_contact}</td></tr>
+                  </tbody>
+                </table>
+                <table className="w-full border-collapse">
+                  <tbody>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">CLEANSING</td><td className="border p-2">DATE: {printedData.cleansing_date} TIME: {printedData.cleansing_time}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">DELIVERY</td><td className="border p-2">DATE: {printedData.delivery_date} TIME: {printedData.delivery_time}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">SERVICE</td><td className="border p-2">DATE: {printedData.service_date} TIME: {printedData.service_time}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">CHURCH</td><td className="border p-2">DATE: {printedData.church_date} TIME: {printedData.church_time}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">SERVICE VENUE</td><td className="border p-2">{printedData.venue_name}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h2 className="text-center bg-red-600 text-white py-2 mb-2">CHECK LIST</h2>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <table className="w-full border-collapse">
+                  <tbody>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">COVER AMOUNT</td><td className="border p-2">R{printedData.cover_amount.toLocaleString()}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">CASKET/COFFIN TYPE</td><td className="border p-2">{printedData.casket_type}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">CASKET/COFFIN COLOUR</td><td className="border p-2">{printedData.casket_colour}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">COW</td><td className="border p-2">{printedData.requires_cow ? 'Yes' : 'None'}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">SHEEP</td><td className="border p-2">{printedData.requires_sheep ? 'Yes' : 'None'}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">TOMBSTONE</td><td className="border p-2">{printedData.requires_tombstone ? 'Yes' : 'None'}</td></tr>
+                  </tbody>
+                </table>
+                <table className="w-full border-collapse">
+                  <tbody>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">FLOWER</td><td className="border p-2">{printedData.requires_flower ? 'Yes' : 'None'}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">BUS</td><td className="border p-2">{printedData.requires_bus ? 'Yes' : 'None'}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">PROGRAMS</td><td className="border p-2">{printedData.programs || 'None'}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">CATERING</td><td className="border p-2">{printedData.requires_catering ? 'Yes' : 'None'}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">GROCERY</td><td className="border p-2">{(() => { const isSpecial = printedData.plan_category === 'specials'; const benefits = isSpecial ? (SPECIAL_PLAN_BENEFITS[printedData.plan_name] || {}) : (PLAN_BENEFITS[printedData.plan_name] || {}); if (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0) { return benefits.grocery_items.join(', '); } if (benefits.grocery) { return String(benefits.grocery); } if (benefits.groceries) { return String(benefits.groceries); } return printedData.requires_grocery ? 'Selected (items not specified)' : 'None'; })()}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">TOP-UP AMOUNT R</td><td className="border p-2">{printedData.top_up_amount || 'None'}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">AIRTIME</td><td className="border p-2">{printedData.airtime ? 'Yes' : 'None'}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">NETWORK</td><td className="border p-2">{printedData.airtime ? (printedData.airtime_network || 'Provided') : 'None'}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">NUMBER</td><td className="border p-2">{printedData.airtime ? (printedData.airtime_number || 'Provided') : 'None'}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">CASHBACK AMOUNT</td><td className="border p-2">R{printedData.cashback_amount.toLocaleString()}</td></tr>
+                    <tr><td className="border p-2 font-semibold bg-gray-50">AMOUNT TO BANK</td><td className="border p-2">R{printedData.amount_to_bank.toLocaleString()}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <table className="w-full border-collapse mb-4">
+                <tbody>
+                  <tr><td className="border p-2">OFFICE PERSONNEL</td><td className="border p-2">{printedData.office_personnel1}</td><td className="border p-2">CLIENT NAME</td><td className="border p-2">{printedData.client_name1}</td></tr>
+                  <tr><td className="border p-2">DATE</td><td className="border p-2">{printedData.date1}</td><td className="border p-2">DATE</td><td className="border p-2">{printedData.date1}</td></tr>
+                </tbody>
+              </table>
+
+              <h2 className="text-center bg-red-600 text-white py-2 mb-2">SIGN OFF</h2>
+              <table className="w-full border-collapse">
+                <tbody>
+                  <tr><td className="border p-2">OFFICE PERSONNEL</td><td className="border p-2">{printedData.office_personnel2}</td><td className="border p-2">CLIENT NAME</td><td className="border p-2">{printedData.client_name2}</td></tr>
+                  <tr><td className="border p-2">DATE</td><td className="border p-2">{printedData.date2}</td><td className="border p-2">DATE</td><td className="border p-2">{printedData.date2}</td></tr>
+                </tbody>
+              </table>
+            </>
+          )}
+
+          <p className="text-center mt-4 text-lg font-bold">RESPECTFUL | PROFESSIONAL | DIGNIFIED</p>
+          </div>
+        </>
+      )}
     </div>
   );
 }

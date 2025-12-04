@@ -17,6 +17,7 @@ const checklistRoutes = require('./routes/checklist');
 const smsRoutes = require('./routes/sms');
 const driversRoutes = require('./routes/drivers');
 const directionsRoutes = require('./routes/directions');
+const repatriationTripsRoutes = require('./routes/repatriationTrips');
 const authRoutes = require('./routes/auth');
 
 const app = express();
@@ -60,6 +61,7 @@ app.use('/api/checklist', checklistRoutes);
 app.use('/api/sms', smsRoutes);
 app.use('/api/drivers', driversRoutes);
 app.use('/api/directions', directionsRoutes);
+app.use('/api/repatriation-trips', repatriationTripsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

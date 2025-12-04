@@ -239,3 +239,24 @@ CREATE INDEX IF NOT EXISTS idx_stock_takes_created_at ON stock_takes(created_at)
 CREATE INDEX IF NOT EXISTS idx_stock_take_items_stock_take_id ON stock_take_items(stock_take_id);
 CREATE INDEX IF NOT EXISTS idx_stock_take_items_inventory_id ON stock_take_items(inventory_id);
 
+-- 15. Repatriation Trips
+CREATE TABLE IF NOT EXISTS repatriation_trips (
+    id SERIAL PRIMARY KEY,
+    case_id INT REFERENCES cases(id),
+    vehicle_id INT REFERENCES vehicles(id),
+    driver_id INT REFERENCES drivers(id),
+    from_location VARCHAR(120),
+    from_address TEXT,
+    to_location VARCHAR(120),
+    to_address TEXT,
+    odometer_closing INT,
+    km_traveled INT,
+    time_out VARCHAR(20),
+    time_in VARCHAR(20),
+    notes TEXT,
+    created_by VARCHAR(100),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_repatriation_trips_case_id ON repatriation_trips(case_id);
+CREATE INDEX IF NOT EXISTS idx_repatriation_trips_vehicle_id ON repatriation_trips(vehicle_id);

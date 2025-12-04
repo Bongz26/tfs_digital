@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate 
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import ConsultationForm from './ConsultationForm';
+import RepatriationTripSheet from './pages/RepatriationTripSheet';
 import Dashboard from './pages/Dashboard';
 import CaseDetails from './pages/CaseDetails';
 import ActiveCases from './pages/ActiveCases'; 
@@ -166,6 +167,14 @@ function Navigation() {
           >
             Purchase Orders
           </Link>
+          <Link 
+            to="/repatriation-trip" 
+            className={`px-3 py-2 rounded transition ${
+              isActive('/repatriation-trip') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+            }`}
+          >
+            Repatriation Trip
+          </Link>
           {/* Admin-only: Users link */}
           {isAuthenticated && user?.role === 'admin' && (
             <Link 
@@ -244,6 +253,15 @@ function Navigation() {
             >
               Purchase Orders
             </Link>
+            <Link 
+              to="/repatriation-trip" 
+              onClick={() => setMobileMenuOpen(false)}
+              className={`block px-4 py-3 rounded transition ${
+                isActive('/repatriation-trip') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+              }`}
+            >
+              Repatriation Trip
+            </Link>
             {/* Admin-only: Users link (mobile) */}
             {isAuthenticated && user?.role === 'admin' && (
               <Link 
@@ -316,6 +334,7 @@ function AppContent() {
         <Route path="/purchase" element={<PurchaseOrdersPage />} />
         <Route path="/users" element={<UserManagement />} />
         <Route path="/test-navigation" element={<TestNavigation />} />
+        <Route path="/repatriation-trip" element={<RepatriationTripSheet />} />
 
         {/* 
           Option 2: Routes WITH protection (uncomment when ready)
