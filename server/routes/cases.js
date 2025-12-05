@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const casesController = require('../controllers/casesController');
 
+// Lookup case by identifiers for auto-fill
+router.get('/lookup', casesController.lookupCase);
+
 // GET all cases
 router.get('/', casesController.getAllCases);
 

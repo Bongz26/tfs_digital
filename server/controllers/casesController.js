@@ -1,5 +1,69 @@
 const { query, getClient } = require('../config/db');
 
+// --- LOOKUP CASE BY IDENTIFIERS ---
+exports.lookupCase = async (req, res) => {
+    try {
+        const { deceased_id, case_number, policy_number, deceased_name, nok_contact } = req.query;
+
+        const idVal = (deceased_id || '').trim();
+        const caseNo = (case_number || '').trim();
+        const policyNo = (policy_number || '').trim();
+        const nameVal = (deceased_name || '').trim();
+        const contactVal = (nok_contact || '').trim();
+
+        if (!idVal && !caseNo && !policyNo && !(nameVal && contactVal)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Provide at least one identifier',
+                hint: 'Use deceased_id, case_number, policy_number, or deceased_name + nok_contact'
+            });
+        }
+
+        let found = null;
+
+        if (!found && idVal) {
+            const r = await query(
+                `SELECT * FROM cases WHERE deceased_id = $1 ORDER BY created_at DESC LIMIT 1`,
+                [idVal]
+            );
+            found = r.rows[0] || null;
+        }
+
+        if (!found && caseNo) {
+            const r = await query(
+                `SELECT * FROM cases WHERE case_number = $1 ORDER BY created_at DESC LIMIT 1`,
+                [caseNo]
+            );
+            found = r.rows[0] || null;
+        }
+
+        if (!found && policyNo) {
+            const r = await query(
+                `SELECT * FROM cases WHERE policy_number = $1 ORDER BY created_at DESC LIMIT 1`,
+                [policyNo]
+            );
+            found = r.rows[0] || null;
+        }
+
+        if (!found && nameVal && contactVal) {
+            const r = await query(
+                `SELECT * FROM cases WHERE LOWER(deceased_name) = LOWER($1) AND nok_contact = $2 ORDER BY created_at DESC LIMIT 1`,
+                [nameVal, contactVal]
+            );
+            found = r.rows[0] || null;
+        }
+
+        if (!found) {
+            return res.status(404).json({ success: false, error: 'No matching case found' });
+        }
+
+        return res.json({ success: true, case: found });
+    } catch (err) {
+        console.error('Lookup case error:', err.message);
+        return res.status(500).json({ success: false, error: 'Failed to lookup case', details: err.message });
+    }
+};
+
 // --- GET ALL CASES ---
 exports.getAllCases = async (req, res) => {
     try {
