@@ -1,6 +1,7 @@
 // src/components/ConsultationForm.jsx
 import React, { useState, useEffect } from 'react';
 import { createCase, lookupCase } from './api/cases';
+import { saveDraft as saveDraftServer, getDraftByPolicy as getDraftServer, getLastDraft as getLastDraftServer, deleteDraftByPolicy as deleteDraftServer } from './api/claimDrafts';
 
 const PLAN_DATA = {
   motjha: {
@@ -267,7 +268,7 @@ const SPECIAL_PLAN_BENEFITS = {
       "Full Service (Includes Fleet & Graveyard Setup)",
       "Tent, Table & Toilet",
       "80 Chairs",
-      "Grocery Package",
+      "Grocery (Rice, Maize, Sugar, Oil, Tea, Cremora)",
       "80 Programmes",
       "Crucifix",
       "Storage & Collection within 80km radius"
@@ -565,23 +566,40 @@ export default function ConsultationForm() {
       const data = JSON.parse(raw);
       setForm(prev => ({ ...prev, ...data }));
       setMessage('Draft loaded');
+      setDraftsOpen(false);
     } catch (e) {
       setMessage('Failed to load draft');
     }
   };
 
-  const loadDraftByPolicy = () => {
+  const loadDraftByPolicy = async () => {
     const policy = String(draftQuery || '').trim();
     if (!policy) {
       setMessage('Enter policy number to load draft');
       return;
     }
+    try {
+      const serverDraft = await getDraftServer(policy);
+      if (serverDraft && serverDraft.data) {
+        setForm(prev => ({ ...prev, ...serverDraft.data }));
+        setMessage('Draft loaded from server');
+        setDraftsOpen(false);
+        return;
+      }
+    } catch (e) {}
     const key = `tfs_claim_draft_${policy}`;
     loadDraftKey(key);
   };
 
-  const loadLastDraft = () => {
+  const loadLastDraft = async () => {
     try {
+      const srv = await getLastDraftServer();
+      if (srv && srv.data) {
+        setForm(prev => ({ ...prev, ...srv.data }));
+        setMessage('Last draft loaded from server');
+        setDraftsOpen(false);
+        return;
+      }
       const key = window.localStorage.getItem('tfs_claim_draft_last');
       if (!key) {
         setMessage('No last draft found');
@@ -593,8 +611,12 @@ export default function ConsultationForm() {
     }
   };
 
-  const deleteDraftKey = (key) => {
+  const deleteDraftKey = async (key) => {
     try {
+      const policy = String(key || '').replace('tfs_claim_draft_', '');
+      if (policy) {
+        try { await deleteDraftServer(policy); } catch (_) {}
+      }
       window.localStorage.removeItem(key);
       setMessage('Draft deleted');
     } catch (e) {
@@ -679,12 +701,16 @@ export default function ConsultationForm() {
     };
 
     try {
-      // Save locally as draft using policy number as key
+      try {
+        await saveDraftServer({ policy_number: data.policy_number, data, department: 'claims' });
+        setMessage('Claim draft saved to server');
+      } catch (err) {}
+      
       const key = `tfs_claim_draft_${data.policy_number}`;
       const stamped = { ...data, saved_at: new Date().toISOString() };
       window.localStorage.setItem(key, JSON.stringify(stamped));
       window.localStorage.setItem('tfs_claim_draft_last', key);
-      setMessage('Claim draft saved locally! Printing receipt...');
+      setMessage('Claim draft saved');
       setPrintedData(data);
       setPrintMode('receipt');
       setTimeout(() => window.print(), 500);
@@ -787,7 +813,13 @@ export default function ConsultationForm() {
                 Airtime: data.airtime,
               };
               const selected = extras.filter(n => map[n]);
-              const notSelected = extras.filter(n => !map[n]);
+              const hasIncludedGrocery = (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0)
+                || !!benefits.grocery
+                || !!benefits.groceries
+                || (Array.isArray(benefits.benefits) && benefits.benefits.some(b => String(b).toLowerCase().includes('grocery')));
+              const notSelected = extras
+                .filter(n => !map[n])
+                .filter(n => !(n === 'Grocery' && hasIncludedGrocery));
               return (
                 <>
                   <li>Additional Selected: {selected.length ? selected.join(', ') : 'None'}</li>
@@ -837,7 +869,13 @@ export default function ConsultationForm() {
                 Airtime: data.airtime,
               };
               const selected = extras.filter(n => map[n]);
-              const notSelected = extras.filter(n => !map[n]);
+              const hasIncludedGrocery = (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0)
+                || !!benefits.grocery
+                || !!benefits.groceries
+                || (Array.isArray(benefits.benefits) && benefits.benefits.some(b => String(b).toLowerCase().includes('grocery')));
+              const notSelected = extras
+                .filter(n => !map[n])
+                .filter(n => !(n === 'Grocery' && hasIncludedGrocery));
               return (
                 <>
                   <li>Additional Selected: {selected.length ? selected.join(', ') : 'None'}</li>
@@ -894,7 +932,13 @@ export default function ConsultationForm() {
                 Airtime: data.airtime,
               };
               const selected = extras.filter(n => map[n]);
-              const notSelected = extras.filter(n => !map[n]);
+              const hasIncludedGrocery = (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0)
+                || !!benefits.grocery
+                || !!benefits.groceries
+                || (Array.isArray(benefits.benefits) && benefits.benefits.some(b => String(b).toLowerCase().includes('grocery')));
+              const notSelected = extras
+                .filter(n => !map[n])
+                .filter(n => !(n === 'Grocery' && hasIncludedGrocery));
               return (
                 <>
                   <li>Additional Selected: {selected.length ? selected.join(', ') : 'None'}</li>
@@ -944,7 +988,13 @@ export default function ConsultationForm() {
             Airtime: data.airtime,
           };
           const selected = extras.filter(n => map[n]);
-          const notSelected = extras.filter(n => !map[n]);
+          const hasIncludedGrocery = (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0)
+            || !!benefits.grocery
+            || !!benefits.groceries
+            || (Array.isArray(benefits.benefits) && benefits.benefits.some(b => String(b).toLowerCase().includes('grocery')));
+          const notSelected = extras
+            .filter(n => !map[n])
+            .filter(n => !(n === 'Grocery' && hasIncludedGrocery));
           return (
             <>
               <li>Additional Selected: {selected.length ? selected.join(', ') : 'None'}</li>

@@ -63,7 +63,8 @@ export default function Dashboard() {
           vehiclesAvailable: data.vehiclesAvailable || 0,
           conflicts: data.conflicts || false,
           lowStock: data.lowStock || [],
-          cowsAssigned: data.cowsAssigned || 0
+          groceriesTotal: data.groceriesTotal || 0,
+          groceriesSubmitted: data.groceriesSubmitted || 0
         });
         
         // Set recent cases from dashboard response
@@ -157,7 +158,7 @@ export default function Dashboard() {
 
         <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-green-600">
           <h3 className="text-lg font-semibold text-gray-700">Grocery Assigned</h3>
-          <p className="text-5xl font-bold text-green-600 mt-2">{stats.cowsAssigned}/8</p>
+          <p className="text-5xl font-bold text-green-600 mt-2">{stats.groceriesSubmitted || 0}/{stats.groceriesTotal || 0}</p>
         </div>
       </div>
 
