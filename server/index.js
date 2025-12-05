@@ -18,6 +18,7 @@ const smsRoutes = require('./routes/sms');
 const driversRoutes = require('./routes/drivers');
 const directionsRoutes = require('./routes/directions');
 const repatriationTripsRoutes = require('./routes/repatriationTrips');
+const claimDraftsRoutes = require('./routes/claimDrafts');
 const authRoutes = require('./routes/auth');
 
 const app = express();
@@ -62,6 +63,7 @@ app.use('/api/sms', smsRoutes);
 app.use('/api/drivers', driversRoutes);
 app.use('/api/directions', directionsRoutes);
 app.use('/api/repatriation-trips', repatriationTripsRoutes);
+app.use('/api/claim-drafts', claimDraftsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

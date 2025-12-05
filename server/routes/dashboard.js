@@ -47,13 +47,36 @@ router.get('/', async (req, res) => {
 
     if (inventoryError) throw inventoryError;
 
-    // 4️⃣ Grocery Assigned
-    const { count: cowsAssigned, error: cowError } = await supabase
-      .from('livestock')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'assigned');
-
-    if (cowError) throw cowError;
+    // 4️⃣ Grocery: total that should be given (by policy) and submitted (checklist)
+    let groceriesTotal = 0;
+    let groceriesSubmitted = 0;
+    try {
+      const { data: groceryCases, error: groceryCasesErr, count: groceryCount } = await supabase
+        .from('cases')
+        .select('id', { count: 'exact' })
+        .eq('requires_grocery', true)
+        .gte('funeral_date', today);
+      if (groceryCasesErr) throw groceryCasesErr;
+      groceriesTotal = groceryCount || (groceryCases ? groceryCases.length : 0);
+      const caseIds = (groceryCases || []).map(c => c.id);
+      if (caseIds.length > 0) {
+        const { data: checklistRows, error: checklistErr } = await supabase
+          .from('checklist')
+          .select('case_id, task, completed')
+          .in('case_id', caseIds)
+          .eq('completed', true);
+        if (checklistErr) throw checklistErr;
+        const submittedCaseIds = new Set(
+          (checklistRows || [])
+            .filter(r => String(r.task || '').toLowerCase().startsWith('grocery'))
+            .map(r => r.case_id)
+        );
+        groceriesSubmitted = submittedCaseIds.size;
+      }
+    } catch (e) {
+      // If supabase path fails, fallback below
+      console.warn('⚠️ Grocery stats via Supabase failed:', e.message);
+    }
 
     // 5️⃣ RECENT CASES (last 5 created)
     const { data: recentCases, error: recentError } = await supabase
@@ -70,22 +93,55 @@ router.get('/', async (req, res) => {
       vehiclesAvailable: vehiclesAvailable || 0,
       conflicts: false, // No longer using conflict alerts
       lowStock: Array.isArray(lowStock) ? lowStock : [],
-      cowsAssigned: cowsAssigned || 0,
+      groceriesTotal,
+      groceriesSubmitted,
       recentCases: recentCases || []
     });
 
   } catch (error) {
     console.error('Dashboard route error:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      upcoming: 0,
-      vehiclesNeeded: 0,
-      vehiclesAvailable: 0,
-      conflicts: false,
-      lowStock: [],
-      cowsAssigned: 0,
-      recentCases: []
-    });
+    // Fallback using direct DB if Supabase fails
+    try {
+      const { query } = require('../config/db');
+      const todaySql = today;
+      const gtRes = await query(
+        `SELECT COUNT(*)::int AS total FROM cases WHERE requires_grocery = true AND funeral_date >= $1`,
+        [todaySql]
+      );
+      const gsRes = await query(
+        `SELECT COUNT(DISTINCT c.id)::int AS submitted
+         FROM cases c
+         JOIN checklist cl ON cl.case_id = c.id
+         WHERE c.requires_grocery = true
+           AND c.funeral_date >= $1
+           AND cl.completed = true
+           AND LOWER(cl.task) LIKE 'grocery%'`,
+        [todaySql]
+      );
+      return res.json({
+        upcoming: 0,
+        vehiclesNeeded: 0,
+        vehiclesAvailable: 0,
+        conflicts: false,
+        lowStock: [],
+        groceriesTotal: gtRes.rows[0]?.total || 0,
+        groceriesSubmitted: gsRes.rows[0]?.submitted || 0,
+        recentCases: []
+      });
+    } catch (fallbackErr) {
+      console.error('Dashboard route error:', error);
+      res.status(500).json({
+        error: 'Internal Server Error',
+        upcoming: 0,
+        vehiclesNeeded: 0,
+        vehiclesAvailable: 0,
+        conflicts: false,
+        lowStock: [],
+        groceriesTotal: 0,
+        groceriesSubmitted: 0,
+        recentCases: []
+      });
+    }
   }
 });
 
