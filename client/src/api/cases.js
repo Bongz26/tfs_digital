@@ -85,3 +85,21 @@ export const fetchCancelledCases = async () => {
         throw err;
     }
 };
+
+export const lookupCase = async (params = {}) => {
+    const search = new URLSearchParams();
+    if (params.deceased_id) search.append('deceased_id', params.deceased_id);
+    if (params.case_number) search.append('case_number', params.case_number);
+    if (params.policy_number) search.append('policy_number', params.policy_number);
+    if (params.deceased_name) search.append('deceased_name', params.deceased_name);
+    if (params.nok_contact) search.append('nok_contact', params.nok_contact);
+    const url = `${BASE_URL}/lookup?${search.toString()}`;
+    try {
+        const res = await axios.get(url);
+        return res.data.case || null;
+    } catch (err) {
+        if (err.response && err.response.status === 404) return null;
+        console.error('Error looking up case:', err.response || err);
+        throw err;
+    }
+};

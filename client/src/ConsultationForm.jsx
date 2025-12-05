@@ -1,6 +1,6 @@
 // src/components/ConsultationForm.jsx
 import React, { useState, useEffect } from 'react';
-import { createCase } from './api/cases';
+import { createCase, lookupCase } from './api/cases';
 
 const PLAN_DATA = {
   motjha: {
@@ -380,6 +380,48 @@ export default function ConsultationForm() {
   const [draftsOpen, setDraftsOpen] = useState(false);
   const [draftQuery, setDraftQuery] = useState('');
   const [scheduleOpen, setScheduleOpen] = useState(false);
+
+  useEffect(() => {
+    const timeout = setTimeout(async () => {
+      const idCandidate = (form.deceased_id || '').trim();
+      const policyCandidate = (form.policy_number || '').trim();
+      const nameCandidate = (form.deceased_name || '').trim();
+      const contactCandidate = (form.nok_contact || '').trim();
+      const hasNameContact = nameCandidate && contactCandidate;
+      const hasId = idCandidate && /^\d{13}$/.test(idCandidate);
+      const hasPolicy = !!policyCandidate;
+      if (!hasId && !hasPolicy && !hasNameContact) return;
+      try {
+        const found = await lookupCase({
+          deceased_id: hasId ? idCandidate : undefined,
+          policy_number: hasPolicy ? policyCandidate : undefined,
+          deceased_name: hasNameContact ? nameCandidate : undefined,
+          nok_contact: hasNameContact ? contactCandidate : undefined
+        });
+        if (found) {
+          setForm(prev => ({
+            ...prev,
+            policy_number: prev.policy_number || found.policy_number || '',
+            deceased_name: prev.deceased_name || found.deceased_name || '',
+            deceased_id: prev.deceased_id || found.deceased_id || '',
+            nok_name: prev.nok_name || found.nok_name || '',
+            nok_contact: prev.nok_contact || found.nok_contact || '',
+            nok_relation: prev.nok_relation || found.nok_relation || '',
+            plan_category: found.plan_category || prev.plan_category,
+            plan_name: found.plan_name || prev.plan_name,
+            plan_members: found.plan_members != null ? found.plan_members : prev.plan_members,
+            plan_age_bracket: found.plan_age_bracket || prev.plan_age_bracket,
+            venue_name: found.venue_name || prev.venue_name,
+            venue_address: found.venue_address || prev.venue_address,
+            service_date: found.service_date || found.funeral_date || prev.service_date,
+            service_time: found.service_time || found.funeral_time || prev.service_time
+          }));
+          setMessage('Existing case data auto-filled');
+        }
+      } catch (e) {}
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [form.deceased_id, form.policy_number, form.deceased_name, form.nok_contact]);
 
   useEffect(() => {
     const isSpecialPlan = form.plan_category === 'specials';
