@@ -5,6 +5,8 @@ const casesController = require('../controllers/casesController');
 // Lookup case by identifiers for auto-fill
 router.get('/lookup', casesController.lookupCase);
 
+router.get('/search', casesController.searchCases);
+
 // GET all cases
 router.get('/', casesController.getAllCases);
 

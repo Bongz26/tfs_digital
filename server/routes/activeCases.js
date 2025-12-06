@@ -3,18 +3,49 @@ const express = require('express');
 const nodemailer = require('nodemailer');
 const router = express.Router();
 
-// GET /api/activeCases - SIMPLIFIED AND FIXED
+// Simple in-memory cache
+let activeCasesCache = { data: null, time: 0 };
+const ACTIVE_TTL_MS = 5000; // 5 seconds
+
+// GET /api/activeCases - Optimized
 router.get('/', async (req, res) => {
   try {
+    const now = Date.now();
+    if (activeCasesCache.data && (now - activeCasesCache.time) < ACTIVE_TTL_MS) {
+      return res.json(activeCasesCache.data);
+    }
     const supabase = req.app.locals.supabase;
 
     console.log('Fetching active cases...');
 
-    // Get active cases (exclude completed, archived, and cancelled)
-    const { data: cases, error: casesError } = await supabase
+    // Get active cases — only required fields, filtered by status/date window
+    const today = new Date().toISOString().split('T')[0];
+    const minDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const maxDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const activeStatuses = ['intake','preparation','confirmed','in_progress'];
+
+    const page = parseInt(req.query.page || '1', 10);
+    const limit = parseInt(req.query.limit || '20', 10);
+    const search = (req.query.search || '').trim();
+    const statusFilter = (req.query.status || '').trim();
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let qb = supabase
       .from('cases')
-      .select('*')
+      .select('id,case_number,deceased_name,status,funeral_date,funeral_time,venue_name,venue_address,policy_number,requires_grocery', { count: 'exact' })
+      .gte('funeral_date', minDate)
+      .lte('funeral_date', maxDate)
       .order('funeral_date', { ascending: true });
+
+    qb = qb.in('status', statusFilter ? [statusFilter] : activeStatuses);
+    if (search) {
+      const term = `%${search}%`;
+      qb = qb.or(`deceased_name.ilike.${term},case_number.ilike.${term},policy_number.ilike.${term}`);
+    }
+    qb = qb.range(from, to);
+
+    const { data: cases, error: casesError, count: casesCount } = await qb;
 
     if (casesError) {
       console.error('Active cases query error:', casesError);
@@ -26,7 +57,7 @@ router.get('/', async (req, res) => {
     // Get all vehicles (availability is now based on time conflicts, not a boolean)
     const { data: allVehicles, error: vehiclesError } = await supabase
       .from('vehicles')
-      .select('*')
+      .select('id,type,reg_number')
       .order('type', { ascending: true });
 
     if (vehiclesError) {
@@ -72,7 +103,7 @@ router.get('/', async (req, res) => {
     if (caseIds.length > 0) {
       const { data: rosterData, error: rosterError } = await supabase
         .from('roster')
-        .select('case_id, vehicle_id, driver_name, status')
+        .select('case_id, vehicle_id, driver_name, status, assignment_role')
         .in('case_id', caseIds);
       
       if (!rosterError && rosterData) {
@@ -89,8 +120,8 @@ router.get('/', async (req, res) => {
     }
 
     // Attach roster data to cases and calculate available vehicles per case
-    const activeCases = (cases || []).filter(c => !['completed', 'archived', 'cancelled'].includes(c.status));
-    console.log(`Active cases after filter: ${activeCases.length}`);
+    const activeCases = cases || [];
+    console.log(`Active cases: ${activeCases.length}`);
 
     const casesWithRoster = activeCases.map(caseItem => {
       // Get vehicles available for this specific case (no time conflicts)
@@ -164,10 +195,12 @@ router.get('/', async (req, res) => {
         }
       }
 
+      const minVehicles = (caseItem.plan_name && /premium/i.test(caseItem.plan_name)) ? 3 : 2;
       const resultCase = {
         ...caseItem,
         roster: rosterAssignments[caseItem.id] || [],
         available_vehicles: availableForCase, // Vehicles available for this specific case
+        required_min_vehicles: minVehicles,
         warning_past_funeral_date: warningPastFuneral,
         warning_prep_required: warningPrepRequired
       };
@@ -175,11 +208,16 @@ router.get('/', async (req, res) => {
       return resultCase;
     });
 
-    res.json({ 
+    const payload = { 
       success: true, 
       cases: casesWithRoster || [],
-      vehicles: vehicles || [] 
-    });
+      vehicles: vehicles || [],
+      page,
+      limit,
+      total: casesCount || (casesWithRoster ? casesWithRoster.length : 0)
+    };
+    activeCasesCache = { data: payload, time: Date.now() };
+    res.json(payload);
 
   } catch (err) {
     console.error('ActiveCases route error:', err.message);

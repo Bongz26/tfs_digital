@@ -64,6 +64,50 @@ exports.lookupCase = async (req, res) => {
     }
 };
 
+exports.searchCases = async (req, res) => {
+    try {
+        const term = (req.query.term || '').trim();
+        const limit = parseInt(req.query.limit || '10', 10);
+
+        if (!term) {
+            return res.status(400).json({ success: false, error: 'Search term is required' });
+        }
+
+        const supabase = req.app?.locals?.supabase;
+        if (supabase) {
+            try {
+                const like = `%${term}%`;
+                const { data, error } = await supabase
+                    .from('cases')
+                    .select('id,case_number,deceased_name,deceased_id,policy_number,status,funeral_date,funeral_time')
+                    .or(`deceased_id.ilike.${like},case_number.ilike.${like},policy_number.ilike.${like}`)
+                    .order('created_at', { ascending: false })
+                    .limit(limit);
+                if (error) throw error;
+                return res.json({ success: true, cases: Array.isArray(data) ? data : [] });
+            } catch (e) {
+                console.warn('⚠️ Supabase search failed in searchCases, falling back to DB:', e.message);
+            }
+        }
+
+        const like = `%${term}%`;
+        const sql = `
+            SELECT id, case_number, deceased_name, deceased_id, policy_number, status, funeral_date, funeral_time
+            FROM cases
+            WHERE deceased_id ILIKE $1
+               OR case_number ILIKE $1
+               OR policy_number ILIKE $1
+            ORDER BY created_at DESC
+            LIMIT $2
+        `;
+        const result = await query(sql, [like, limit]);
+        return res.json({ success: true, cases: result.rows || [] });
+    } catch (err) {
+        console.error('Search cases error:', err.message);
+        return res.status(500).json({ success: false, error: 'Failed to search cases', details: err.message });
+    }
+};
+
 // --- GET ALL CASES ---
 exports.getAllCases = async (req, res) => {
     try {
@@ -281,7 +325,7 @@ exports.createCase = async (req, res) => {
 // --- ASSIGN VEHICLE TO CASE ---
 exports.assignVehicle = async (req, res) => {
     const { caseId } = req.params;
-    const { vehicle_id, driver_name, pickup_time } = req.body;
+    const { vehicle_id, driver_name, pickup_time, assignment_role } = req.body;
 
     if (!vehicle_id) {
         return res.status(400).json({ success: false, error: 'vehicle_id is required' });
@@ -291,6 +335,19 @@ exports.assignVehicle = async (req, res) => {
 
     try {
         await client.query('BEGIN');
+
+        // Ensure roster has assignment_role column
+        try {
+            const colCheck = await client.query(
+                `SELECT 1 FROM information_schema.columns WHERE table_name = 'roster' AND column_name = 'assignment_role'`
+            );
+            if (colCheck.rows.length === 0) {
+                await client.query(`ALTER TABLE roster ADD COLUMN assignment_role VARCHAR(20)`);
+            }
+        } catch (e) {
+            // Continue even if check fails; insert will work if column exists
+            console.warn('assignment_role column check failed:', e.message);
+        }
 
         const caseResult = await client.query(
             'SELECT id, case_number, funeral_date, funeral_time, delivery_date, delivery_time FROM cases WHERE id = $1',
@@ -339,6 +396,16 @@ exports.assignVehicle = async (req, res) => {
         if (vehicleResult.rows.length === 0) {
             await client.query('ROLLBACK');
             return res.status(404).json({ success: false, error: 'Vehicle not found' });
+        }
+
+        // Prevent duplicate vehicle assignment to the same case
+        const dupVehicle = await client.query(
+            `SELECT 1 FROM roster WHERE case_id = $1 AND vehicle_id = $2 AND status != 'completed'`,
+            [caseId, vehicle_id]
+        );
+        if (dupVehicle.rows.length > 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ success: false, error: 'This vehicle is already assigned to this case' });
         }
 
         if (currentFuneralDate) {
@@ -420,40 +487,30 @@ exports.assignVehicle = async (req, res) => {
                 'SELECT id, name FROM drivers WHERE name = $1 AND active = true',
                 [driver_name.trim()]
             );
-            if (driverResult.rows.length === 0) {
-                console.log(`⚠️  Driver "${driver_name}" not found in drivers table, but allowing assignment`);
-            }
+        if (driverResult.rows.length === 0) {
+            console.log(`⚠️  Driver "${driver_name}" not found in drivers table, but allowing assignment`);
         }
-
-        const existingRoster = await client.query(
-            'SELECT id FROM roster WHERE case_id = $1',
-            [caseId]
+        // Prevent duplicate driver assignment to the same case
+        const dupDriver = await client.query(
+            `SELECT 1 FROM roster WHERE case_id = $1 AND LOWER(driver_name) = LOWER($2) AND status != 'completed'`,
+            [caseId, driver_name.trim()]
         );
+        if (dupDriver.rows.length > 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ success: false, error: 'This driver is already assigned to this case' });
+        }
+        }
 
         const assignedDriver = driver_name && driver_name.trim() !== ''
             ? driver_name.trim()
             : 'TBD';
 
-        let rosterEntry;
-        if (existingRoster.rows.length > 0) {
-            rosterEntry = await client.query(
-                `UPDATE roster 
-         SET vehicle_id = $1, 
-             driver_name = $2,
-             pickup_time = $3,
-             status = 'scheduled'
-         WHERE case_id = $4
-         RETURNING *`,
-                [vehicle_id, assignedDriver, calculatedPickupTime, caseId]
-            );
-        } else {
-            rosterEntry = await client.query(
-                `INSERT INTO roster (case_id, vehicle_id, driver_name, pickup_time, status)
-         VALUES ($1, $2, $3, $4, 'scheduled')
-         RETURNING *`,
-                [caseId, vehicle_id, assignedDriver, calculatedPickupTime]
-            );
-        }
+        const rosterEntry = await client.query(
+            `INSERT INTO roster (case_id, vehicle_id, driver_name, pickup_time, status, assignment_role)
+             VALUES ($1, $2, $3, $4, 'scheduled', $5)
+             RETURNING *`,
+            [caseId, vehicle_id, assignedDriver, calculatedPickupTime, (assignment_role || null)]
+        );
 
         await client.query(
             'UPDATE vehicles SET available = false WHERE id = $1',
@@ -491,10 +548,28 @@ exports.updateCaseStatus = async (req, res) => {
 
     const validStatuses = ['intake', 'confirmed', 'preparation', 'scheduled', 'in_progress', 'completed', 'archived', 'cancelled'];
     if (!status || !validStatuses.includes(status)) {
-        return res.status(400).json({
+        return res.status(400).json({ success: false, error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+    }
+
+    // Enforce minimum vehicles for operational statuses
+    try {
+      if (['scheduled','in_progress'].includes(status)) {
+        const caseRes = await query('SELECT plan_name FROM cases WHERE id = $1', [id]);
+        const planName = (caseRes.rows[0] && caseRes.rows[0].plan_name) || '';
+        const minVehicles = (planName && /premium/i.test(planName)) ? 3 : 2;
+        const rosterRes = await query('SELECT COUNT(*)::int AS cnt FROM roster WHERE case_id = $1', [id]);
+        const assigned = (rosterRes.rows[0] && rosterRes.rows[0].cnt) || 0;
+        if (assigned < minVehicles) {
+          return res.status(400).json({
             success: false,
-            error: `Invalid status. Must be one of: ${validStatuses.join(', ')}`
-        });
+            error: `Assign at least ${minVehicles} vehicle(s) before setting status to ${status}`,
+            required_min_vehicles: minVehicles,
+            assigned_vehicles: assigned
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Status update precheck failed:', e.message);
     }
 
   try {

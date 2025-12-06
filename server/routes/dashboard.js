@@ -2,8 +2,15 @@
 const express = require('express');
 const router = express.Router();
 
+let dashboardCache = { data: null, time: 0 };
+const DASHBOARD_TTL_MS = 5000;
+
 router.get('/', async (req, res) => {
   try {
+    const now = Date.now();
+    if (dashboardCache.data && (now - dashboardCache.time) < DASHBOARD_TTL_MS) {
+      return res.json(dashboardCache.data);
+    }
     const supabase = req.app.locals.supabase;
     const today = new Date().toISOString().split('T')[0];
 
@@ -47,28 +54,34 @@ router.get('/', async (req, res) => {
 
     if (inventoryError) throw inventoryError;
 
-    // 4️⃣ Grocery: total that should be given (by policy) and submitted (checklist)
+    // 4️⃣ Grocery: total that should be given (by policy) and submitted (roster assigns)
     let groceriesTotal = 0;
     let groceriesSubmitted = 0;
+    const activeStatuses = ['intake','preparation','confirmed','in_progress'];
+    const minDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const maxDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     try {
-      const { data: groceryCases, error: groceryCasesErr, count: groceryCount } = await supabase
+      const { data: activeCases, error: activeErr } = await supabase
         .from('cases')
-        .select('id', { count: 'exact' })
-        .eq('requires_grocery', true)
-        .gte('funeral_date', today);
-      if (groceryCasesErr) throw groceryCasesErr;
-      groceriesTotal = groceryCount || (groceryCases ? groceryCases.length : 0);
-      const caseIds = (groceryCases || []).map(c => c.id);
+        .select('id, status, funeral_date, requires_grocery')
+        .in('status', activeStatuses)
+        .gte('funeral_date', minDate)
+        .lte('funeral_date', maxDate);
+      if (activeErr) throw activeErr;
+      const groceryEligible = (activeCases || []).filter(c => c.requires_grocery === true);
+      groceriesTotal = groceryEligible.length;
+      const caseIds = groceryEligible.map(c => c.id);
       if (caseIds.length > 0) {
-        const { data: checklistRows, error: checklistErr } = await supabase
-          .from('checklist')
-          .select('case_id, task, completed')
+        const { data: rosterRows, error: rosterErr } = await supabase
+          .from('roster')
+          .select('case_id, vehicle_id, driver_name, status')
           .in('case_id', caseIds)
-          .eq('completed', true);
-        if (checklistErr) throw checklistErr;
+          .neq('status', 'completed')
+          .neq('status', 'cancelled');
+        if (rosterErr) throw rosterErr;
         const submittedCaseIds = new Set(
-          (checklistRows || [])
-            .filter(r => String(r.task || '').toLowerCase().startsWith('grocery'))
+          (rosterRows || [])
+            .filter(r => r.vehicle_id != null && (r.driver_name && String(r.driver_name).trim() !== ''))
             .map(r => r.case_id)
         );
         groceriesSubmitted = submittedCaseIds.size;
@@ -78,16 +91,17 @@ router.get('/', async (req, res) => {
       console.warn('⚠️ Grocery stats via Supabase failed:', e.message);
     }
 
-    // 5️⃣ RECENT CASES (last 5 created)
+    // 5️⃣ RECENT CASES (configurable limit; default 20)
+    const recentLimit = parseInt(req.query.recentLimit || '20', 10);
     const { data: recentCases, error: recentError } = await supabase
       .from('cases')
-      .select('*')
+      .select('id,case_number,deceased_name,status,funeral_date,funeral_time,deceased_id,nok_name,nok_contact,created_at')
       .order('created_at', { ascending: false })
-      .limit(5);
+      .limit(recentLimit);
 
     if (recentError) throw recentError;
 
-    res.json({
+    const payload = {
       upcoming: funeralsCount || 0,
       vehiclesNeeded: funeralsCount || 0,
       vehiclesAvailable: vehiclesAvailable || 0,
@@ -96,7 +110,9 @@ router.get('/', async (req, res) => {
       groceriesTotal,
       groceriesSubmitted,
       recentCases: recentCases || []
-    });
+    };
+    dashboardCache = { data: payload, time: Date.now() };
+    res.json(payload);
 
   } catch (error) {
     console.error('Dashboard route error:', error);
@@ -105,20 +121,27 @@ router.get('/', async (req, res) => {
       const { query } = require('../config/db');
       const todaySql = today;
       const gtRes = await query(
-        `SELECT COUNT(*)::int AS total FROM cases WHERE requires_grocery = true AND funeral_date >= $1`,
-        [todaySql]
+        `SELECT COUNT(*)::int AS total 
+         FROM cases 
+         WHERE requires_grocery = true 
+           AND funeral_date BETWEEN $1 AND $2
+           AND status IN ('intake','preparation','confirmed','in_progress')`,
+        [minDate, maxDate]
       );
       const gsRes = await query(
         `SELECT COUNT(DISTINCT c.id)::int AS submitted
          FROM cases c
-         JOIN checklist cl ON cl.case_id = c.id
+         JOIN roster r ON r.case_id = c.id
          WHERE c.requires_grocery = true
-           AND c.funeral_date >= $1
-           AND cl.completed = true
-           AND LOWER(cl.task) LIKE 'grocery%'`,
-        [todaySql]
+           AND c.funeral_date BETWEEN $1 AND $2
+           AND c.status IN ('intake','preparation','confirmed','in_progress')
+           AND r.status <> 'completed'
+           AND r.status <> 'cancelled'
+           AND r.vehicle_id IS NOT NULL
+           AND COALESCE(NULLIF(r.driver_name, ''), NULL) IS NOT NULL`,
+        [minDate, maxDate]
       );
-      return res.json({
+      const payload = {
         upcoming: 0,
         vehiclesNeeded: 0,
         vehiclesAvailable: 0,
@@ -127,7 +150,9 @@ router.get('/', async (req, res) => {
         groceriesTotal: gtRes.rows[0]?.total || 0,
         groceriesSubmitted: gsRes.rows[0]?.submitted || 0,
         recentCases: []
-      });
+      };
+      dashboardCache = { data: payload, time: Date.now() };
+      return res.json(payload);
     } catch (fallbackErr) {
       console.error('Dashboard route error:', error);
       res.status(500).json({
