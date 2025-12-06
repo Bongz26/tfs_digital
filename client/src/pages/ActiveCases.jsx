@@ -13,6 +13,7 @@ export default function ActiveCases() {
   const [drivers, setDrivers] = useState([]);
   const [selectedVehicle, setSelectedVehicle] = useState({});
   const [selectedDriver, setSelectedDriver] = useState({});
+  const [vehicleCategory, setVehicleCategory] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [changingStatus, setChangingStatus] = useState({});
@@ -21,6 +22,11 @@ export default function ActiveCases() {
   const [toasts, setToasts] = useState([]);
   const [auditModal, setAuditModal] = useState({ open: false, caseId: null, logs: [] });
   const [cancelled, setCancelled] = useState([]);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [total, setTotal] = useState(0);
 
   // Fetch active cases and vehicles in one call
   useEffect(() => {
@@ -30,7 +36,7 @@ export default function ActiveCases() {
         setError('');
 
         console.log('Fetching active cases data...');
-        const { cases: casesData, vehicles: vehiclesData } = await fetchActiveCases();
+        const { cases: casesData, vehicles: vehiclesData, page: p, total: t, limit: l } = await fetchActiveCases({ page, limit, search, status: statusFilter });
         console.log('Active cases data received:', { cases: casesData, vehicles: vehiclesData });
 
         const today = new Date();
@@ -61,6 +67,9 @@ export default function ActiveCases() {
 
         setCases(normalizedCases);
         setVehicles(vehiclesData);
+        setTotal(t || normalizedCases.length);
+        setPage(p || page);
+        setLimit(l || limit);
 
         try {
           const cancelledCases = await fetchCancelledCases();
@@ -90,7 +99,7 @@ export default function ActiveCases() {
     };
 
         fetchData();
-  }, []);
+  }, [page, limit, search, statusFilter]);
 
   useEffect(() => {
     const messages = [];
@@ -132,7 +141,8 @@ export default function ActiveCases() {
     try {
       await assignVehicle(caseId, {
         vehicle_id: vehicle.id,
-        driver_name: driver.name
+        driver_name: driver.name,
+        assignment_role: vehicleCategory[caseId] || 'family'
         // pickup_time will be calculated on backend (1.5 hours before funeral time)
       });
 
@@ -153,10 +163,31 @@ export default function ActiveCases() {
         delete newState[caseId];
         return newState;
       });
+      setVehicleCategory(prev => {
+        const newState = { ...prev };
+        delete newState[caseId];
+        return newState;
+      });
     } catch (err) {
       console.error('Assign error:', err);
       alert(`Failed to assign vehicle: ${err.message || err.response?.data?.error}`);
     }
+  };
+
+  const classifyVehicleType = (t) => {
+    const x = String(t || '').toLowerCase();
+    if (x === 'hearse') return 'hearse';
+    return 'family';
+  };
+
+  const formatVehicleType = (t) => {
+    const x = String(t || '').toLowerCase();
+    if (x === 'fortuner') return 'Toyota Fortuner';
+    if (x === 'q7') return 'Audi Q7';
+    if (x === 'v_class') return 'Mercedes-Benz V-Class';
+    if (x === 'vito') return 'Mercedes-Benz Vito';
+    if (x === 'hearse') return 'Hearse';
+    return (t ? String(t).replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Vehicle');
   };
 
   const handleChangeCaseStatus = async (caseId, newStatus) => {
@@ -295,6 +326,24 @@ export default function ActiveCases() {
         <p className="text-gray-600 text-sm sm:text-base md:text-lg">
           Manage vehicle assignments for upcoming funerals
         </p>
+      </div>
+
+      {/* Controls */}
+      <div className="bg-white p-4 sm:p-6 rounded-xl shadow mb-4 sm:mb-6 flex flex-col sm:flex-row gap-3 sm:gap-4 items-start sm:items-center">
+        <input value={search} onChange={e => { setPage(1); setSearch(e.target.value); }} placeholder="Search by name or case number" className="w-full sm:w-64 px-4 py-2 border rounded-lg" />
+        <select value={statusFilter} onChange={e => { setPage(1); setStatusFilter(e.target.value); }} className="px-4 py-2 border rounded-lg">
+          <option value="">All active statuses</option>
+          <option value="intake">Intake</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="preparation">Preparation</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="in_progress">In Progress</option>
+        </select>
+        <select value={limit} onChange={e => { setPage(1); setLimit(parseInt(e.target.value, 10)); }} className="px-4 py-2 border rounded-lg">
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="50">50</option>
+        </select>
       </div>
 
       {/* SUMMARY CARDS */}
@@ -511,8 +560,32 @@ export default function ActiveCases() {
                         </div>
                       </td>
                       <td className="p-3 sm:p-4">
-                        {(!c.roster || c.roster.length === 0) ? (
+                        {(!c.roster || c.roster.length < (c.required_min_vehicles || 1)) ? (
                           <div className="flex flex-col space-y-2">
+                            <div className="flex items-center gap-4 text-sm">
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="radio"
+                                  name={`vehcat-${c.id}`}
+                                  checked={(vehicleCategory[c.id] || 'family') === 'hearse'}
+                                  onChange={() => {
+                                    setVehicleCategory(prev => ({ ...prev, [c.id]: 'hearse' }));
+                                  }}
+                                />
+                                Hearse
+                              </label>
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="radio"
+                                  name={`vehcat-${c.id}`}
+                                  checked={(vehicleCategory[c.id] || 'family') === 'family'}
+                                  onChange={() => {
+                                    setVehicleCategory(prev => ({ ...prev, [c.id]: 'family' }));
+                                  }}
+                                />
+                                Family Car
+                              </label>
+                            </div>
                             <select
                               className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
                               value={selectedVehicle[c.id]?.id || ''}
@@ -538,12 +611,12 @@ export default function ActiveCases() {
                                 const availableVehicles = c.available_vehicles || vehicles;
                                 return availableVehicles.map(v => (
                                   <option key={v.id} value={v.id}>
-                                    {v.type ? v.type.toUpperCase().replace('_', ' ') : 'VEHICLE'} - {v.reg_number}
+                                    {formatVehicleType(v.type)} - {v.reg_number}
                                   </option>
                                 ));
                               })()}
                             </select>
-                            {(!c.roster || c.roster.length === 0) && c.available_vehicles && c.available_vehicles.length < vehicles.length && (
+                            {c.available_vehicles && c.available_vehicles.length < vehicles.length && (
                               <div className="text-xs text-orange-600 mt-1">
                                 ⚠️ Some vehicles unavailable due to time conflicts
                               </div>
@@ -593,17 +666,30 @@ export default function ActiveCases() {
                             >
                               Assign Vehicle & Driver
                             </button>
+                            <div className="text-xs text-gray-600">Assigned: {c.roster?.length || 0} / {c.required_min_vehicles || 1}</div>
                           </div>
                         ) : (
                           <div className="text-center">
                             <div className="text-green-600 font-medium mb-2 text-sm">
-                              ✓ Vehicle Assigned
+                              ✓ Vehicle(s) Assigned ({c.roster.length})
                             </div>
                             {c.roster.map((r, idx) => (
                               <div key={idx} className="text-xs text-gray-600">
+                                {(r.assignment_role ? (r.assignment_role === 'hearse' ? 'Hearse' : 'Family') + ' • ' : '')}
                                 Driver: {r.driver_name || 'TBD'}
                               </div>
                             ))}
+                            {c.roster.length < (c.required_min_vehicles || 1) && (
+                              <div className="mt-2">
+                                <button
+                                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
+                                  onClick={() => handleAssignVehicle(c.id)}
+                                  disabled={!selectedVehicle[c.id] || !selectedDriver[c.id]}
+                                >
+                                  Add Another Vehicle
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
                       </td>
@@ -768,8 +854,32 @@ export default function ActiveCases() {
                   )}
 
                   {/* Vehicle & Driver Assignment */}
-                  {(!c.roster || c.roster.length === 0) ? (
+                  {(!c.roster || c.roster.length < (c.required_min_vehicles || 1)) ? (
                     <div className="space-y-2">
+                      <div className="flex items-center gap-4 text-xs">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name={`vehcatm-${c.id}`}
+                            checked={(vehicleCategory[c.id] || 'family') === 'hearse'}
+                            onChange={() => {
+                              setVehicleCategory(prev => ({ ...prev, [c.id]: 'hearse' }));
+                            }}
+                          />
+                          Hearse
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name={`vehcatm-${c.id}`}
+                            checked={(vehicleCategory[c.id] || 'family') === 'family'}
+                            onChange={() => {
+                              setVehicleCategory(prev => ({ ...prev, [c.id]: 'family' }));
+                            }}
+                          />
+                          Family
+                        </label>
+                      </div>
                       <select
                         className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
                         value={selectedVehicle[c.id]?.id || ''}
@@ -795,7 +905,7 @@ export default function ActiveCases() {
                           const availableVehicles = c.available_vehicles || vehicles;
                           return availableVehicles.map(v => (
                             <option key={v.id} value={v.id}>
-                              {v.type ? v.type.toUpperCase().replace('_', ' ') : 'VEHICLE'} - {v.reg_number}
+                              {formatVehicleType(v.type)} - {v.reg_number}
                             </option>
                           ));
                         })()}
@@ -843,20 +953,33 @@ export default function ActiveCases() {
                         onClick={() => handleAssignVehicle(c.id)}
                         disabled={!selectedVehicle[c.id] || !selectedDriver[c.id]}
                       >
-                        Assign Vehicle & Driver
+                        {c.roster?.length ? 'Add Another Vehicle' : 'Assign Vehicle & Driver'}
                       </button>
+                      <div className="text-xs text-gray-600 text-center">Assigned: {c.roster?.length || 0} / {c.required_min_vehicles || 1}</div>
                     </div>
                   ) : (
                     <div className="text-center pt-2">
                       {c.roster.map((r, idx) => (
                         <div key={idx} className="text-xs text-gray-600">
+                          {(r.assignment_role ? (r.assignment_role === 'hearse' ? 'Hearse' : 'Family') + ' • ' : '')}
                           Driver: {r.driver_name || 'TBD'}
                         </div>
                       ))}
+                      <div className="text-xs text-gray-600">Assigned: {c.roster.length} / {c.required_min_vehicles || 1}</div>
                     </div>
                   )}
                 </div>
               ))}
+            </div>
+
+            {/* Pagination */}
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-gray-600">Showing {cases.length} of {total} cases</div>
+              <div className="flex items-center gap-2">
+                <button className="px-3 py-2 border rounded-lg" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Prev</button>
+                <div className="px-3">Page {page}</div>
+                <button className="px-3 py-2 border rounded-lg" disabled={(page * limit) >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+              </div>
             </div>
           </>
         )}

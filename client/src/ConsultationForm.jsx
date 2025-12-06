@@ -567,6 +567,7 @@ export default function ConsultationForm() {
       setForm(prev => ({ ...prev, ...data }));
       setMessage('Draft loaded');
       setDraftsOpen(false);
+      setDraftQuery('');
     } catch (e) {
       setMessage('Failed to load draft');
     }
@@ -584,6 +585,7 @@ export default function ConsultationForm() {
         setForm(prev => ({ ...prev, ...serverDraft.data }));
         setMessage('Draft loaded from server');
         setDraftsOpen(false);
+        setDraftQuery('');
         return;
       }
     } catch (e) {}
@@ -598,6 +600,7 @@ export default function ConsultationForm() {
         setForm(prev => ({ ...prev, ...srv.data }));
         setMessage('Last draft loaded from server');
         setDraftsOpen(false);
+        setDraftQuery('');
         return;
       }
       const key = window.localStorage.getItem('tfs_claim_draft_last');

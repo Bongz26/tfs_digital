@@ -103,3 +103,16 @@ export const lookupCase = async (params = {}) => {
         throw err;
     }
 };
+
+export const searchCases = async (term, limit = 10) => {
+    try {
+        const params = new URLSearchParams();
+        params.append('term', term);
+        if (limit) params.append('limit', String(limit));
+        const res = await axios.get(`${BASE_URL}/search?${params.toString()}`);
+        return res.data.cases || [];
+    } catch (err) {
+        console.error('Error searching cases:', err.response || err);
+        throw err;
+    }
+};

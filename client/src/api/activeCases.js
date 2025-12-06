@@ -3,12 +3,21 @@ import { API_HOST } from "./config";
 
 const BASE_URL = `${API_HOST}/api/active-cases`;
 
-export const fetchActiveCases = async () => {
+export const fetchActiveCases = async (params = {}) => {
     try {
-        const res = await axios.get(BASE_URL);
+        const searchParams = new URLSearchParams();
+        if (params.page) searchParams.append('page', String(params.page));
+        if (params.limit) searchParams.append('limit', String(params.limit));
+        if (params.search) searchParams.append('search', params.search);
+        if (params.status) searchParams.append('status', params.status);
+        const url = searchParams.toString() ? `${BASE_URL}?${searchParams.toString()}` : BASE_URL;
+        const res = await axios.get(url);
         return {
             cases: res.data.cases || [],
-            vehicles: res.data.vehicles || []
+            vehicles: res.data.vehicles || [],
+            page: res.data.page || 1,
+            total: res.data.total || (res.data.cases ? res.data.cases.length : 0),
+            limit: res.data.limit || params.limit || 20
         };
     } catch (err) {
         console.error("Error fetching active cases:", err.response || err);
