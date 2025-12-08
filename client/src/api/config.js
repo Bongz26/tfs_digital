@@ -7,17 +7,7 @@
 export const getApiHost = () => {
   const forceRemote = String(process.env.REACT_APP_FORCE_REMOTE || process.env.REACT_APP_USE_REMOTE_ON_LOCALHOST || '').toLowerCase() === 'true';
 
-  // If we are on localhost and NOT forcing remote, default to local backend
-  if (typeof window !== "undefined") {
-    const hostname = window.location.hostname;
-    const isLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "" || hostname === "::1";
-    if (isLocal && !forceRemote) {
-      console.log("🔧 [API Config] Detected localhost - using local backend (override available via REACT_APP_FORCE_REMOTE=true)");
-      return "http://localhost:5000";
-    }
-  }
-
-  // Use env var (strip any paths) or fallback to Render
+  // Prefer explicit env URL first (works for localhost too)
   const envUrl = process.env.REACT_APP_API_URL?.trim();
   if (envUrl) {
     try {
@@ -27,13 +17,26 @@ export const getApiHost = () => {
       }
       const url = new URL(cleanUrl);
       const cleanHost = `${url.protocol}//${url.host}`;
-      console.log("🔧 [API Config] Cleaned env URL:", envUrl, "→", cleanHost);
+      console.log("🔧 [API Config] Using explicit REACT_APP_API_URL:", envUrl, "→", cleanHost);
       return cleanHost;
     } catch (e) {
-      console.warn("⚠️ Invalid REACT_APP_API_URL, using default:", e.message);
+      console.warn("⚠️ Invalid REACT_APP_API_URL, ignoring:", e.message);
     }
   }
 
+  // If we are on localhost and NOT forcing remote, default to local backend with optional port override
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    const isLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "" || hostname === "::1";
+    if (isLocal && !forceRemote) {
+      const port = String(process.env.REACT_APP_API_PORT || '').trim() || '5000';
+      const localUrl = `http://localhost:${port}`;
+      console.log("🔧 [API Config] Detected localhost - using", localUrl, "(override via REACT_APP_API_PORT or REACT_APP_FORCE_REMOTE=true)");
+      return localUrl;
+    }
+  }
+
+  // Fallback to Render URL when not local or when forced remote
   return "https://admintfs.onrender.com";
 };
 

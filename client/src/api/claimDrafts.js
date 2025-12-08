@@ -28,8 +28,8 @@ export const getLastDraft = async () => {
   }
 };
 
-export const deleteDraftByPolicy = async (policy) => {
-  await axios.delete(`${BASE_URL}/${encodeURIComponent(policy)}`);
+export const deleteDraftByPolicy = async (policy, reason) => {
+  await axios.delete(`${BASE_URL}/${encodeURIComponent(policy)}`, { data: { reason } });
   return true;
 };
 

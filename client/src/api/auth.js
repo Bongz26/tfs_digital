@@ -347,6 +347,27 @@ export const updateUserStatus = async (userId, active) => {
   return data;
 };
 
+/**
+ * Delete user (Admin only)
+ */
+export const deleteUser = async (userId, confirmEmail, reason) => {
+  const token = getAccessToken();
+  const response = await fetch(`${AUTH_URL}/users/${userId}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ confirm_email: confirmEmail, reason })
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to delete user');
+  }
+  return data;
+};
+
 export default {
   login,
   logout,

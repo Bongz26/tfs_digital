@@ -14,7 +14,10 @@ import StockManagement from './pages/StockManagement';
 import PurchaseOrdersPage from './pages/purchaseOrders';
 import TestNavigation from './pages/TestNavigation';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import UserManagement from './pages/UserManagement';
+import AirtimeRequests from './pages/AirtimeRequests';
 import './index.css';
 
 function Navigation() {
@@ -37,7 +40,7 @@ function Navigation() {
   };
 
   // Don't show navigation on login page
-  if (location.pathname === '/login') {
+  if (location.pathname === '/login' || location.pathname === '/forgot-password' || location.pathname === '/reset-password') {
     return null;
   }
 
@@ -177,6 +180,14 @@ function Navigation() {
           >
             Repatriation Trip
           </Link>
+          <Link 
+            to="/airtime-requests" 
+            className={`px-3 py-2 rounded transition ${
+              isActive('/airtime-requests') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+            }`}
+          >
+            Airtime Requests
+          </Link>
           {/* Admin-only: Users link */}
           {isAuthenticated && user?.role === 'admin' && (
             <Link 
@@ -264,6 +275,15 @@ function Navigation() {
             >
               Repatriation Trip
             </Link>
+            <Link 
+              to="/airtime-requests" 
+              onClick={() => setMobileMenuOpen(false)}
+              className={`block px-4 py-3 rounded transition ${
+                isActive('/airtime-requests') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+              }`}
+            >
+              Airtime Requests
+            </Link>
             {/* Admin-only: Users link (mobile) */}
             {isAuthenticated && user?.role === 'admin' && (
               <Link 
@@ -342,6 +362,8 @@ function AppContent() {
       <Routes>
         {/* Public route - Login */}
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/" element={
           <ProtectedRoute>
             <ConsultationForm onSubmit={console.log} />
@@ -385,6 +407,11 @@ function AppContent() {
         <Route path="/repatriation-trip" element={
           <ProtectedRoute>
             <RepatriationTripSheet />
+          </ProtectedRoute>
+        } />
+        <Route path="/airtime-requests" element={
+          <ProtectedRoute>
+            <AirtimeRequests />
           </ProtectedRoute>
         } />
       </Routes>

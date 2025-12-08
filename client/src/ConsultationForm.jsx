@@ -1,6 +1,7 @@
 // src/components/ConsultationForm.jsx
 import React, { useState, useEffect } from 'react';
 import { createCase, lookupCase } from './api/cases';
+import { createAirtimeRequest } from './api/sms';
 import { saveDraft as saveDraftServer, getDraftByPolicy as getDraftServer, getLastDraft as getLastDraftServer, deleteDraftByPolicy as deleteDraftServer, listDrafts as listDraftsServer } from './api/claimDrafts';
 
 const PLAN_DATA = {
@@ -432,6 +433,7 @@ export default function ConsultationForm() {
       : (PLAN_BENEFITS[form.plan_name] || {});
     const nextBenefitMode = isSpecialPlan ? 'benefits' : form.benefit_mode;
     const nextCashbackAmount = isSpecialPlan ? 0 : (form.benefit_mode === 'cashback' ? (benefits.cover || 0) : 0);
+    const hasAirtimeBenefit = (typeof benefits.airtime !== 'undefined') && nextBenefitMode === 'benefits';
     setForm(prev => ({
       ...prev,
       casket_type: benefits.casket || '',
@@ -440,6 +442,7 @@ export default function ConsultationForm() {
       cashback_amount: nextCashbackAmount,
       benefit_mode: nextBenefitMode,
       programs: benefits.programmes || prev.programs,
+      airtime: hasAirtimeBenefit ? true : false,
       // You can auto-set more fields if needed, e.g., requires_flower: !!benefits.flower
     }));
   }, [form.plan_name, form.plan_category, form.benefit_mode]);
@@ -1085,7 +1088,9 @@ export default function ConsultationForm() {
                             } catch (e) {}
                           }} className="px-3 py-1 rounded bg-green-600 text-white text-sm">Load</button>
                           <button type="button" onClick={async () => {
-                            try { await deleteDraftServer(d.policy_number); } catch (_) {}
+                            const reason = window.prompt('Enter reason for deletion');
+                            if (reason == null) return;
+                            try { await deleteDraftServer(d.policy_number, reason); } catch (_) {}
                             setServerDrafts(prev => prev.filter(x => x.policy_number !== d.policy_number));
                           }} className="px-3 py-1 rounded bg-red-600 text-white text-sm">Delete</button>
                         </div>
@@ -1319,6 +1324,39 @@ export default function ConsultationForm() {
                   <input type="number" placeholder="0.00" value={form.total_price} onChange={e => handleInputChange('total_price', e.target.value)} className="w-40 px-4 py-3 border-2 rounded-lg text-right text-2xl font-bold" />
                 )}
               </div>
+              {form.airtime && (
+                <div className="mt-4 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const b = PLAN_BENEFITS[form.plan_name] || {};
+                        const amount = typeof b.airtime !== 'undefined' ? parseFloat(b.airtime) : 0;
+                        if (!form.airtime_network || !form.airtime_number) {
+                          setMessage('Provide Network and Number for airtime request');
+                          return;
+                        }
+                        const req = await createAirtimeRequest({
+                          case_id: null,
+                          policy_number: form.policy_number || '',
+                          beneficiary_name: form.nok_name || '',
+                          network: form.airtime_network,
+                          phone_number: form.airtime_number,
+                          amount,
+                          notes: `Auto from plan ${form.plan_name}`
+                        });
+                        setMessage(`Airtime request created (Status: ${req.status})`);
+                      } catch (e) {
+                        setMessage('Failed to create airtime request');
+                      }
+                    }}
+                    className="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold"
+                  >
+                    Send Airtime Request
+                  </button>
+                  <span className="text-sm text-gray-600">Operator will be notified</span>
+                </div>
+              )}
             </div>
 
           </div>

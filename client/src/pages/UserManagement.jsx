@@ -9,7 +9,8 @@ import {
   getAllUsers, 
   createUser, 
   updateUserRole, 
-  updateUserStatus 
+  updateUserStatus,
+  deleteUser
 } from '../api/auth';
 
 export default function UserManagement() {
@@ -96,6 +97,28 @@ export default function UserManagement() {
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError(err.message || 'Failed to update status');
+    }
+  };
+
+  const handleDeleteUser = async (u) => {
+    try {
+      if (u.user_id === currentUser?.id) {
+        setError('You cannot delete your own account');
+        return;
+      }
+      const typed = window.prompt(`Type the user's email to confirm deletion:\n${u.email}`);
+      if (!typed || String(typed).toLowerCase() !== String(u.email).toLowerCase()) {
+        setError('Confirmation email does not match');
+        setTimeout(() => setError(''), 3000);
+        return;
+      }
+      const reason = window.prompt('Optional: reason for deletion (will be logged)') || '';
+      await deleteUser(u.user_id, typed, reason);
+      setSuccess('User deleted successfully');
+      await fetchUsers();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.message || 'Failed to delete user');
     }
   };
 
@@ -402,16 +425,24 @@ export default function UserManagement() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {user.user_id !== currentUser?.id && (
-                          <button
-                            onClick={() => handleStatusToggle(user.user_id, user.active)}
-                            className={`px-3 py-1 rounded text-sm font-medium transition ${
-                              user.active
-                                ? 'text-red-600 hover:bg-red-50'
-                                : 'text-green-600 hover:bg-green-50'
-                            }`}
-                          >
-                            {user.active ? 'Deactivate' : 'Activate'}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleStatusToggle(user.user_id, user.active)}
+                              className={`px-3 py-1 rounded text-sm font-medium transition ${
+                                user.active
+                                  ? 'text-red-600 hover:bg-red-50'
+                                  : 'text-green-600 hover:bg-green-50'
+                              }`}
+                            >
+                              {user.active ? 'Deactivate' : 'Activate'}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(user)}
+                              className="px-3 py-1 rounded text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>

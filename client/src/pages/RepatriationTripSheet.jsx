@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { API_HOST } from '../api/config';
+import { getAccessToken } from '../api/auth';
 
 export default function RepatriationTripSheet() {
   const [form, setForm] = useState({
@@ -22,6 +23,7 @@ export default function RepatriationTripSheet() {
   const [lastClosingOdo, setLastClosingOdo] = useState('');
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [authError, setAuthError] = useState('');
 
   const handleChange = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -50,12 +52,26 @@ export default function RepatriationTripSheet() {
     // Load vehicles and drivers for selection
     (async () => {
       try {
-        const vRes = await fetch(`${API_HOST}/api/vehicles`);
+        const token = getAccessToken();
+        const vRes = await fetch(`${API_HOST}/api/vehicles`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (vRes.status === 401) {
+          setAuthError('Your session has expired. Please login again to load vehicles and drivers.');
+          return;
+        }
         const vJson = await vRes.json();
         setVehicles(Array.isArray(vJson.vehicles) ? vJson.vehicles : []);
       } catch (e) {}
       try {
-        const dRes = await fetch(`${API_HOST}/api/drivers`);
+        const token2 = getAccessToken();
+        const dRes = await fetch(`${API_HOST}/api/drivers`, {
+          headers: token2 ? { Authorization: `Bearer ${token2}` } : {}
+        });
+        if (dRes.status === 401) {
+          setAuthError('Your session has expired. Please login again to load vehicles and drivers.');
+          return;
+        }
         const dJson = await dRes.json();
         setDrivers(Array.isArray(dJson.drivers) ? dJson.drivers : []);
       } catch (e) {}
@@ -67,7 +83,14 @@ export default function RepatriationTripSheet() {
     (async () => {
       if (!form.vehicle_id) return;
       try {
-        const res = await fetch(`${API_HOST}/api/repatriation-trips/last-closing?vehicleId=${form.vehicle_id}`);
+        const token = getAccessToken();
+        const res = await fetch(`${API_HOST}/api/repatriation-trips/last-closing?vehicleId=${form.vehicle_id}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (res.status === 401) {
+          setAuthError('Your session has expired. Please login again to load last odometer closing.');
+          return;
+        }
         const json = await res.json();
         if (json && json.success) {
           setLastClosingOdo(json.last_closing ?? '');
@@ -83,6 +106,12 @@ export default function RepatriationTripSheet() {
           <h1 className="text-2xl font-bold text-red-700">Repatriation Trip Sheet</h1>
           <button onClick={handlePrint} className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold">Print</button>
         </div>
+
+        {authError && (
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            {authError} <a href="/login" className="underline ml-1">Login</a>
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           <div className="p-6 border-b">
@@ -208,9 +237,13 @@ export default function RepatriationTripSheet() {
                     notes: null,
                     created_by: 'system'
                   };
+                  const token = getAccessToken();
                   const res = await fetch(`${API_HOST}/api/repatriation-trips`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                      'Content-Type': 'application/json',
+                      ...(token ? { Authorization: `Bearer ${token}` } : {})
+                    },
                     body: JSON.stringify(payload)
                   });
                   const json = await res.json();

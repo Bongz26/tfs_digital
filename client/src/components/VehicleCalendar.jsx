@@ -1,16 +1,27 @@
 // client/src/components/VehicleCalendar.jsx
 import React, { useEffect, useState } from 'react';
 import { API_HOST } from '../api/config';
+import { getAccessToken } from '../api/auth';
 
 export default function VehicleCalendar() {
   const [roster, setRoster] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('upcoming');
+  const [authError, setAuthError] = useState('');
 
   useEffect(() => {
     const API_URL = API_HOST;
-    fetch(`${API_URL}/api/roster`)
-      .then(res => res.ok ? res.json() : Promise.reject(`HTTP ${res.status}`))
+    const token = getAccessToken();
+    fetch(`${API_URL}/api/roster`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+      .then(res => {
+        if (res.status === 401) {
+          setAuthError('Your session has expired. Please login again to view the live roster.');
+          return Promise.reject('HTTP 401');
+        }
+        return res.ok ? res.json() : Promise.reject(`HTTP ${res.status}`);
+      })
       .then(data => setRoster(data.roster || []))
       .catch(err => {
         console.error('Roster fetch error:', err);
@@ -96,6 +107,11 @@ export default function VehicleCalendar() {
 
   return (
     <div>
+      {authError && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+          {authError} <a href="/login" className="underline ml-1">Login</a>
+        </div>
+      )}
       {/* View Mode Toggle */}
       <div className="mb-6 flex justify-center">
         <div className="inline-flex rounded-lg border-2 border-red-200 bg-white p-1 shadow-sm">
