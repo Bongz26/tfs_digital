@@ -574,7 +574,7 @@ export default function ConsultationForm() {
   };
 
   const loadDraftByPolicy = async () => {
-    const policy = String(draftQuery || '').trim();
+    const policy = String(draftQuery || '').trim()
     if (!policy) {
       setMessage('Enter policy number to load draft');
       return;
@@ -707,7 +707,11 @@ export default function ConsultationForm() {
       try {
         await saveDraftServer({ policy_number: data.policy_number, data, department: 'claims' });
         setMessage('Claim draft saved to server');
-      } catch (err) {}
+      } catch (err) {
+        const serverErr = err.response?.data;
+        const detail = serverErr?.details || serverErr?.hint || serverErr?.error;
+        setMessage(`Remote save failed: ${detail || err.message}`);
+      }
       
       const key = `tfs_claim_draft_${data.policy_number}`;
       const stamped = { ...data, saved_at: new Date().toISOString() };

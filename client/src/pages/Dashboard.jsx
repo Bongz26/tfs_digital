@@ -2,8 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import VehicleCalendar from '../components/VehicleCalendar';
-import { API_HOST } from '../api/config';
 import { searchCases } from '../api/cases';
+import { fetchDashboardData as apiFetchDashboardData } from '../api/dashboard';
 
 function getUpcomingSaturday() {
   const today = new Date();
@@ -44,22 +44,11 @@ export default function Dashboard() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState('');
 
-  // Use shared API config to ensure localhost detection works correctly
-  const API_URL = API_HOST;
-
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const loadDashboardData = async () => {
       try {
         setLoading(true);
-        const url = `${API_URL}/api/dashboard?recentLimit=5`;
-        console.log('🔍 [Dashboard] Fetching from:', url);
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-        
-        const data = await response.json();
+        const data = await apiFetchDashboardData({ recentLimit: 5 });
         
         // Set stats from dashboard response
         setStats({
@@ -83,7 +72,7 @@ export default function Dashboard() {
       }
     };
 
-    fetchDashboardData();
+    loadDashboardData();
   }, []);
 
   const handleSearch = async (e) => {

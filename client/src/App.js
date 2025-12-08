@@ -1,8 +1,10 @@
 // src/App.js
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import { getAccessToken, clearAuthData } from './api/auth';
 import ConsultationForm from './ConsultationForm';
 import RepatriationTripSheet from './pages/RepatriationTripSheet';
 import Dashboard from './pages/Dashboard';
@@ -311,6 +313,27 @@ function Navigation() {
 }
 
 function AppContent() {
+  axios.interceptors.request.use((config) => {
+    const token = getAccessToken();
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  });
+  axios.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      const status = error?.response?.status;
+      if (status === 401) {
+        clearAuthData();
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
+      }
+      return Promise.reject(error);
+    }
+  );
   return (
     <>
       <Navigation />
@@ -319,26 +342,6 @@ function AppContent() {
       <Routes>
         {/* Public route - Login */}
         <Route path="/login" element={<Login />} />
-
-        {/* 
-          Protected Routes - Uncomment the ProtectedRoute wrapper when ready to enforce auth
-          For now, routes are accessible to allow testing
-        */}
-        
-        {/* Option 1: Routes WITHOUT protection (current - for testing) */}
-        <Route path="/" element={<ConsultationForm onSubmit={console.log} />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/cases/:id" element={<CaseDetails />} />
-        <Route path="/active-cases" element={<ActiveCases />} />
-        <Route path="/stock" element={<StockManagement />} />
-        <Route path="/purchase" element={<PurchaseOrdersPage />} />
-        <Route path="/users" element={<UserManagement />} />
-        <Route path="/test-navigation" element={<TestNavigation />} />
-        <Route path="/repatriation-trip" element={<RepatriationTripSheet />} />
-
-        {/* 
-          Option 2: Routes WITH protection (uncomment when ready)
-          
         <Route path="/" element={
           <ProtectedRoute>
             <ConsultationForm onSubmit={console.log} />
@@ -360,16 +363,30 @@ function AppContent() {
           </ProtectedRoute>
         } />
         <Route path="/stock" element={
-          <ProtectedRoute requiredRole="staff">
+          <ProtectedRoute>
             <StockManagement />
           </ProtectedRoute>
         } />
         <Route path="/purchase" element={
-          <ProtectedRoute requiredRole="manager">
+          <ProtectedRoute>
             <PurchaseOrdersPage />
           </ProtectedRoute>
         } />
-        */}
+        <Route path="/users" element={
+          <ProtectedRoute>
+            <UserManagement />
+          </ProtectedRoute>
+        } />
+        <Route path="/test-navigation" element={
+          <ProtectedRoute>
+            <TestNavigation />
+          </ProtectedRoute>
+        } />
+        <Route path="/repatriation-trip" element={
+          <ProtectedRoute>
+            <RepatriationTripSheet />
+          </ProtectedRoute>
+        } />
       </Routes>
     </>
   );
