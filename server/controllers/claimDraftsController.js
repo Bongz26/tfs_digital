@@ -59,8 +59,42 @@ exports.listDrafts = async (req, res) => {
 exports.deleteDraft = async (req, res) => {
   try {
     const { policy } = req.params;
+    const reason = (req.body && req.body.reason) ? String(req.body.reason).trim() : '';
+
     const result = await query('DELETE FROM claim_drafts WHERE policy_number = $1 RETURNING *', [policy]);
     if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Draft not found' });
+
+    // Ensure deletion log table exists
+    await query(`
+      CREATE TABLE IF NOT EXISTS claim_draft_deletions (
+        id SERIAL PRIMARY KEY,
+        policy_number VARCHAR(100) NOT NULL,
+        department VARCHAR(50),
+        data JSONB,
+        deleted_by UUID,
+        deleted_by_email VARCHAR(200),
+        deleted_by_role VARCHAR(50),
+        reason TEXT,
+        deleted_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    const deletedRow = result.rows[0];
+    const user = req.user || {};
+    await query(
+      `INSERT INTO claim_draft_deletions (policy_number, department, data, deleted_by, deleted_by_email, deleted_by_role, reason)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        deletedRow.policy_number,
+        deletedRow.department || null,
+        deletedRow.data || null,
+        user.id || null,
+        user.email || null,
+        user.role || null,
+        reason || null
+      ]
+    );
+
     res.json({ success: true, deleted: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

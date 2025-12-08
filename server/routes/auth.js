@@ -35,6 +35,23 @@ const getSupabaseAdmin = () => {
   return supabaseAdmin;
 };
 
+async function findUserByEmail(adminClient, email) {
+  const target = String(email || '').toLowerCase();
+  const perPage = 200;
+  for (let page = 1; page <= 15; page++) {
+    try {
+      const { data } = await adminClient.auth.admin.listUsers({ page, perPage });
+      const match = (data?.users || []).find(u => String(u.email || '').toLowerCase() === target);
+      if (match) return match;
+      if (!data || !Array.isArray(data.users) || data.users.length < perPage) break;
+    } catch (e) {
+      console.warn('⚠️  [findUserByEmail] listUsers failed', { page, error: e?.message });
+      break;
+    }
+  }
+  return null;
+}
+
 /**
  * POST /api/auth/register
  * Register a new user
@@ -621,6 +638,13 @@ router.post('/users/create', requireAuth, requireRole([ROLES.ADMIN]), async (req
     const validRoles = Object.values(ROLES);
     const userRole = validRoles.includes(role) ? role : 'staff';
 
+    console.log('📥 [CreateUser] Request received', {
+      email,
+      full_name: full_name || null,
+      phone: phone || null,
+      role: userRole
+    });
+
     const adminClient = getSupabaseAdmin();
     if (!adminClient) {
       return res.status(500).json({
@@ -629,21 +653,100 @@ router.post('/users/create', requireAuth, requireRole([ROLES.ADMIN]), async (req
       });
     }
 
+    // Check if user already exists in Supabase Auth and reactivate/update if so
+    let existingUser = await findUserByEmail(adminClient, email);
+    if (existingUser) {
+      console.log('🔎 [CreateUser] Existing auth user found', { id: existingUser.id, email: existingUser.email });
+    } else {
+      console.log('🔎 [CreateUser] No existing auth user found for email');
+    }
+
+    if (existingUser) {
+      // Update existing user with new password and metadata, and ensure profile exists
+      console.log('♻️ [CreateUser] Updating existing auth user');
+      await adminClient.auth.admin.updateUserById(existingUser.id, {
+        password,
+        user_metadata: {
+          full_name: full_name || existingUser.user_metadata?.full_name || email.split('@')[0]
+        }
+      });
+
+      // Upsert profile
+      const { error: profileUpsertError } = await adminClient
+        .from('user_profiles')
+        .upsert({
+          user_id: existingUser.id,
+          email: email,
+          full_name: full_name || email.split('@')[0],
+          phone: phone || null,
+          role: userRole,
+          active: true,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' });
+
+      if (profileUpsertError) {
+        console.error('⚠️ Error upserting user profile:', profileUpsertError);
+      }
+
+      console.log(`♻️ User reactivated/updated by admin: ${email} (role: ${userRole})`);
+      return res.status(200).json({
+        success: true,
+        message: 'Existing user updated and reactivated',
+        user: {
+          id: existingUser.id,
+          email: existingUser.email,
+          role: userRole
+        }
+      });
+    }
+
     // Create user with admin client
+    console.log('🆕 [CreateUser] Creating new auth user');
     const { data, error } = await adminClient.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // Auto-confirm email
+      email_confirm: true,
       user_metadata: {
         full_name: full_name || email.split('@')[0]
       }
     });
 
     if (error) {
-      return res.status(400).json({
-        success: false,
-        error: error.message
-      });
+      console.warn('⚠️  [CreateUser] createUser failed', { error: error.message });
+      // If already registered, try to locate and update existing user
+      const msg = String(error.message || '').toLowerCase();
+      if (msg.includes('already') && msg.includes('registered')) {
+        try {
+          const found2 = await findUserByEmail(adminClient, email);
+          if (found2) {
+            console.log('♻️ [CreateUser] Found existing user after create failure, updating');
+            await adminClient.auth.admin.updateUserById(found2.id, {
+              password,
+              user_metadata: { full_name: full_name || email.split('@')[0] }
+            });
+            const { error: profileUpsertError2 } = await adminClient
+              .from('user_profiles')
+              .upsert({
+                user_id: found2.id,
+                email,
+                full_name: full_name || email.split('@')[0],
+                phone: phone || null,
+                role: userRole,
+                active: true,
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'user_id' });
+            if (profileUpsertError2) console.error('⚠️  [CreateUser] Profile upsert error:', profileUpsertError2);
+            return res.status(200).json({
+              success: true,
+              message: 'Existing user updated and reactivated',
+              user: { id: found2.id, email: found2.email, role: userRole }
+            });
+          }
+        } catch (e2) {
+          console.warn('⚠️  [CreateUser] Fallback update failed', { error: e2?.message });
+        }
+      }
+      return res.status(400).json({ success: false, error: error.message });
     }
 
     // Create user profile with role
@@ -673,13 +776,75 @@ router.post('/users/create', requireAuth, requireRole([ROLES.ADMIN]), async (req
         role: userRole
       }
     });
-
+  
   } catch (err) {
     console.error('❌ Create user error:', err);
     res.status(500).json({
       success: false,
       error: 'Failed to create user'
     });
+  }
+});
+
+/**
+ * DELETE /api/auth/users/:id
+ * Permanently delete a user (Admin only)
+ * Requires confirmation: provide `confirm_email` in body matching the user's email
+ * Safety: cannot delete self
+ */
+router.delete('/users/:id', requireAuth, requireRole([ROLES.ADMIN]), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { confirm_email, reason } = req.body || {};
+
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'User id is required' });
+    }
+
+    if (id === req.user.id) {
+      return res.status(400).json({ success: false, error: 'Cannot delete your own account' });
+    }
+
+    const adminClient = getSupabaseAdmin();
+    if (!adminClient) {
+      return res.status(500).json({ success: false, error: 'Admin service unavailable. Set SUPABASE_SERVICE_KEY in environment.' });
+    }
+
+    // Fetch user profile to verify email
+    const { data: profile, error: profileErr } = await adminClient
+      .from('user_profiles')
+      .select('user_id, email, full_name, role, active, created_at')
+      .eq('user_id', id)
+      .single();
+
+    if (profileErr && profileErr.code !== 'PGRST116') {
+      return res.status(500).json({ success: false, error: 'Failed to fetch user profile' });
+    }
+
+    const emailToCheck = profile?.email;
+    if (!emailToCheck) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    if (!confirm_email || String(confirm_email).toLowerCase() !== String(emailToCheck).toLowerCase()) {
+      return res.status(400).json({ success: false, error: 'Confirmation email does not match user email' });
+    }
+
+    // Delete from Supabase Auth
+    const { error: delErr } = await adminClient.auth.admin.deleteUser(id);
+    if (delErr) {
+      return res.status(400).json({ success: false, error: delErr.message || 'Failed to delete auth user' });
+    }
+
+    // Remove profile row
+    await adminClient.from('user_profiles').delete().eq('user_id', id);
+
+    console.log(`🗑️ User ${id} (${emailToCheck}) deleted by ${req.user.email}${reason ? ` — reason: ${reason}` : ''}`);
+
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (err) {
+    console.error('❌ Delete user error:', err);
+    res.status(500).json({ success: false, error: 'Failed to delete user' });
   }
 });
 
