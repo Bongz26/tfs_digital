@@ -19,6 +19,7 @@ const driversRoutes = require('./routes/drivers');
 const directionsRoutes = require('./routes/directions');
 const repatriationTripsRoutes = require('./routes/repatriationTrips');
 const claimDraftsRoutes = require('./routes/claimDrafts');
+const { requireAuth } = require('./middleware/auth');
 const authRoutes = require('./routes/auth');
 
 const app = express();
@@ -49,21 +50,21 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // Routes
-app.use('/api/auth', authRoutes);  // Auth routes (public)
-app.use('/api/inventory', inventoryRoutes);
-app.use('/api/cases', casesRoutes);
-app.use('/api/purchase-orders', purchaseOrdersRouter);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/active-cases', activeCasesRoutes);
-app.use('/api/vehicles', vehiclesRoutes);
-app.use('/api/roster', rosterRoutes);
-app.use('/api/livestock', livestockRoutes);
-app.use('/api/checklist', checklistRoutes);
-app.use('/api/sms', smsRoutes);
-app.use('/api/drivers', driversRoutes);
-app.use('/api/directions', directionsRoutes);
-app.use('/api/repatriation-trips', repatriationTripsRoutes);
-app.use('/api/claim-drafts', claimDraftsRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/inventory', requireAuth, inventoryRoutes);
+app.use('/api/cases', requireAuth, casesRoutes);
+app.use('/api/purchase-orders', requireAuth, purchaseOrdersRouter);
+app.use('/api/dashboard', requireAuth, dashboardRoutes);
+app.use('/api/active-cases', requireAuth, activeCasesRoutes);
+app.use('/api/vehicles', requireAuth, vehiclesRoutes);
+app.use('/api/roster', requireAuth, rosterRoutes);
+app.use('/api/livestock', requireAuth, livestockRoutes);
+app.use('/api/checklist', requireAuth, checklistRoutes);
+app.use('/api/sms', requireAuth, smsRoutes);
+app.use('/api/drivers', requireAuth, driversRoutes);
+app.use('/api/directions', requireAuth, directionsRoutes);
+app.use('/api/repatriation-trips', requireAuth, repatriationTripsRoutes);
+app.use('/api/claim-drafts', requireAuth, claimDraftsRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

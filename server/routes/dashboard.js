@@ -96,6 +96,7 @@ router.get('/', async (req, res) => {
     const { data: recentCases, error: recentError } = await supabase
       .from('cases')
       .select('id,case_number,deceased_name,status,funeral_date,funeral_time,deceased_id,nok_name,nok_contact,created_at')
+      .neq('status', 'archived')
       .order('created_at', { ascending: false })
       .limit(recentLimit);
 
