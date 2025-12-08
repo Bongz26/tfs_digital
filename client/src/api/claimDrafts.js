@@ -32,3 +32,10 @@ export const deleteDraftByPolicy = async (policy) => {
   await axios.delete(`${BASE_URL}/${encodeURIComponent(policy)}`);
   return true;
 };
+
+export const listDrafts = async (department) => {
+  const params = {};
+  if (department) params.department = department;
+  const res = await axios.get(BASE_URL, { params });
+  return res.data.drafts || [];
+};

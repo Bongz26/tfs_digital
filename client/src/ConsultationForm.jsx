@@ -1,7 +1,7 @@
 // src/components/ConsultationForm.jsx
 import React, { useState, useEffect } from 'react';
 import { createCase, lookupCase } from './api/cases';
-import { saveDraft as saveDraftServer, getDraftByPolicy as getDraftServer, getLastDraft as getLastDraftServer, deleteDraftByPolicy as deleteDraftServer } from './api/claimDrafts';
+import { saveDraft as saveDraftServer, getDraftByPolicy as getDraftServer, getLastDraft as getLastDraftServer, deleteDraftByPolicy as deleteDraftServer, listDrafts as listDraftsServer } from './api/claimDrafts';
 
 const PLAN_DATA = {
   motjha: {
@@ -381,6 +381,7 @@ export default function ConsultationForm() {
   const [draftsOpen, setDraftsOpen] = useState(false);
   const [draftQuery, setDraftQuery] = useState('');
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [serverDrafts, setServerDrafts] = useState([]);
 
   useEffect(() => {
     const timeout = setTimeout(async () => {
@@ -442,6 +443,21 @@ export default function ConsultationForm() {
       // You can auto-set more fields if needed, e.g., requires_flower: !!benefits.flower
     }));
   }, [form.plan_name, form.plan_category, form.benefit_mode]);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      if (!draftsOpen) return;
+      try {
+        const drafts = await listDraftsServer('claims');
+        if (mounted) setServerDrafts(drafts);
+      } catch (e) {
+        if (mounted) setServerDrafts([]);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, [draftsOpen]);
 
   const getAutoPrice = () => {
     if (form.plan_category === 'colour_grade') return 0;
@@ -1048,9 +1064,35 @@ export default function ConsultationForm() {
               </div>
               {draftsOpen && (
                 <div className="mt-4 max-h-56 overflow-auto bg-white border border-yellow-200 rounded-lg">
-                  {getDrafts().length === 0 ? (
-                    <div className="p-4 text-sm text-gray-600">No drafts found</div>
-                  ) : (
+                  {serverDrafts && serverDrafts.length > 0 && (
+                    serverDrafts.map((d) => (
+                      <div key={`srv_${d.policy_number}`} className="flex items-center justify-between p-3 border-b">
+                        <div className="text-sm">
+                          <span className="font-bold">{d.policy_number}</span>
+                          <span className="ml-2 text-gray-500">{d.updated_at ? new Date(d.updated_at).toLocaleString() : ''}</span>
+                          {d.department && <span className="ml-2 text-gray-400">{d.department}</span>}
+                        </div>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={async () => {
+                            try {
+                              const serverDraft = await getDraftServer(d.policy_number);
+                              if (serverDraft && serverDraft.data) {
+                                setForm(prev => ({ ...prev, ...serverDraft.data }));
+                                setMessage('Draft loaded from server');
+                                setDraftsOpen(false);
+                                setDraftQuery('');
+                              }
+                            } catch (e) {}
+                          }} className="px-3 py-1 rounded bg-green-600 text-white text-sm">Load</button>
+                          <button type="button" onClick={async () => {
+                            try { await deleteDraftServer(d.policy_number); } catch (_) {}
+                            setServerDrafts(prev => prev.filter(x => x.policy_number !== d.policy_number));
+                          }} className="px-3 py-1 rounded bg-red-600 text-white text-sm">Delete</button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  {getDrafts().length > 0 && (
                     getDrafts().map(({ key, data }) => (
                       <div key={key} className="flex items-center justify-between p-3 border-b last:border-b-0">
                         <div className="text-sm">
@@ -1064,6 +1106,9 @@ export default function ConsultationForm() {
                         </div>
                       </div>
                     ))
+                  )}
+                  {(!serverDrafts || serverDrafts.length === 0) && getDrafts().length === 0 && (
+                    <div className="p-4 text-sm text-gray-600">No drafts found</div>
                   )}
                 </div>
               )}
