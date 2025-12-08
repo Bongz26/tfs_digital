@@ -16,7 +16,10 @@ export default function RepatriationTripSheet() {
     to_address: '',
     odometer_closing: '',
     time_out: '',
-    time_in: ''
+    time_in: '',
+    vehicle_id: '',
+    driver_id: '',
+    collection_type: ''
   });
 
   const [printMode, setPrintMode] = useState(false);
@@ -165,23 +168,36 @@ export default function RepatriationTripSheet() {
                 ))}
               </select>
             </div>
-              <div>
-                <label className="text-sm font-semibold">From</label>
-                <input value={form.from_location} onChange={e => handleChange('from_location', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-              </div>
-              <div>
-                <label className="text-sm font-semibold">Address</label>
-                <input value={form.from_address} onChange={e => handleChange('from_address', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-              </div>
-              <div>
-                <label className="text-sm font-semibold">To</label>
-                <input value={form.to_location} onChange={e => handleChange('to_location', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-              </div>
-              <div>
-                <label className="text-sm font-semibold">Address</label>
-                <input value={form.to_address} onChange={e => handleChange('to_address', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+            <div className="md:col-span-2">
+              <label className="text-sm font-semibold">Collection Type</label>
+              <div className="flex items-center gap-6 mt-2">
+                <label className="inline-flex items-center gap-2">
+                  <input type="radio" name="collection_type" value="book" checked={form.collection_type === 'book'} onChange={e => handleChange('collection_type', e.target.value)} />
+                  <span>Book</span>
+                </label>
+                <label className="inline-flex items-center gap-2">
+                  <input type="radio" name="collection_type" value="private" checked={form.collection_type === 'private'} onChange={e => handleChange('collection_type', e.target.value)} />
+                  <span>Private</span>
+                </label>
               </div>
             </div>
+            <div>
+              <label className="text-sm font-semibold">From</label>
+              <input value={form.from_location} onChange={e => handleChange('from_location', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+            </div>
+            <div>
+              <label className="text-sm font-semibold">Address</label>
+              <input value={form.from_address} onChange={e => handleChange('from_address', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+            </div>
+            <div>
+              <label className="text-sm font-semibold">To</label>
+              <input value={form.to_location} onChange={e => handleChange('to_location', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+            </div>
+            <div>
+              <label className="text-sm font-semibold">Address</label>
+              <input value={form.to_address} onChange={e => handleChange('to_address', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+            </div>
+          </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div>
@@ -235,6 +251,7 @@ export default function RepatriationTripSheet() {
                     time_out: form.time_out,
                     time_in: form.time_in,
                     notes: null,
+                    collection_type: form.collection_type || null,
                     created_by: 'system'
                   };
                   const token = getAccessToken();
@@ -258,6 +275,24 @@ export default function RepatriationTripSheet() {
                       console.log('Linked/Created case_number:', json.case_number);
                     }
                     alert(`Trip saved. KM traveled: ${json.trip.km_traveled ?? 'N/A'}`);
+                    setForm({
+                      deceased_name: '',
+                      deceased_id: '',
+                      policy_number: '',
+                      date_of_death: '',
+                      family_contact_name: '',
+                      family_contact_number: '',
+                      from_location: '',
+                      from_address: '',
+                      to_location: '',
+                      to_address: '',
+                      odometer_closing: '',
+                      time_out: '',
+                      time_in: '',
+                      vehicle_id: '',
+                      driver_id: '',
+                      collection_type: ''
+                    });
                   } else {
                     alert(`Error: ${json.error || 'Failed to save trip'}`);
                   }
