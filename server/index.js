@@ -1,6 +1,8 @@
 // index.js
 require('dotenv').config();
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const { createClient } = require('@supabase/supabase-js');
@@ -70,6 +72,14 @@ app.use('/api/claim-drafts', requireAuth, requireMinRole('staff'), claimDraftsRo
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date() });
 });
+
+const clientBuildPath = path.join(__dirname, '../client/build');
+if (fs.existsSync(clientBuildPath)) {
+  app.use(express.static(clientBuildPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
+  });
+}
 
 // 404 handler
 app.use((req, res) => {

@@ -65,7 +65,8 @@ router.post('/', async (req, res) => {
       family_contact_name,
       family_contact_number,
       date_of_death,
-      policy_number
+      policy_number,
+      collection_type
     } = req.body;
 
     if (!vehicle_id || odometer_closing === undefined || odometer_closing === null) {
@@ -207,6 +208,8 @@ router.post('/', async (req, res) => {
       kmTraveled = 0;
     }
 
+    const finalNotes = [collection_type ? `collection_type:${collection_type}` : null, notes].filter(Boolean).join(' | ') || null;
+
     const insertRes = await query(
       `INSERT INTO repatriation_trips 
        (case_id, vehicle_id, driver_id, from_location, from_address, to_location, to_address, odometer_closing, km_traveled, time_out, time_in, notes, created_by)
@@ -224,7 +227,7 @@ router.post('/', async (req, res) => {
         kmTraveled,
         time_out || null,
         time_in || null,
-        notes || null,
+        finalNotes,
         created_by || null
       ]
     );
