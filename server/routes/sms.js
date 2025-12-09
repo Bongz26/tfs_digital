@@ -133,7 +133,7 @@ router.post('/send', async (req, res) => {
 
     // TODO: Integrate with actual SMS service (e.g., Twilio, AWS SNS, etc.)
     // For now, just log the message
-    
+
     // Verify case exists if case_id is provided
     if (case_id) {
       const caseResult = await query('SELECT id FROM cases WHERE id = $1', [case_id]);
@@ -156,13 +156,31 @@ router.post('/send', async (req, res) => {
     // const sendResult = await smsService.sendSMS(phone, message);
     // await query('UPDATE sms_log SET status = $1 WHERE id = $2', [sendResult.status, logResult.rows[0].id]);
 
-    res.status(201).json({ 
-      success: true, 
+    res.status(201).json({
+      success: true,
       message: logResult.rows[0],
       note: 'SMS logging enabled. Integrate with SMS service to send actual messages.'
     });
   } catch (error) {
     console.error('Error sending SMS:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Fix existing airtime requests dates from drafts
+router.post('/airtime-requests/fix-dates', requireMinRole('admin'), async (req, res) => {
+  try {
+    const result = await query(`
+      UPDATE airtime_requests ar
+      SET requested_at = cd.created_at
+      FROM claim_drafts cd
+      WHERE ar.policy_number = cd.policy_number
+        AND ar.operator_notes = 'Auto from claim draft'
+        AND cd.created_at IS NOT NULL
+    `);
+    res.json({ success: true, updated: result.rowCount || 0 });
+  } catch (error) {
+    console.error('Error fixing dates:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -194,13 +212,16 @@ async function ensureAirtimeTable() {
     )
   `);
   await query(`ALTER TABLE airtime_requests ADD COLUMN IF NOT EXISTS requested_at TIMESTAMP DEFAULT NOW()`);
-  try {
-    await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_airtime_requests_unique ON airtime_requests (policy_number, network, phone_number)`);
-  } catch (_) {}
 }
 
 async function normalizeAndDeduplicateAirtimeRequests() {
   await ensureAirtimeTable();
+
+  // First, drop the unique index if it exists (to allow deduplication)
+  try {
+    await query(`DROP INDEX IF EXISTS idx_airtime_requests_unique`);
+  } catch (_) { }
+
   // Normalize fields
   await query(`
     UPDATE airtime_requests
@@ -208,6 +229,7 @@ async function normalizeAndDeduplicateAirtimeRequests() {
         network = UPPER(TRIM(network)),
         phone_number = TRIM(phone_number)
   `);
+
   // Remove duplicates, keep latest by requested_at
   await query(`
     DELETE FROM airtime_requests ar
@@ -220,9 +242,11 @@ async function normalizeAndDeduplicateAirtimeRequests() {
     ) d
     WHERE ar.id = d.id AND d.rn > 1
   `);
+
+  // Now create the unique index after deduplication
   try {
     await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_airtime_requests_unique ON airtime_requests (policy_number, network, phone_number)`);
-  } catch (_) {}
+  } catch (_) { }
 }
 
 async function ensureAirtimeArchiveTable() {
@@ -253,6 +277,7 @@ async function ensureAirtimeArchiveTable() {
 async function archiveOldAirtimeRequests() {
   await ensureAirtimeTable();
   await ensureAirtimeArchiveTable();
+  // Archive all requests from before Dec 8, 2025 (pilot data cleanup)
   await query(`
     INSERT INTO airtime_requests_archive (
       original_id, case_id, policy_number, beneficiary_name, network, phone_number, amount,
@@ -263,10 +288,10 @@ async function archiveOldAirtimeRequests() {
            status, requested_by, requested_by_email, requested_by_role, requested_at, sent_at,
            handled_by, operator_phone, operator_notes, NOW()
     FROM airtime_requests
-    WHERE requested_at::date < CURRENT_DATE - INTERVAL '14 days'
+    WHERE requested_at::date < '2025-12-08'
     ON CONFLICT (original_id) DO NOTHING
   `);
-  const del = await query(`DELETE FROM airtime_requests WHERE requested_at::date < CURRENT_DATE - INTERVAL '14 days'`);
+  const del = await query(`DELETE FROM airtime_requests WHERE requested_at::date < '2025-12-08'`);
   return { deleted: del.rowCount || 0 };
 }
 
@@ -302,7 +327,7 @@ async function generateAirtimeRequestsFromDrafts() {
       return;
     }
     const drafts = await query(
-      `SELECT policy_number, data FROM claim_drafts
+      `SELECT policy_number, data, created_at FROM claim_drafts
        WHERE (data->>'status') = 'claim_draft'
          AND COALESCE((data->>'airtime') = 'true', false)
          AND NULLIF(TRIM(data->>'airtime_network'), '') IS NOT NULL
@@ -317,28 +342,42 @@ async function generateAirtimeRequestsFromDrafts() {
         [row.policy_number || null, phone, network]
       );
       if (exists.rows.length > 0) continue;
+
+      // Look up case_id from cases table using policy_number
+      let caseId = null;
+      if (row.policy_number) {
+        const caseResult = await query(
+          `SELECT id FROM cases WHERE policy_number = $1 LIMIT 1`,
+          [row.policy_number]
+        );
+        if (caseResult.rows.length > 0) {
+          caseId = caseResult.rows[0].id;
+        }
+      }
+
       const amount = getPlanAirtimeAmount(d.plan_name) || 0;
       const res = await query(
         `INSERT INTO airtime_requests (
           case_id, policy_number, beneficiary_name, network, phone_number, amount,
-        status, requested_by, requested_by_email, requested_by_role, operator_notes, operator_phone
-      ) VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8,$9,$10,$11)
+        status, requested_by, requested_by_email, requested_by_role, operator_notes, operator_phone, requested_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8,$9,$10,$11, $12)
       RETURNING *`,
-      [
-        null,
-        row.policy_number || null,
-        d.nok_name || null,
-        network,
-        phone,
-        parseFloat(amount || 0) || 0,
-        null,
-        null,
-        null,
-        'Auto from claim draft',
-        null
-      ]
-    );
-    
+        [
+          caseId,
+          row.policy_number || null,
+          d.nok_name || null,
+          network,
+          phone,
+          parseFloat(amount || 0) || 0,
+          null,
+          null,
+          null,
+          'Auto from claim draft',
+          null,
+          row.created_at || new Date()
+        ]
+      );
+
     }
   } catch (_) {
     return;
@@ -354,10 +393,8 @@ async function generateAirtimeRequestsFromCases() {
        WHERE airtime = true
          AND NULLIF(TRIM(airtime_network), '') IS NOT NULL
          AND NULLIF(TRIM(airtime_number), '') IS NOT NULL
-         AND (
-           status NOT IN ('completed','cancelled','archived')
-           OR (claim_date IS NOT NULL AND claim_date >= CURRENT_DATE - INTERVAL '14 days')
-         )`
+         AND claim_date >= '2025-12-08'
+         AND status NOT IN ('completed','cancelled','archived')`
     );
     for (const c of cases.rows) {
       const network = String(c.airtime_network || '').trim();
@@ -445,7 +482,7 @@ router.post('/airtime-requests', requireMinRole('staff'), async (req, res) => {
       ]
     );
 
-    
+
 
     res.status(201).json({ success: true, request: result.rows[0] });
   } catch (error) {
@@ -469,14 +506,20 @@ router.get('/airtime-requests', requireMinRole('staff'), async (req, res) => {
         ) rn
         FROM airtime_requests
       )
-      SELECT d.*, c.case_number, c.deceased_name, c.status
+      SELECT 
+        d.*,
+        COALESCE(d.case_id, c2.id) as case_id,
+        c.case_number, 
+        c.deceased_name, 
+        c.status
       FROM d
       LEFT JOIN cases c ON d.case_id = c.id
+      LEFT JOIN cases c2 ON d.policy_number = c2.policy_number AND d.case_id IS NULL
       WHERE d.rn = 1
+        AND d.requested_at::date >= '2025-12-08'
         AND (
           c.status IS NULL
           OR c.status NOT IN ('completed','cancelled','archived')
-          OR d.requested_at::date >= CURRENT_DATE - INTERVAL '14 days'
         )
       ORDER BY d.requested_at DESC
     `);
@@ -502,7 +545,7 @@ router.patch('/airtime-requests/:id/status', requireMinRole('staff'), async (req
     await ensureAirtimeTable();
     const { status, operator_notes } = req.body;
     const user = req.user || {};
-    const allowed = ['pending','sent','failed','cancelled'];
+    const allowed = ['pending', 'sent', 'failed', 'cancelled'];
     if (!allowed.includes(String(status || '').toLowerCase())) {
       return res.status(400).json({ success: false, error: 'Invalid status' });
     }
@@ -523,6 +566,72 @@ router.patch('/airtime-requests/:id/status', requireMinRole('staff'), async (req
     res.json({ success: true, request: result.rows[0] });
   } catch (error) {
     console.error('Error updating airtime status:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Fix existing airtime requests to have case_ids
+router.post('/airtime-requests/fix-case-ids', requireMinRole('admin'), async (req, res) => {
+  try {
+    await ensureAirtimeTable();
+    const result = await query(`
+      UPDATE airtime_requests ar
+      SET case_id = c.id
+      FROM cases c
+      WHERE ar.policy_number = c.policy_number
+        AND ar.case_id IS NULL
+        AND ar.policy_number IS NOT NULL
+    `);
+    res.json({ success: true, updated: result.rowCount || 0 });
+  } catch (error) {
+    console.error('Error fixing case IDs:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Status endpoint to check airtime requests setup
+router.get('/airtime-requests/status', requireMinRole('staff'), async (req, res) => {
+  try {
+    await ensureAirtimeTable();
+
+    // Count total requests
+    const total = await query(`SELECT COUNT(*) as count FROM airtime_requests`);
+
+    // Count requests with case_id
+    const withCaseId = await query(`SELECT COUNT(*) as count FROM airtime_requests WHERE case_id IS NOT NULL`);
+
+    // Count requests without case_id
+    const withoutCaseId = await query(`SELECT COUNT(*) as count FROM airtime_requests WHERE case_id IS NULL`);
+
+    // Count by date
+    const byDate = await query(`
+      SELECT requested_at::date as date, COUNT(*) as count 
+      FROM airtime_requests 
+      GROUP BY requested_at::date 
+      ORDER BY date DESC 
+      LIMIT 10
+    `);
+
+    // Sample requests
+    const samples = await query(`
+      SELECT id, policy_number, case_id, requested_at, operator_notes
+      FROM airtime_requests 
+      ORDER BY requested_at DESC 
+      LIMIT 5
+    `);
+
+    res.json({
+      success: true,
+      status: {
+        total: parseInt(total.rows[0]?.count || 0),
+        withCaseId: parseInt(withCaseId.rows[0]?.count || 0),
+        withoutCaseId: parseInt(withoutCaseId.rows[0]?.count || 0),
+        byDate: byDate.rows,
+        samples: samples.rows
+      }
+    });
+  } catch (error) {
+    console.error('Error getting airtime status:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
