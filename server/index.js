@@ -80,6 +80,21 @@ if (fs.existsSync(clientBuildPath)) {
     res.sendFile(path.join(clientBuildPath, 'index.html'));
   });
 }
+// If client build is not present (e.g., backend-only deploy), redirect known app routes to frontend origin
+else {
+  const frontendOrigin = process.env.FRONTEND_URL || 'https://tfs-digital.onrender.com';
+  const clientRoutes = [
+    '/', '/login', '/register', '/forgot-password', '/reset-password',
+    '/dashboard', '/cases', '/airtime-requests', '/stock-management',
+    '/vehicles', '/repatriation-trips'
+  ];
+  clientRoutes.forEach(route => {
+    app.get(route, (req, res) => {
+      const to = `${frontendOrigin}${req.path}`;
+      res.redirect(to);
+    });
+  });
+}
 
 // 404 handler
 app.use((req, res) => {
