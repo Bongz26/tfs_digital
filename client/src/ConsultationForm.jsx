@@ -1541,7 +1541,26 @@ export default function ConsultationForm() {
       {/* Printable Section */}
       {printedData && printMode && (
         <>
-          <style>{`@media print { body, html { margin:0; } @page { size: A4; margin: 10mm; } body * { visibility: hidden !important; } #tfs-print-root, #tfs-print-root * { visibility: visible !important; } #tfs-print-root { position: absolute; left: 0; top: 0; width: 100%; } }`}</style>
+          <style>{`@media print {
+            @page { size: A4; margin: 0; }
+            html, body { margin: 0; padding: 0; }
+            body * { visibility: hidden !important; }
+            #tfs-print-root, #tfs-print-root * { visibility: visible !important; }
+            #tfs-print-root {
+              position: fixed; left: 0; top: 0;
+              width: 210mm; min-height: 297mm;
+              padding: 6mm; box-sizing: border-box;
+              font-size: 9pt;
+            }
+            /* Condense spacing to fit one page */
+            #tfs-print-root .mb-4 { margin-bottom: 6px !important; }
+            #tfs-print-root .mb-2 { margin-bottom: 4px !important; }
+            #tfs-print-root .py-2 { padding-top: 4px !important; padding-bottom: 4px !important; }
+            #tfs-print-root .p-2 { padding: 4px !important; }
+            #tfs-print-root .p-4 { padding: 6px !important; }
+            #tfs-print-root .p-6 { padding: 8px !important; }
+            #tfs-print-root table { page-break-inside: avoid; }
+          }`}</style>
           <div id="tfs-print-root" className="hidden print:block" style={{ margin: '0 auto', fontFamily: 'Arial, sans-serif', fontSize: '10pt', padding: '0' }}>
           <div className="flex justify-between mb-4">
             <h1 className="text-2xl font-bold text-red-800">THUSANANG FUNERAL SERVICES</h1>

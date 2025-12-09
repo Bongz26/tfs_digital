@@ -1,11 +1,15 @@
 import axios from "axios";
 import { API_HOST } from "./config";
+import { getAccessToken } from "./auth";
 
 const BASE_URL = `${API_HOST}/api/cases`;
 
 export const fetchCases = async () => {
     try {
-        const res = await axios.get(BASE_URL);
+        const token = getAccessToken();
+        const res = await axios.get(BASE_URL, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.cases || [];
     } catch (err) {
         console.error("Error fetching cases:", err.response || err);
@@ -15,7 +19,10 @@ export const fetchCases = async () => {
 
 export const fetchCaseById = async (id) => {
     try {
-        const res = await axios.get(`${BASE_URL}/${id}`);
+        const token = getAccessToken();
+        const res = await axios.get(`${BASE_URL}/${id}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.case;
     } catch (err) {
         console.error(`Error fetching case ${id}:`, err.response || err);
@@ -25,7 +32,10 @@ export const fetchCaseById = async (id) => {
 
 export const createCase = async (caseData) => {
     try {
-        const res = await axios.post(BASE_URL, caseData);
+        const token = getAccessToken();
+        const res = await axios.post(BASE_URL, caseData, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.case;
     } catch (err) {
         console.error("Error creating case:", err.response || err);
@@ -35,7 +45,10 @@ export const createCase = async (caseData) => {
 
 export const updateCaseStatus = async (id, status, notes) => {
     try {
-        const res = await axios.patch(`${BASE_URL}/${id}/status`, { status, notes });
+        const token = getAccessToken();
+        const res = await axios.patch(`${BASE_URL}/${id}/status`, { status, notes }, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.case;
     } catch (err) {
         console.error(`Error updating case status ${id}:`, err.response || err);
@@ -45,9 +58,12 @@ export const updateCaseStatus = async (id, status, notes) => {
 
 export const updateFuneralTime = async (id, funeralTime, funeralDate) => {
     try {
+        const token = getAccessToken();
         const res = await axios.patch(`${BASE_URL}/${id}/funeral-time`, {
             funeral_time: funeralTime,
             funeral_date: funeralDate
+        }, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
         return res.data.case;
     } catch (err) {
@@ -58,7 +74,10 @@ export const updateFuneralTime = async (id, funeralTime, funeralDate) => {
 
 export const assignVehicle = async (caseId, assignmentData) => {
     try {
-        const res = await axios.post(`${BASE_URL}/assign/${caseId}`, assignmentData);
+        const token = getAccessToken();
+        const res = await axios.post(`${BASE_URL}/assign/${caseId}`, assignmentData, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.roster;
     } catch (err) {
         console.error(`Error assigning vehicle to case ${caseId}:`, err.response || err);
@@ -68,7 +87,10 @@ export const assignVehicle = async (caseId, assignmentData) => {
 
 export const fetchCaseAuditLog = async (id) => {
     try {
-        const res = await axios.get(`${BASE_URL}/audit/${id}`);
+        const token = getAccessToken();
+        const res = await axios.get(`${BASE_URL}/audit/${id}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.logs || [];
     } catch (err) {
         console.error(`Error fetching audit log ${id}:`, err.response || err);
@@ -78,7 +100,10 @@ export const fetchCaseAuditLog = async (id) => {
 
 export const fetchCancelledCases = async () => {
     try {
-        const res = await axios.get(`${BASE_URL}/list/cancelled`);
+        const token = getAccessToken();
+        const res = await axios.get(`${BASE_URL}/list/cancelled`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.cases || [];
     } catch (err) {
         console.error('Error fetching cancelled cases:', err.response || err);
@@ -95,7 +120,10 @@ export const lookupCase = async (params = {}) => {
     if (params.nok_contact) search.append('nok_contact', params.nok_contact);
     const url = `${BASE_URL}/lookup?${search.toString()}`;
     try {
-        const res = await axios.get(url);
+        const token = getAccessToken();
+        const res = await axios.get(url, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.case || null;
     } catch (err) {
         if (err.response && err.response.status === 404) return null;
@@ -109,7 +137,10 @@ export const searchCases = async (term, limit = 10) => {
         const params = new URLSearchParams();
         params.append('term', term);
         if (limit) params.append('limit', String(limit));
-        const res = await axios.get(`${BASE_URL}/search?${params.toString()}`);
+        const token = getAccessToken();
+        const res = await axios.get(`${BASE_URL}/search?${params.toString()}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.cases || [];
     } catch (err) {
         console.error('Error searching cases:', err.response || err);

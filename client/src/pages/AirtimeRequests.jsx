@@ -7,6 +7,12 @@ export default function AirtimeRequests() {
   const [error, setError] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [updating, setUpdating] = useState({});
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalId, setModalId] = useState(null);
+  const [modalStatus, setModalStatus] = useState('');
+  const [modalNotes, setModalNotes] = useState('');
+  const [modalMode, setModalMode] = useState('update'); // 'update' | 'view'
+  const [modalItem, setModalItem] = useState(null);
 
   const load = async () => {
     try {
@@ -23,25 +29,38 @@ export default function AirtimeRequests() {
 
   useEffect(() => { load(); }, []);
 
-  const handleUpdate = async (id, status) => {
-    setUpdating(prev => ({ ...prev, [id]: true }));
+  const openModal = (id, status) => {
+    setModalId(id);
+    setModalStatus(status);
+    setModalNotes('');
+    setModalMode('update');
+    setModalItem(requests.find(x => x.id === id) || null);
+    setModalOpen(true);
+  };
+
+  const viewNote = (item) => {
+    setModalId(item.id);
+    setModalStatus('note');
+    setModalNotes(String(item.operator_notes || ''));
+    setModalMode('view');
+    setModalItem(item);
+    setModalOpen(true);
+  };
+
+  const submitModal = async () => {
+    if (!modalNotes || modalNotes.trim() === '') {
+      alert('A note is required to update status');
+      return;
+    }
+    setUpdating(prev => ({ ...prev, [modalId]: true }));
     try {
-      let notes = '';
-      if (status === 'cancelled') {
-        notes = window.prompt('Enter cancellation reason');
-        if (!notes || notes.trim() === '') {
-          setUpdating(prev => ({ ...prev, [id]: false }));
-          return;
-        }
-      } else {
-        notes = window.prompt('Optional note for this status change (leave blank to skip)') || '';
-      }
-      const updated = await updateAirtimeRequestStatus(id, status, notes);
+      const updated = await updateAirtimeRequestStatus(modalId, modalStatus, modalNotes);
       setRequests(prev => prev.map(r => (r.id === updated.id ? updated : r)));
+      setModalOpen(false);
     } catch (err) {
       alert(err.response?.data?.error || err.message || 'Failed to update status');
     } finally {
-      setUpdating(prev => ({ ...prev, [id]: false }));
+      setUpdating(prev => ({ ...prev, [modalId]: false }));
     }
   };
 
@@ -107,6 +126,7 @@ export default function AirtimeRequests() {
                     <th className="px-4 py-2 text-left text-sm font-semibold">Details</th>
                     <th className="px-4 py-2 text-left text-sm font-semibold">Amount</th>
                     <th className="px-4 py-2 text-left text-sm font-semibold">Status</th>
+                    <th className="px-4 py-2 text-left text-sm font-semibold">Notes</th>
                     <th className="px-4 py-2 text-left text-sm font-semibold">Actions</th>
                   </tr>
                 </thead>
@@ -133,32 +153,48 @@ export default function AirtimeRequests() {
                           {String(r.status || '').toUpperCase()}
                         </span>
                       </td>
+                      <td className="px-4 py-2 text-sm">
+                        {(() => {
+                          const note = String(r.operator_notes || '').trim();
+                          if (!note) return '';
+                          if (note.length <= 80) return note;
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span>{note.slice(0, 80)}...</span>
+                              <button
+                                className="text-blue-600 underline text-xs"
+                                onClick={() => viewNote(r)}
+                              >View</button>
+                            </div>
+                          );
+                        })()}
+                      </td>
                       <td className="px-4 py-2">
                         <div className="flex flex-wrap gap-2">
                           <button
                             disabled={updating[r.id]}
-                            onClick={() => handleUpdate(r.id, 'sent')}
+                            onClick={() => openModal(r.id, 'sent')}
                             className="px-3 py-1 rounded bg-green-600 text-white text-sm disabled:bg-gray-400"
                           >
                             Mark Sent
                           </button>
                           <button
                             disabled={updating[r.id]}
-                            onClick={() => handleUpdate(r.id, 'failed')}
+                            onClick={() => openModal(r.id, 'failed')}
                             className="px-3 py-1 rounded bg-red-600 text-white text-sm disabled:bg-gray-400"
                           >
                             Mark Failed
                           </button>
                           <button
                             disabled={updating[r.id]}
-                            onClick={() => handleUpdate(r.id, 'pending')}
+                            onClick={() => openModal(r.id, 'pending')}
                             className="px-3 py-1 rounded bg-yellow-600 text-white text-sm disabled:bg-gray-400"
                           >
                             Reset Pending
                           </button>
                           <button
                             disabled={updating[r.id]}
-                            onClick={() => handleUpdate(r.id, 'cancelled')}
+                            onClick={() => openModal(r.id, 'cancelled')}
                             className="px-3 py-1 rounded bg-gray-600 text-white text-sm disabled:bg-gray-400"
                           >
                             Cancel
@@ -173,7 +209,50 @@ export default function AirtimeRequests() {
           </div>
         )}
       </div>
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setModalOpen(false)}></div>
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4">
+            <div className="px-6 py-4 border-b">
+              <div className="text-lg font-semibold text-gray-800">{modalMode === 'update' ? 'Update Airtime Status' : 'Airtime Request'}</div>
+              <div className="text-sm text-gray-500">{modalMode === 'update' ? String(modalStatus).toUpperCase() : (modalItem?.policy_number || '')}</div>
+            </div>
+            <div className="px-6 py-4">
+              {modalItem && (
+                <div className="text-xs text-gray-600 mb-3 space-y-1">
+                  <div><span className="font-semibold">Policy:</span> {modalItem.policy_number || '-'}</div>
+                  <div><span className="font-semibold">Beneficiary:</span> {modalItem.beneficiary_name || '-'}</div>
+                  <div><span className="font-semibold">Network/Number:</span> {modalItem.network} • {modalItem.phone_number}</div>
+                  <div><span className="font-semibold">Amount:</span> R{Number(modalItem.amount || 0).toFixed(2)}</div>
+                  <div><span className="font-semibold">Status:</span> {String(modalItem.status || '').toUpperCase()}</div>
+                  <div><span className="font-semibold">Requested by:</span> {modalItem.requested_by_email || '-'} <span className="text-gray-500">({modalItem.requested_by_role || '-'})</span></div>
+                  <div><span className="font-semibold">Requested at:</span> {modalItem.requested_at ? new Date(modalItem.requested_at).toLocaleString() : '-'}</div>
+                  {modalItem.sent_at && (
+                    <div><span className="font-semibold">Sent at:</span> {new Date(modalItem.sent_at).toLocaleString()}</div>
+                  )}
+                </div>
+              )}
+              <label className="block text-sm font-medium text-gray-700">Note</label>
+              {modalMode === 'update' ? (
+                <textarea
+                  value={modalNotes}
+                  onChange={e => setModalNotes(e.target.value)}
+                  placeholder="Enter reason or details"
+                  className="mt-2 w-full border rounded-lg px-3 py-2 min-h-[100px] focus:ring-2 focus:ring-red-500"
+                />
+              ) : (
+                <div className="mt-2 w-full border rounded-lg px-3 py-2 text-sm bg-gray-50 whitespace-pre-wrap">{modalNotes || '-'}</div>
+              )}
+            </div>
+            <div className="px-6 py-4 flex justify-end gap-3 border-t">
+              <button onClick={() => setModalOpen(false)} className="px-4 py-2 rounded-lg border">{modalMode === 'update' ? 'Cancel' : 'Close'}</button>
+              {modalMode === 'update' && (
+                <button onClick={submitModal} className="px-4 py-2 rounded-lg bg-blue-600 text-white">Save</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
