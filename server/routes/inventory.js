@@ -11,6 +11,9 @@ router.get('/stats', inventoryController.getInventoryStats);
 // POST create new inventory item
 router.post('/', inventoryController.createInventoryItem);
 
+// POST replace inventory with preset list (admin/manager intent)
+router.post('/replace', inventoryController.replaceInventoryWithPreset);
+
 // GET single inventory item
 router.get('/:id', inventoryController.getInventoryItem);
 

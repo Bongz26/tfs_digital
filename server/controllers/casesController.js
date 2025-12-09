@@ -110,8 +110,8 @@ exports.searchCases = async (req, res) => {
 
 // --- GET ALL CASES ---
 exports.getAllCases = async (req, res) => {
-    try {
-        const { status, exclude } = req.query;
+  try {
+    const { status, exclude } = req.query;
 
         const supabase = req.app?.locals?.supabase;
         if (supabase) {
@@ -132,6 +132,20 @@ exports.getAllCases = async (req, res) => {
                         rows = rows.filter(c => !parts.includes((c.status || '').toLowerCase()));
                     }
                 }
+                const distinct = String(req.query.distinct || 'policy').toLowerCase();
+                if (distinct !== 'none') {
+                    const pickLatestByPolicy = new Map();
+                    for (const c of rows) {
+                        const key = String(c.policy_number || '').replace(/\s+/g, '').toUpperCase();
+                        const prev = pickLatestByPolicy.get(key);
+                        const currCreated = c.created_at ? new Date(c.created_at) : new Date(0);
+                        const prevCreated = prev && prev.created_at ? new Date(prev.created_at) : new Date(0);
+                        if (!prev || currCreated > prevCreated) {
+                            pickLatestByPolicy.set(key, c);
+                        }
+                    }
+                    rows = Array.from(pickLatestByPolicy.values());
+                }
                 return res.json({ success: true, cases: rows });
             } catch (e) {
                 console.warn('⚠️ Supabase read failed in getAllCases, falling back to DB:', e.message);
@@ -139,28 +153,41 @@ exports.getAllCases = async (req, res) => {
         }
 
         const { status: st, exclude: ex } = req.query;
-        let sql = 'SELECT * FROM cases';
-        const where = [];
         const params = [];
+        const innerWhere = [];
         if (st) {
             params.push(st);
-            where.push(`status = $${params.length}`);
+            innerWhere.push(`status = $${params.length}`);
         }
         if (ex) {
             const parts = String(ex).split(',').map(s => s.trim()).filter(Boolean);
             if (parts.length > 0) {
                 const placeholders = parts.map((_, i) => `$${params.length + i + 1}`).join(',');
                 params.push(...parts);
-                where.push(`status NOT IN (${placeholders})`);
+                innerWhere.push(`status NOT IN (${placeholders})`);
             }
         }
-        if (where.length > 0) {
-            sql += ` WHERE ${where.join(' AND ')}`;
+        const distinct = String(req.query.distinct || 'policy').toLowerCase();
+        let sql;
+        if (distinct === 'none') {
+            sql = `SELECT * FROM cases${innerWhere.length ? ' WHERE ' + innerWhere.join(' AND ') : ''} ORDER BY funeral_date DESC`;
+        } else {
+            sql = `
+                SELECT * FROM (
+                  SELECT *, ROW_NUMBER() OVER (
+                    PARTITION BY UPPER(REGEXP_REPLACE(COALESCE(policy_number,''),'\\s+','', 'g'))
+                    ORDER BY created_at DESC
+                  ) rn
+                  FROM cases
+                  ${innerWhere.length ? ' WHERE ' + innerWhere.join(' AND ') : ''}
+                ) t
+                WHERE rn = 1
+                ORDER BY funeral_date DESC
+            `;
         }
-        sql += ' ORDER BY funeral_date DESC';
         const result = await query(sql, params);
         res.json({ success: true, cases: result.rows });
-    } catch (err) {
+  } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, error: 'Failed to fetch cases', details: err.message });
     }
@@ -305,6 +332,7 @@ exports.createCase = async (req, res) => {
         );
 
         console.log('✅ [POST /api/cases] Case created successfully:', result.rows[0]?.id, result.rows[0]?.case_number);
+
         res.json({ success: true, case: result.rows[0] });
     } catch (err) {
         console.error('❌ [POST /api/cases] Error creating case:', err);

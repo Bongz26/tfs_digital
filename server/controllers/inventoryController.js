@@ -517,3 +517,83 @@ exports.deleteInventoryItem = async (req, res) => {
         res.status(500).json({ success: false, error: 'Failed to delete inventory item', details: err.message });
     }
 };
+
+// --- REPLACE INVENTORY WITH PRESET LIST ---
+exports.replaceInventoryWithPreset = async (req, res) => {
+    try {
+        await query(`
+            CREATE TABLE IF NOT EXISTS inventory (
+              id SERIAL PRIMARY KEY,
+              name VARCHAR(200) NOT NULL,
+              category VARCHAR(100) DEFAULT 'other',
+              sku VARCHAR(100),
+              stock_quantity INT DEFAULT 0,
+              unit_price DECIMAL(12,2) DEFAULT 0,
+              low_stock_threshold INT DEFAULT 2,
+              location VARCHAR(100) DEFAULT 'Manekeng',
+              notes TEXT,
+              supplier_id INT,
+              created_at TIMESTAMP DEFAULT NOW(),
+              updated_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+
+        await query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS model VARCHAR(100)`);
+        await query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS color VARCHAR(50)`);
+        try { await query(`CREATE INDEX IF NOT EXISTS idx_inventory_model_color ON inventory (UPPER(model), UPPER(color))`); } catch (_) {}
+        try { await query(`ALTER TABLE inventory ALTER COLUMN low_stock_threshold SET DEFAULT 1`); } catch (_) {}
+
+        const items = [
+            { model: 'Pierce Dome', color: null, qty: 3, category: 'coffin' },
+            { model: 'Octagonal', color: null, qty: 1, category: 'coffin' },
+            { model: 'Ponge', color: 'Cherry', qty: 3, category: 'coffin' },
+            { model: 'Ponge', color: 'Plywood', qty: 3, category: 'coffin' },
+            { model: 'Ilu View', color: null, qty: 3, category: 'coffin' },
+            { model: 'Raised Haunew', color: null, qty: 4, category: 'coffin' },
+            { model: 'Tier Casket', color: null, qty: 4, category: 'coffin' },
+            { model: 'Flat Top', color: 'Plywood', qty: 1, category: 'coffin' },
+            { model: 'Tier Plywood', color: null, qty: 1, category: 'coffin' },
+            { model: 'Yreat Flio', color: null, qty: 2, category: 'coffin' },
+            { model: 'Fluo', color: 'Spain', qty: 1, category: 'coffin' },
+            { model: 'Fluo', color: 'Cherry', qty: 1, category: 'coffin' },
+            { model: 'Econo', color: 'Cherry', qty: 2, category: 'coffin' },
+            { model: 'Fluo', color: 'Midbrain', qty: 1, category: 'coffin' },
+            { model: 'Fluo', color: 'Princeton', qty: 15, category: 'coffin' },
+            { model: 'Blood Coffin', color: null, qty: 3, category: 'coffin' },
+            { model: 'Kreat Coffin', color: null, qty: 1, category: 'coffin' },
+            { model: 'Kreat Coffin', color: null, qty: 2, category: 'coffin' },
+            { model: 'Kreat Casket', color: null, qty: 3, category: 'coffin' },
+            { model: 'White Casket', color: null, qty: 1, category: 'coffin' },
+            { model: 'Kreat Dutch', color: null, qty: 1, category: 'coffin' },
+            { model: 'Ucornee Wood', color: 'Walnut', qty: 1, category: 'coffin' },
+            { model: 'Kreat', color: null, qty: 1, category: 'coffin' },
+            { model: 'Feet', color: null, qty: 4, category: 'coffin' }
+        ];
+
+        await query('TRUNCATE inventory RESTART IDENTITY CASCADE');
+
+        for (const it of items) {
+            const name = it.color ? `${it.model} ${it.color}` : it.model;
+            await query(
+                `INSERT INTO inventory (name, category, sku, stock_quantity, unit_price, low_stock_threshold, location, model, color)
+                 VALUES ($1,$2,$3,$4,$5,1,$7,$8,$9)`,
+                [
+                    name,
+                    it.category,
+                    null,
+                    it.qty,
+                    0,
+                    'Manekeng',
+                    it.model,
+                    it.color || null
+                ]
+            );
+        }
+
+        const result = await query('SELECT * FROM inventory ORDER BY category, name');
+        res.json({ success: true, replaced: items.length, inventory: result.rows });
+    } catch (err) {
+        console.error('❌ Error replacing inventory:', err);
+        res.status(500).json({ success: false, error: 'Failed to replace inventory', details: err.message });
+    }
+};
