@@ -1561,121 +1561,165 @@ export default function ConsultationForm() {
       {printedData && printMode && (
         <>
           <style>{`@media print {
-            @page { size: A4; margin: 0; }
+            @page { size: A4; margin: 5mm; }
             html, body { margin: 0; padding: 0; }
             body * { visibility: hidden !important; }
             #tfs-print-root, #tfs-print-root * { visibility: visible !important; }
             #tfs-print-root {
-              position: absolute; left: 0; top: 0;
-              width: 210mm;
-              padding: 5mm; box-sizing: border-box;
-              font-size: 8pt;
+              position: absolute; left: 0; top: 0; width: 100%;
+              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+              font-size: 10px;
+              color: #000;
               background: white;
             }
-            /* Condense spacing to fit one page */
-            #tfs-print-root .mb-4 { margin-bottom: 4px !important; }
-            #tfs-print-root .mb-2 { margin-bottom: 2px !important; }
-            #tfs-print-root .py-2 { padding-top: 2px !important; padding-bottom: 2px !important; }
-            #tfs-print-root .p-2 { padding: 2px !important; }
-            #tfs-print-root .p-4 { padding: 4px !important; }
-            #tfs-print-root .p-6 { padding: 4px !important; }
-            #tfs-print-root h1 { font-size: 14pt !important; margin-bottom: 4px !important; }
-            #tfs-print-root h2 { font-size: 11pt !important; padding: 2px !important; margin-bottom: 4px !important; }
-            #tfs-print-root table { width: 100%; border-collapse: collapse; page-break-inside: avoid; }
-            #tfs-print-root td { border: 1px solid #ccc; }
+            .print-header { border-bottom: 2px solid #b91c1c; padding-bottom: 10px; margin-bottom: 10px; }
+            .print-section { margin-bottom: 8px; border: 1px solid #ccc; break-inside: avoid; }
+            .print-section-title { background: #f3f4f6; font-weight: bold; padding: 4px 8px; border-bottom: 1px solid #ccc; font-size: 11px; color: #991b1b; }
+            .print-grid { display: grid; grid-template-columns: repeat(2, 1fr); }
+            .print-row { display: flex; border-bottom: 1px solid #eee; }
+            .print-row:last-child { border-bottom: none; }
+            .print-label { width: 120px; background: #fafafa; padding: 3px 6px; font-weight: 600; border-right: 1px solid #eee; color: #444; }
+            .print-value { flex: 1; padding: 3px 6px; }
+            .checklist-grid { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid #eee; }
+            .checklist-item { border-right: 1px solid #eee; border-bottom: 1px solid #eee; padding: 3px 6px; display: flex; justify-content: space-between; align-items: center; }
+            .checklist-item:nth-child(3n) { border-right: none; }
+            .checklist-label { font-weight: 600; color: #555; }
+            .checklist-val { font-weight: bold; }
+            .sign-off-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            .sign-off-table td { border: 1px solid #ccc; padding: 6px; vertical-align: top; height: 40px; }
+            .sign-off-label { font-size: 9px; color: #666; margin-bottom: 4px; display: block; font-weight: bold; }
           }`}</style>
-          <div id="tfs-print-root" className="hidden print:block" style={{ margin: '0 auto', fontFamily: 'Arial, sans-serif', fontSize: '8pt', padding: '0' }}>
-            <div className="flex justify-between mb-4">
-              <h1 className="text-2xl font-bold text-red-800">THUSANANG FUNERAL SERVICES</h1>
-              <p className="text-right">RESPECTFUL | PROFESSIONAL | DIGNIFIED<br />Head Office Phuthaditjhaba<br />Site 1, Portion 2, Beirut<br />Tel: 08000 145 74 | After Hours: 073 750 0857<br />Cell No / WhatsApp: 071 480 5050 / 073 073 1580<br />info@thusanangfs.co.za<br />www.thusanangfs.co.za<br />AN AUTHORISED SERVICE PROVIDER | FSP: 39701</p>
+
+          <div id="tfs-print-root">
+            {/* Header */}
+            <div className="print-header flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                {/* Logo Placeholder if needed */}
+                <div>
+                  <h1 className="text-2xl font-bold text-red-800 leading-none">THUSANANG</h1>
+                  <div className="text-lg font-bold text-gray-800 tracking-widest">FUNERAL SERVICES</div>
+                  <div className="text-[9px] mt-1 text-gray-500 font-semibold tracking-wider">RESPECTFUL | PROFESSIONAL | DIGNIFIED</div>
+                </div>
+              </div>
+              <div className="text-right text-[9px] leading-tight text-gray-600">
+                <p><strong className="text-gray-800">Head Office:</strong> Site 1, Portion 2, Beirut, Phuthaditjhaba</p>
+                <p className="my-0.5"><strong className="text-gray-800">Tel:</strong> 08000 145 74 | <strong className="text-gray-800">Cell:</strong> 071 480 5050</p>
+                <p>info@thusanangfs.co.za | www.thusanangfs.co.za</p>
+                <p className="mt-0.5 font-bold text-red-800">FSP: 39701</p>
+              </div>
             </div>
 
             {printMode === 'receipt' ? (
-              <>
-                <h2 className="text-xl font-bold text-center bg-red-600 text-white py-2 mb-4">CLAIM RECEIPT</h2>
-                <p><strong>Policy Number:</strong> {printedData.policy_number}</p>
-                <p><strong>Deceased Names:</strong> {printedData.deceased_name}</p>
-                <p><strong>Claimant Names:</strong> {printedData.nok_name}</p>
-                <p><strong>Contact Details:</strong> {printedData.nok_contact}</p>
-                <p><strong>Cleansing:</strong> {printedData.cleansing_date} {printedData.cleansing_time && (`• ${printedData.cleansing_time}`)}</p>
-
-                <h3 className="font-bold mt-4">Plan Benefits:</h3>
-                {renderBenefitsList(printedData)}
-              </>
+              <div className="p-4 border-2 border-gray-800 rounded">
+                <h2 className="text-xl font-bold text-center text-red-800 mb-6 border-b-2 border-red-800 pb-2">CLAIM RECEIPT</h2>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                  <div className="print-row"><span className="font-bold w-32">Policy Number:</span> <span>{printedData.policy_number}</span></div>
+                  <div className="print-row"><span className="font-bold w-32">Claim Date:</span> <span>{printedData.claim_date}</span></div>
+                  <div className="print-row col-span-2"><span className="font-bold w-32">Deceased:</span> <span>{printedData.deceased_name}</span></div>
+                  <div className="print-row col-span-2"><span className="font-bold w-32">Claimant:</span> <span>{printedData.nok_name}</span></div>
+                  <div className="print-row col-span-2"><span className="font-bold w-32">Contact:</span> <span>{printedData.nok_contact}</span></div>
+                </div>
+                <div className="mt-6">
+                  <h3 className="font-bold border-b border-gray-300 mb-2">Plan Benefits Included:</h3>
+                  {renderBenefitsList(printedData)}
+                </div>
+              </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <table className="w-full border-collapse">
+                {/* Main Details Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Left Column: Personal Info */}
+                  <div className="print-section">
+                    <div className="print-section-title">CASE DETAILS</div>
+                    <div className="print-row"><div className="print-label">POLICY NUMBER</div><div className="print-value font-bold text-lg">{printedData.policy_number}</div></div>
+                    <div className="print-row"><div className="print-label">CLAIM DATE</div><div className="print-value">{printedData.claim_date}</div></div>
+                    <div className="print-row"><div className="print-label">DECEASED NAME</div><div className="print-value font-bold">{printedData.deceased_name}</div></div>
+                    <div className="print-row"><div className="print-label">CLAIMANT NAME</div><div className="print-value">{printedData.nok_name}</div></div>
+                    <div className="print-row"><div className="print-label">CONTACT</div><div className="print-value">{printedData.nok_contact}</div></div>
+                  </div>
+
+                  {/* Right Column: Logistics */}
+                  <div className="print-section">
+                    <div className="print-section-title">LOGISTICS</div>
+                    <div className="print-row"><div className="print-label">CLEANSING</div><div className="print-value">{printedData.cleansing_date} {printedData.cleansing_time}</div></div>
+                    <div className="print-row"><div className="print-label">DELIVERY</div><div className="print-value">{printedData.delivery_date} {printedData.delivery_time}</div></div>
+                    <div className="print-row"><div className="print-label">SERVICE</div><div className="print-value">{printedData.service_date} {printedData.service_time}</div></div>
+                    <div className="print-row"><div className="print-label">CHURCH</div><div className="print-value">{printedData.church_date} {printedData.church_time}</div></div>
+                    <div className="print-row"><div className="print-label">VENUE</div><div className="print-value">{printedData.venue_name}</div></div>
+                  </div>
+                </div>
+
+                {/* Checklist Grid (Compact) */}
+                <div className="print-section">
+                  <div className="print-section-title">SERVICE REQUIREMENTS & CHECKLIST</div>
+                  <div className="checklist-grid">
+                    <div className="checklist-item"><span className="checklist-label">Casket Type</span> <span className="checklist-val">{printedData.casket_type}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Casket Colour</span> <span className="checklist-val">{printedData.casket_colour}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Top-Up</span> <span className="checklist-val">{printedData.top_up_amount ? `R${printedData.top_up_amount}` : '-'}</span></div>
+
+                    <div className="checklist-item"><span className="checklist-label">Cow</span> <span className="checklist-val">{printedData.requires_cow ? 'YES' : 'NO'}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Sheep</span> <span className="checklist-val">{printedData.requires_sheep ? 'YES' : 'NO'}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Tombstone</span> <span className="checklist-val">{printedData.requires_tombstone ? 'YES' : 'NO'}</span></div>
+
+                    <div className="checklist-item"><span className="checklist-label">Flower</span> <span className="checklist-val">{printedData.requires_flower ? 'YES' : 'NO'}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Bus</span> <span className="checklist-val">{printedData.requires_bus ? 'YES' : 'NO'}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Programmes</span> <span className="checklist-val">{printedData.programs || 'NO'}</span></div>
+
+                    <div className="checklist-item"><span className="checklist-label">Catering</span> <span className="checklist-val">{printedData.requires_catering ? 'YES' : 'NO'}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Airtime</span> <span className="checklist-val">{printedData.airtime ? 'YES' : 'NO'}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Network/No</span> <span className="checklist-val text-[9px]">{printedData.airtime ? `${printedData.airtime_network} ${printedData.airtime_number}` : '-'}</span></div>
+
+                    <div className="checklist-item col-span-3"><span className="checklist-label mr-2">Grocery:</span> <span className="checklist-val font-normal text-[9px]">
+                      {(() => {
+                        const isSpecial = printedData.plan_category === 'specials';
+                        const benefits = isSpecial ? (SPECIAL_PLAN_BENEFITS[printedData.plan_name] || {}) : (PLAN_BENEFITS[printedData.plan_name] || {});
+                        if (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0) return benefits.grocery_items.join(', ');
+                        if (benefits.grocery) return String(benefits.grocery);
+                        if (benefits.groceries) return String(benefits.groceries);
+                        return printedData.requires_grocery ? 'Standard Grocery Benefit' : 'None';
+                      })()}
+                    </span></div>
+
+                    <div className="checklist-item"><span className="checklist-label">Cashback</span> <span className="checklist-val">R{Number(printedData.cashback_amount || 0).toLocaleString()}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Bank Amount</span> <span className="checklist-val">R{Number(printedData.amount_to_bank || 0).toLocaleString()}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Total Value</span> <span className="checklist-val">R{Number(printedData.cover_amount || 0).toLocaleString()}</span></div>
+                  </div>
+                </div>
+
+                {/* Sign Off Section */}
+                <div className="mt-2">
+                  <table className="sign-off-table">
                     <tbody>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">CLAIM DATE</td><td className="border p-2">{formatDateForBoxes(printedData.claim_date).map((char, i) => <span key={i} className="inline-block w-6 text-center border border-black mx-1">{char}</span>)}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">POLICY NUMBER</td><td className="border p-2">{printedData.policy_number}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">DECEASED NAMES</td><td className="border p-2">{printedData.deceased_name}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">CLAIMANT NAMES</td><td className="border p-2">{printedData.nok_name}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">CONTACT DETAILS</td><td className="border p-2">{printedData.nok_contact}</td></tr>
-                    </tbody>
-                  </table>
-                  <table className="w-full border-collapse">
-                    <tbody>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">CLEANSING</td><td className="border p-2">DATE: {printedData.cleansing_date} TIME: {printedData.cleansing_time}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">DELIVERY</td><td className="border p-2">DATE: {printedData.delivery_date} TIME: {printedData.delivery_time}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">SERVICE</td><td className="border p-2">DATE: {printedData.service_date} TIME: {printedData.service_time}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">CHURCH</td><td className="border p-2">DATE: {printedData.church_date} TIME: {printedData.church_time}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">SERVICE VENUE</td><td className="border p-2">{printedData.venue_name}</td></tr>
+                      <tr>
+                        <td width="25%">
+                          <span className="sign-off-label">OFFICE PERSONNEL</span>
+                          <div className="font-bold">{printedData.office_personnel1}</div>
+                        </td>
+                        <td width="25%">
+                          <span className="sign-off-label">SIGNATURE</span>
+                        </td>
+                        <td width="25%">
+                          <span className="sign-off-label">CLIENT NAME</span>
+                          <div className="font-bold">{printedData.client_name1}</div>
+                        </td>
+                        <td width="25%">
+                          <span className="sign-off-label">SIGNATURE</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <span className="sign-off-label">DATE</span>
+                          <div>{printedData.date1}</div>
+                        </td>
+                        <td colSpan="3" className="bg-gray-50 text-[9px] text-gray-500 italic align-middle">
+                          I acknowledge that all details above are correct and confirmed.
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
-
-                <h2 className="text-center bg-red-600 text-white py-2 mb-2">CHECK LIST</h2>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                  <table className="w-full border-collapse">
-                    <tbody>
-
-                      <tr><td className="border p-2 font-semibold bg-gray-50">CASKET/COFFIN TYPE</td><td className="border p-2">{printedData.casket_type}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">CASKET/COFFIN COLOUR</td><td className="border p-2">{printedData.casket_colour}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">COW</td><td className="border p-2">{printedData.requires_cow ? 'Yes' : 'None'}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">SHEEP</td><td className="border p-2">{printedData.requires_sheep ? 'Yes' : 'None'}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">TOMBSTONE</td><td className="border p-2">{printedData.requires_tombstone ? 'Yes' : 'None'}</td></tr>
-                    </tbody>
-                  </table>
-                  <table className="w-full border-collapse">
-                    <tbody>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">FLOWER</td><td className="border p-2">{printedData.requires_flower ? 'Yes' : 'None'}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">BUS</td><td className="border p-2">{printedData.requires_bus ? 'Yes' : 'None'}</td></tr>
-                      {printedData.plan_category !== 'specials' && (
-                        <tr><td className="border p-2 font-semibold bg-gray-50">PROGRAMMES</td><td className="border p-2">{printedData.programs || 'None'}</td></tr>
-                      )}
-                      <tr><td className="border p-2 font-semibold bg-gray-50">CATERING</td><td className="border p-2">{printedData.requires_catering ? 'Yes' : 'None'}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">GROCERY</td><td className="border p-2">{(() => { const isSpecial = printedData.plan_category === 'specials'; const benefits = isSpecial ? (SPECIAL_PLAN_BENEFITS[printedData.plan_name] || {}) : (PLAN_BENEFITS[printedData.plan_name] || {}); if (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0) { return benefits.grocery_items.join(', '); } if (benefits.grocery) { return String(benefits.grocery); } if (benefits.groceries) { return String(benefits.groceries); } return printedData.requires_grocery ? 'Selected (items not specified)' : 'None'; })()}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">TOP-UP AMOUNT R</td><td className="border p-2">{printedData.top_up_amount || 'None'}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">AIRTIME</td><td className="border p-2">{printedData.airtime ? 'Yes' : 'None'}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">NETWORK</td><td className="border p-2">{printedData.airtime ? (printedData.airtime_network || 'Provided') : 'None'}</td></tr>
-                      <tr><td className="border p-2 font-semibold bg-gray-50">NUMBER</td><td className="border p-2">{printedData.airtime ? (printedData.airtime_number || 'Provided') : 'None'}</td></tr>
-                      {printedData.plan_category !== 'specials' && (
-                        <tr><td className="border p-2 font-semibold bg-gray-50">CASHBACK AMOUNT</td><td className="border p-2">R{printedData.cashback_amount.toLocaleString()}</td></tr>
-                      )}
-                      <tr><td className="border p-2 font-semibold bg-gray-50">AMOUNT TO BANK</td><td className="border p-2">R{printedData.amount_to_bank.toLocaleString()}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                <table className="w-full border-collapse mb-4">
-                  <tbody>
-                    <tr><td className="border p-2">OFFICE PERSONNEL</td><td className="border p-2">{printedData.office_personnel1}</td><td className="border p-2">CLIENT NAME</td><td className="border p-2">{printedData.client_name1}</td></tr>
-                    <tr><td className="border p-2">DATE</td><td className="border p-2">{printedData.date1}</td><td className="border p-2">DATE</td><td className="border p-2">{printedData.date1}</td></tr>
-                  </tbody>
-                </table>
-
-                <h2 className="text-center bg-red-600 text-white py-2 mb-2">SIGN OFF</h2>
-                <table className="w-full border-collapse">
-                  <tbody>
-                    <tr><td className="border p-2">OFFICE PERSONNEL</td><td className="border p-2">{printedData.office_personnel2}</td><td className="border p-2">CLIENT NAME</td><td className="border p-2">{printedData.client_name2}</td></tr>
-                    <tr><td className="border p-2">DATE</td><td className="border p-2">{printedData.date2}</td><td className="border p-2">DATE</td><td className="border p-2">{printedData.date2}</td></tr>
-                  </tbody>
-                </table>
               </>
             )}
-
-            <p className="text-center mt-4 text-lg font-bold">RESPECTFUL | PROFESSIONAL | DIGNIFIED</p>
           </div>
         </>
       )}
