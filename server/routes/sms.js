@@ -263,10 +263,10 @@ async function archiveOldAirtimeRequests() {
            status, requested_by, requested_by_email, requested_by_role, requested_at, sent_at,
            handled_by, operator_phone, operator_notes, NOW()
     FROM airtime_requests
-    WHERE requested_at::date < CURRENT_DATE
+    WHERE requested_at::date < CURRENT_DATE - INTERVAL '14 days'
     ON CONFLICT (original_id) DO NOTHING
   `);
-  const del = await query(`DELETE FROM airtime_requests WHERE requested_at::date < CURRENT_DATE`);
+  const del = await query(`DELETE FROM airtime_requests WHERE requested_at::date < CURRENT_DATE - INTERVAL '14 days'`);
   return { deleted: del.rowCount || 0 };
 }
 
@@ -349,11 +349,15 @@ async function generateAirtimeRequestsFromCases() {
   await ensureAirtimeTable();
   try {
     const cases = await query(
-      `SELECT id, policy_number, nok_name, plan_name, airtime, airtime_network, airtime_number
+      `SELECT id, policy_number, nok_name, plan_name, airtime, airtime_network, airtime_number, status, claim_date
        FROM cases
        WHERE airtime = true
          AND NULLIF(TRIM(airtime_network), '') IS NOT NULL
-         AND NULLIF(TRIM(airtime_number), '') IS NOT NULL`
+         AND NULLIF(TRIM(airtime_number), '') IS NOT NULL
+         AND (
+           status NOT IN ('completed','cancelled','archived')
+           OR (claim_date IS NOT NULL AND claim_date >= CURRENT_DATE - INTERVAL '14 days')
+         )`
     );
     for (const c of cases.rows) {
       const network = String(c.airtime_network || '').trim();
@@ -453,6 +457,8 @@ router.post('/airtime-requests', requireMinRole('staff'), async (req, res) => {
 // List airtime requests
 router.get('/airtime-requests', requireMinRole('staff'), async (req, res) => {
   try {
+    await generateAirtimeRequestsFromCases();
+    await generateAirtimeRequestsFromDrafts();
     await normalizeAndDeduplicateAirtimeRequests();
     await archiveOldAirtimeRequests();
     const result = await query(`
@@ -463,10 +469,15 @@ router.get('/airtime-requests', requireMinRole('staff'), async (req, res) => {
         ) rn
         FROM airtime_requests
       )
-      SELECT d.*, c.case_number, c.deceased_name
+      SELECT d.*, c.case_number, c.deceased_name, c.status
       FROM d
       LEFT JOIN cases c ON d.case_id = c.id
       WHERE d.rn = 1
+        AND (
+          c.status IS NULL
+          OR c.status NOT IN ('completed','cancelled','archived')
+          OR d.requested_at::date >= CURRENT_DATE - INTERVAL '14 days'
+        )
       ORDER BY d.requested_at DESC
     `);
     res.json({ success: true, requests: result.rows });
@@ -494,6 +505,9 @@ router.patch('/airtime-requests/:id/status', requireMinRole('staff'), async (req
     const allowed = ['pending','sent','failed','cancelled'];
     if (!allowed.includes(String(status || '').toLowerCase())) {
       return res.status(400).json({ success: false, error: 'Invalid status' });
+    }
+    if (!operator_notes || String(operator_notes).trim().length < 2) {
+      return res.status(400).json({ success: false, error: 'operator_notes is required' });
     }
     const sentAt = String(status).toLowerCase() === 'sent' ? 'NOW()' : null;
     const result = await query(
