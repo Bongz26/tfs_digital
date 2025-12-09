@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_HOST } from '../api/config';
+import { getAccessToken } from '../api/auth';
 import StockTakeModal from '../components/StockTake/StockTakeModal';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable"; // import the function
@@ -10,14 +11,13 @@ const generateStockReportPDF = (inventory) => {
   // attach autoTable
   autoTable(doc, {
     startY: 45,
-    head: [["Item", "Category", "Stock", "Reserved", "Available", "Unit Price (R)", "Status"]],
+    head: [["Item", "Category", "Stock", "Reserved", "Available", "Status"]],
     body: inventory.map(item => [
       item.name,
       item.category ? item.category.charAt(0).toUpperCase() + item.category.slice(1) : 'Other',
       item.stock_quantity || 0,
       item.reserved_quantity || 0,
       (item.stock_quantity || 0) - (item.reserved_quantity || 0),
-      item.unit_price ? Number(item.unit_price).toFixed(2) : '0.00',
       item.is_low_stock ? "Low Stock" : "In Stock",
     ]),
     styles: { fontSize: 10, cellPadding: 3 },
@@ -51,7 +51,7 @@ export default function StockManagement() {
     sku: '',
     stock_quantity: 0,
     unit_price: 0,
-    low_stock_threshold: 2,
+    low_stock_threshold: 1,
     location: 'Manekeng Showroom',
     notes: ''
   });
@@ -68,8 +68,10 @@ export default function StockManagement() {
       const url = category === 'all' 
         ? `${API_URL}/api/inventory`
         : `${API_URL}/api/inventory?category=${category}`;
-      
-      const response = await fetch(url);
+      const token = getAccessToken();
+      const response = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       console.log('Inventory response: ', data);
@@ -93,7 +95,10 @@ export default function StockManagement() {
   // Fetch stats
   const fetchStats = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/inventory/stats`);
+      const token = getAccessToken();
+      const response = await fetch(`${API_URL}/api/inventory/stats`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       if (response.ok) {
         const data = await response.json();
         if (data.success) setStats(data.stats);
@@ -110,9 +115,10 @@ export default function StockManagement() {
 
   const updateStock = async (itemId, newQuantity, reason = 'Manual adjustment') => {
     try {
+      const token = getAccessToken();
       const response = await fetch(`${API_URL}/api/inventory/${itemId}/stock`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: token ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } : { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stock_quantity: newQuantity, reason })
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -131,9 +137,10 @@ export default function StockManagement() {
 
   const addNewItem = async () => {
     try {
+      const token = getAccessToken();
       const response = await fetch(`${API_URL}/api/inventory`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: token ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } : { 'Content-Type': 'application/json' },
         body: JSON.stringify(newItem)
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -146,7 +153,7 @@ export default function StockManagement() {
           sku: '',
           stock_quantity: 0,
           unit_price: 0,
-          low_stock_threshold: 2,
+          low_stock_threshold: 1,
           location: 'Manekeng Showroom',
           notes: ''
         });
@@ -162,9 +169,10 @@ export default function StockManagement() {
   // Update inventory item (for editing)
   const updateInventoryItem = async (itemData) => {
     try {
+      const token = getAccessToken();
       const response = await fetch(`${API_URL}/api/inventory/${itemData.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: token ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } : { 'Content-Type': 'application/json' },
         body: JSON.stringify(itemData)
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -190,7 +198,7 @@ export default function StockManagement() {
       sku: item.sku || '',
       stock_quantity: item.stock_quantity || 0,
       unit_price: item.unit_price || 0,
-      low_stock_threshold: item.low_stock_threshold || 2,
+      low_stock_threshold: item.low_stock_threshold ?? 1,
       location: item.location || 'Manekeng',
       notes: item.notes || ''
     });
@@ -385,22 +393,11 @@ export default function StockManagement() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Unit Price (R)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={newItem.unit_price}
-                    onChange={(e) => setNewItem({...newItem, unit_price: parseFloat(e.target.value) || 0})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                  />
-                </div>
-
-                <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Low Stock Alert</label>
                   <input
                     type="number"
                     value={newItem.low_stock_threshold}
-                    onChange={(e) => setNewItem({...newItem, low_stock_threshold: parseInt(e.target.value) || 2})}
+                    onChange={(e) => setNewItem({...newItem, low_stock_threshold: parseInt(e.target.value) || 1})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                   />
                 </div>
@@ -492,21 +489,11 @@ export default function StockManagement() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Unit Price (R)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editItem.unit_price}
-                    onChange={(e) => setEditItem({...editItem, unit_price: parseFloat(e.target.value) || 0})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
-                  />
-                </div>
-                <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Low Stock Alert</label>
                   <input
                     type="number"
                     value={editItem.low_stock_threshold}
-                    onChange={(e) => setEditItem({...editItem, low_stock_threshold: parseInt(e.target.value) || 2})}
+                    onChange={(e) => setEditItem({...editItem, low_stock_threshold: parseInt(e.target.value) || 1})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                   />
                 </div>
@@ -564,7 +551,7 @@ export default function StockManagement() {
               <tr className="bg-gray-100 border-b">
                 <th className="p-3 text-left font-semibold text-gray-700">Item Details</th>
                 <th className="p-3 text-left font-semibold text-gray-700">Stock Levels</th>
-                <th className="p-3 text-left font-semibold text-gray-700">Pricing</th>
+                
                 <th className="p-3 text-left font-semibold text-gray-700">Status</th>
                 <th className="p-3 text-left font-semibold text-gray-700">Actions</th>
               </tr>
@@ -572,7 +559,7 @@ export default function StockManagement() {
             <tbody>
               {filteredInventory.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="p-6 text-center text-gray-500">
+                  <td colSpan="4" className="p-6 text-center text-gray-500">
                     {activeTab === 'low' 
                       ? '🎉 No low stock items! Everything is well stocked.' 
                       : 'No inventory items found'}
@@ -586,6 +573,9 @@ export default function StockManagement() {
                       <div className="text-sm text-gray-600 flex items-center space-x-2 mt-1">
                         <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs capitalize">{item.category}</span>
                         <span>{item.sku && `SKU: ${item.sku}`}</span>
+                        {item.color && (
+                          <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">Color: {item.color}</span>
+                        )}
                       </div>
                       <div className="text-xs text-gray-500 mt-1">{item.location}</div>
                       {item.notes && (
@@ -615,14 +605,7 @@ export default function StockManagement() {
                       </div>
                     </td>
 
-                    <td className="p-3">
-                      <div className="font-semibold text-gray-800">
-                        R{parseFloat(item.unit_price || 0).toFixed(2)}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        Low stock: {item.low_stock_threshold}
-                        </div>
-                    </td>
+                    
 
                     <td className="p-3">
                       <span className={`px-2 py-1 rounded text-xs font-semibold ${
@@ -678,6 +661,21 @@ export default function StockManagement() {
                           className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
                         >
                           +Qty
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const val = prompt(`Set low stock alert for \"${item.name}\" (current: ${item.low_stock_threshold})`);
+                            if (val !== null) {
+                              const parsed = parseInt(val);
+                              if (!isNaN(parsed) && parsed >= 0) {
+                                const result = await updateInventoryItem({ id: item.id, low_stock_threshold: parsed });
+                                if (!result.success) alert(`Error: ${result.error}`);
+                              }
+                            }
+                          }}
+                          className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
+                        >
+                          Threshold
                         </button>
                       </div>
                     </td>

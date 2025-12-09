@@ -491,7 +491,7 @@ export default function ConsultationForm() {
     if (form.requires_catering) items.push('Catering');
     if (form.requires_grocery) items.push('Grocery');
     if (form.requires_bus) items.push('Bus');
-    if (form.programs) items.push(`Programs: ${form.programs}`);
+    if (form.programs) items.push(`Programmes: ${form.programs}`);
     if (form.top_up_amount) items.push(`Top-Up: R${form.top_up_amount}`);
     if (form.airtime) items.push(`Airtime: ${form.airtime_network || ''} ${form.airtime_number || ''}`.trim());
     return items.length ? items.join(', ') : 'None selected';
@@ -850,7 +850,6 @@ export default function ConsultationForm() {
                 <>
                   <li>Additional Selected: {selected.length ? selected.join(', ') : 'None'}</li>
                   <li>Not Selected: {notSelected.length ? notSelected.join(', ') : 'None'}</li>
-                  <li>Programs: {data.programs || 'None'}</li>
                   <li>Airtime Details: {data.airtime ? `${data.airtime_network || ''} ${data.airtime_number || ''}`.trim() || 'Provided' : 'None'}</li>
                   <li>Top-Up Amount: {data.top_up_amount || 'None'}</li>
                   <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
@@ -906,7 +905,7 @@ export default function ConsultationForm() {
                 <>
                   <li>Additional Selected: {selected.length ? selected.join(', ') : 'None'}</li>
                   <li>Not Selected: {notSelected.length ? notSelected.join(', ') : 'None'}</li>
-                  <li>Programs: {data.programs || 'None'}</li>
+                  <li>Programmes: {data.programs || 'None'}</li>
                   <li>Airtime Details: {data.airtime ? `${data.airtime_network || ''} ${data.airtime_number || ''}`.trim() || 'Provided' : 'None'}</li>
                   <li>Top-Up Amount: {data.top_up_amount || 'None'}</li>
                   <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
@@ -969,7 +968,7 @@ export default function ConsultationForm() {
                 <>
                   <li>Additional Selected: {selected.length ? selected.join(', ') : 'None'}</li>
                   <li>Not Selected: {notSelected.length ? notSelected.join(', ') : 'None'}</li>
-                  <li>Programs: {data.programs || 'None'}</li>
+                  <li>Programmes: {data.programs || 'None'}</li>
                   <li>Airtime Details: {data.airtime ? `${data.airtime_network || ''} ${data.airtime_number || ''}`.trim() || 'Provided' : 'None'}</li>
                   <li>Top-Up Amount: {data.top_up_amount || 'None'}</li>
                   <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
@@ -1483,7 +1482,7 @@ export default function ConsultationForm() {
                 <label className="flex items-center"><input type="checkbox" checked={form.requires_catering} onChange={e => handleInputChange('requires_catering', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Catering</span></label>
                 <label className="flex items-center"><input type="checkbox" checked={form.requires_grocery} onChange={e => handleInputChange('requires_grocery', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Grocery</span></label>
                 <label className="flex items-center"><input type="checkbox" checked={form.requires_bus} onChange={e => handleInputChange('requires_bus', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Bus</span></label>
-                <div><label>Programs (Number)</label><input type="number" value={form.programs} onChange={e => handleInputChange('programs', parseInt(e.target.value) || 0)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
+                <div><label>Programmes (Number)</label><input type="number" value={form.programs} onChange={e => handleInputChange('programs', parseInt(e.target.value) || 0)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
                 <div><label>Top-Up Amount R</label><input type="number" value={form.top_up_amount} onChange={e => handleInputChange('top_up_amount', parseFloat(e.target.value) || 0)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
                 <label className="flex items-center"><input type="checkbox" checked={form.airtime} onChange={e => handleInputChange('airtime', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Airtime</span></label>
                 {form.airtime && (
@@ -1604,7 +1603,9 @@ export default function ConsultationForm() {
                   <tbody>
                     <tr><td className="border p-2 font-semibold bg-gray-50">FLOWER</td><td className="border p-2">{printedData.requires_flower ? 'Yes' : 'None'}</td></tr>
                     <tr><td className="border p-2 font-semibold bg-gray-50">BUS</td><td className="border p-2">{printedData.requires_bus ? 'Yes' : 'None'}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">PROGRAMS</td><td className="border p-2">{printedData.programs || 'None'}</td></tr>
+                    {printedData.plan_category !== 'specials' && (
+                      <tr><td className="border p-2 font-semibold bg-gray-50">PROGRAMMES</td><td className="border p-2">{printedData.programs || 'None'}</td></tr>
+                    )}
                     <tr><td className="border p-2 font-semibold bg-gray-50">CATERING</td><td className="border p-2">{printedData.requires_catering ? 'Yes' : 'None'}</td></tr>
                     <tr><td className="border p-2 font-semibold bg-gray-50">GROCERY</td><td className="border p-2">{(() => { const isSpecial = printedData.plan_category === 'specials'; const benefits = isSpecial ? (SPECIAL_PLAN_BENEFITS[printedData.plan_name] || {}) : (PLAN_BENEFITS[printedData.plan_name] || {}); if (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0) { return benefits.grocery_items.join(', '); } if (benefits.grocery) { return String(benefits.grocery); } if (benefits.groceries) { return String(benefits.groceries); } return printedData.requires_grocery ? 'Selected (items not specified)' : 'None'; })()}</td></tr>
                     <tr><td className="border p-2 font-semibold bg-gray-50">TOP-UP AMOUNT R</td><td className="border p-2">{printedData.top_up_amount || 'None'}</td></tr>

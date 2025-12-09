@@ -1,11 +1,15 @@
 import axios from "axios";
 import { API_HOST } from "./config";
+import { getAccessToken } from "./auth";
 
 const BASE_URL = `${API_HOST}/api/inventory`;
 
 export const fetchInventory = async (category = 'all') => {
     try {
-        const res = await axios.get(`${BASE_URL}?category=${category}`);
+        const token = getAccessToken();
+        const res = await axios.get(`${BASE_URL}?category=${category}` , {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.inventory || [];
     } catch (err) {
         console.error("Error fetching inventory:", err.response || err);
@@ -15,7 +19,10 @@ export const fetchInventory = async (category = 'all') => {
 
 export const fetchInventoryStats = async () => {
     try {
-        const res = await axios.get(`${BASE_URL}/stats`);
+        const token = getAccessToken();
+        const res = await axios.get(`${BASE_URL}/stats`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.stats;
     } catch (err) {
         console.error("Error fetching inventory stats:", err.response || err);
@@ -25,7 +32,10 @@ export const fetchInventoryStats = async () => {
 
 export const createInventoryItem = async (itemData) => {
     try {
-        const res = await axios.post(BASE_URL, itemData);
+        const token = getAccessToken();
+        const res = await axios.post(BASE_URL, itemData, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.item;
     } catch (err) {
         console.error("Error creating inventory item:", err.response || err);
@@ -35,7 +45,10 @@ export const createInventoryItem = async (itemData) => {
 
 export const updateStockQuantity = async (id, quantity) => {
     try {
-        const res = await axios.patch(`${BASE_URL}/${id}/stock`, { stock_quantity: quantity });
+        const token = getAccessToken();
+        const res = await axios.patch(`${BASE_URL}/${id}/stock`, { stock_quantity: quantity }, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data;
     } catch (err) {
         console.error(`Error updating stock ${id}:`, err.response || err);
@@ -45,7 +58,10 @@ export const updateStockQuantity = async (id, quantity) => {
 
 export const adjustStock = async (id, adjustmentData) => {
     try {
-        const res = await axios.post(`${BASE_URL}/${id}/adjust`, adjustmentData);
+        const token = getAccessToken();
+        const res = await axios.post(`${BASE_URL}/${id}/adjust`, adjustmentData, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data;
     } catch (err) {
         console.error(`Error adjusting stock ${id}:`, err.response || err);
@@ -56,7 +72,10 @@ export const adjustStock = async (id, adjustmentData) => {
 // Stock Take API calls
 export const fetchOpenStockTakes = async () => {
     try {
-        const res = await axios.get(`${BASE_URL}/stock-take/open`);
+        const token = getAccessToken();
+        const res = await axios.get(`${BASE_URL}/stock-take/open`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.stock_takes || [];
     } catch (err) {
         console.error("Error fetching open stock takes:", err.response || err);
@@ -66,7 +85,10 @@ export const fetchOpenStockTakes = async () => {
 
 export const startStockTake = async (takenBy) => {
     try {
-        const res = await axios.post(`${BASE_URL}/stock-take/start`, { taken_by: takenBy });
+        const token = getAccessToken();
+        const res = await axios.post(`${BASE_URL}/stock-take/start`, { taken_by: takenBy }, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data;
     } catch (err) {
         console.error("Error starting stock take:", err.response || err);
@@ -76,7 +98,10 @@ export const startStockTake = async (takenBy) => {
 
 export const fetchStockTake = async (id) => {
     try {
-        const res = await axios.get(`${BASE_URL}/stock-take/${id}`);
+        const token = getAccessToken();
+        const res = await axios.get(`${BASE_URL}/stock-take/${id}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data;
     } catch (err) {
         console.error(`Error fetching stock take ${id}:`, err.response || err);
@@ -86,7 +111,10 @@ export const fetchStockTake = async (id) => {
 
 export const updateStockTakeItem = async (stockTakeId, itemId, data) => {
     try {
-        const res = await axios.put(`${BASE_URL}/stock-take/${stockTakeId}/item/${itemId}`, data);
+        const token = getAccessToken();
+        const res = await axios.put(`${BASE_URL}/stock-take/${stockTakeId}/item/${itemId}`, data, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data.item;
     } catch (err) {
         console.error(`Error updating stock take item ${itemId}:`, err.response || err);
@@ -96,7 +124,10 @@ export const updateStockTakeItem = async (stockTakeId, itemId, data) => {
 
 export const cancelStockTake = async (id) => {
     try {
-        const res = await axios.post(`${BASE_URL}/stock-take/${id}/cancel`);
+        const token = getAccessToken();
+        const res = await axios.post(`${BASE_URL}/stock-take/${id}/cancel`, null, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data;
     } catch (err) {
         console.error(`Error cancelling stock take ${id}:`, err.response || err);
@@ -106,7 +137,10 @@ export const cancelStockTake = async (id) => {
 
 export const completeStockTake = async (id) => {
     try {
-        const res = await axios.post(`${BASE_URL}/stock-take/${id}/complete`);
+        const token = getAccessToken();
+        const res = await axios.post(`${BASE_URL}/stock-take/${id}/complete`, null, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
         return res.data;
     } catch (err) {
         console.error(`Error completing stock take ${id}:`, err.response || err);

@@ -29,7 +29,7 @@ export const getApiHost = () => {
     const hostname = window.location.hostname;
     const isLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "" || hostname === "::1";
     if (isLocal && !forceRemote) {
-      const port = String(process.env.REACT_APP_API_PORT || '').trim() || '5000';
+      const port = String(process.env.REACT_APP_API_PORT || '').trim() || '5001';
       const localUrl = `http://localhost:${port}`;
       console.log("🔧 [API Config] Detected localhost - using", localUrl, "(override via REACT_APP_API_PORT or REACT_APP_FORCE_REMOTE=true)");
       return localUrl;
@@ -50,4 +50,3 @@ if (typeof window !== "undefined") {
   console.log("🌐 [API Config] REACT_APP_FORCE_REMOTE:", process.env.REACT_APP_FORCE_REMOTE);
   console.log("🌐 [API Config] Final API_HOST:", API_HOST);
 }
-
