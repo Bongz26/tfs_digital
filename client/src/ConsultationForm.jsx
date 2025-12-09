@@ -877,7 +877,6 @@ export default function ConsultationForm() {
           <ul className="list-disc pl-5">
             <li>Included: {benefits.juice_liters || 0}L Juice, {benefits.cakes_liters || 0}L Cakes</li>
             <li>Grocery Items: {(benefits.grocery_items || []).join(', ')}</li>
-            <li>Cover Amount: R{data.cover_amount.toLocaleString()}</li>
             {data.benefit_mode === 'cashback' && (
               <li>Cashback: R{(data.cover_amount || 0).toLocaleString()}</li>
             )}
@@ -997,8 +996,7 @@ export default function ConsultationForm() {
         {benefits.grocery && <li>{benefits.grocery}</li>}
         {benefits.groceries && <li>{benefits.groceries}</li>}
         {benefits.service && <li>{benefits.service}</li>}
-        <li>Cover Amount: R{data.cover_amount.toLocaleString()}</li>
-        <li>Cashback: R{(data.cashback_amount || 0).toLocaleString()}</li>
+        
         <li>Programmes Selected: {data.programs}</li>
         {(() => {
           const extras = ['Flower','Grocery','Catering','Tombstone','Bus','Cow','Sheep','Airtime'];
@@ -1558,9 +1556,7 @@ export default function ConsultationForm() {
               <p><strong>Claimant Names:</strong> {printedData.nok_name}</p>
               <p><strong>Contact Details:</strong> {printedData.nok_contact}</p>
               <p><strong>Cleansing:</strong> {printedData.cleansing_date} {printedData.cleansing_time && (`• ${printedData.cleansing_time}`)}</p>
-              {printedData.cover_amount > 0 && (
-                <p><strong>Cover Amount:</strong> R{printedData.cover_amount.toLocaleString()}</p>
-              )}
+              
               <h3 className="font-bold mt-4">Plan Benefits:</h3>
               {renderBenefitsList(printedData)}
             </>
@@ -1591,7 +1587,7 @@ export default function ConsultationForm() {
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <table className="w-full border-collapse">
                   <tbody>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">COVER AMOUNT</td><td className="border p-2">R{printedData.cover_amount.toLocaleString()}</td></tr>
+                    
                     <tr><td className="border p-2 font-semibold bg-gray-50">CASKET/COFFIN TYPE</td><td className="border p-2">{printedData.casket_type}</td></tr>
                     <tr><td className="border p-2 font-semibold bg-gray-50">CASKET/COFFIN COLOUR</td><td className="border p-2">{printedData.casket_colour}</td></tr>
                     <tr><td className="border p-2 font-semibold bg-gray-50">COW</td><td className="border p-2">{printedData.requires_cow ? 'Yes' : 'None'}</td></tr>
@@ -1612,7 +1608,9 @@ export default function ConsultationForm() {
                     <tr><td className="border p-2 font-semibold bg-gray-50">AIRTIME</td><td className="border p-2">{printedData.airtime ? 'Yes' : 'None'}</td></tr>
                     <tr><td className="border p-2 font-semibold bg-gray-50">NETWORK</td><td className="border p-2">{printedData.airtime ? (printedData.airtime_network || 'Provided') : 'None'}</td></tr>
                     <tr><td className="border p-2 font-semibold bg-gray-50">NUMBER</td><td className="border p-2">{printedData.airtime ? (printedData.airtime_number || 'Provided') : 'None'}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">CASHBACK AMOUNT</td><td className="border p-2">R{printedData.cashback_amount.toLocaleString()}</td></tr>
+                    {printedData.plan_category !== 'specials' && (
+                      <tr><td className="border p-2 font-semibold bg-gray-50">CASHBACK AMOUNT</td><td className="border p-2">R{printedData.cashback_amount.toLocaleString()}</td></tr>
+                    )}
                     <tr><td className="border p-2 font-semibold bg-gray-50">AMOUNT TO BANK</td><td className="border p-2">R{printedData.amount_to_bank.toLocaleString()}</td></tr>
                   </tbody>
                 </table>
