@@ -70,6 +70,7 @@ describe('Purchase Orders Controller', () => {
                 .mockResolvedValueOnce() // BEGIN
                 .mockResolvedValueOnce({ rows: [{ id: 1 }] }) // Supplier lookup (found)
                 .mockResolvedValueOnce({ rows: [{ id: 1, po_number: 'PO-123' }] }) // Insert PO Header
+                .mockResolvedValueOnce({ rows: [{ unit_price: 10 }] }) // Fetch Inventory Price
                 .mockResolvedValueOnce() // Insert Item
                 .mockResolvedValueOnce() // COMMIT
                 .mockResolvedValueOnce({ rows: [{ id: 1, po_number: 'PO-123', items: [] }] }); // Fetch full PO

@@ -10,6 +10,7 @@ describe('Cases Controller', () => {
         req = {
             body: {},
             params: {},
+            query: {},
         };
         res = {
             json: jest.fn(),

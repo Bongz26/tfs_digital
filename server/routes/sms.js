@@ -314,119 +314,112 @@ function getPlanAirtimeAmount(name) {
   return m[k] || 0;
 }
 
+const PLAN_AMOUNT_CASE_SQL = `
+  CASE 
+    WHEN TRIM(plan_name) = 'Plan A' THEN 100
+    WHEN TRIM(plan_name) = 'Plan B' THEN 100
+    WHEN TRIM(plan_name) = 'Plan C' THEN 100
+    WHEN TRIM(plan_name) = 'Plan D' THEN 200
+    WHEN TRIM(plan_name) = 'Plan E' THEN 200
+    WHEN TRIM(plan_name) = 'Plan F' THEN 200
+    WHEN TRIM(plan_name) = 'Silver' THEN 100
+    WHEN TRIM(plan_name) = 'Gold' THEN 200
+    WHEN TRIM(plan_name) = 'Platinum' THEN 200
+    WHEN TRIM(plan_name) = 'Black' THEN 200
+    WHEN TRIM(plan_name) = 'Pearl' THEN 200
+    WHEN TRIM(plan_name) = 'Ivory' THEN 200
+    ELSE 0 
+  END
+`;
+
+const PLAN_AMOUNT_JSON_SQL = `
+  CASE 
+    WHEN TRIM(data->>'plan_name') = 'Plan A' THEN 100
+    WHEN TRIM(data->>'plan_name') = 'Plan B' THEN 100
+    WHEN TRIM(data->>'plan_name') = 'Plan C' THEN 100
+    WHEN TRIM(data->>'plan_name') = 'Plan D' THEN 200
+    WHEN TRIM(data->>'plan_name') = 'Plan E' THEN 200
+    WHEN TRIM(data->>'plan_name') = 'Plan F' THEN 200
+    WHEN TRIM(data->>'plan_name') = 'Silver' THEN 100
+    WHEN TRIM(data->>'plan_name') = 'Gold' THEN 200
+    WHEN TRIM(data->>'plan_name') = 'Platinum' THEN 200
+    WHEN TRIM(data->>'plan_name') = 'Black' THEN 200
+    WHEN TRIM(data->>'plan_name') = 'Pearl' THEN 200
+    WHEN TRIM(data->>'plan_name') = 'Ivory' THEN 200
+    ELSE 0 
+  END
+`;
+
 async function generateAirtimeRequestsFromDrafts() {
   await ensureAirtimeTable();
   try {
+    // Check table exists logic preserved
     const exists = await query(
       `SELECT EXISTS (
          SELECT FROM information_schema.tables 
          WHERE table_schema = 'public' AND table_name = 'claim_drafts'
        ) AS ex`
     );
-    if (!exists.rows[0]?.ex) {
-      return;
-    }
-    const drafts = await query(
-      `SELECT policy_number, data, created_at FROM claim_drafts
-       WHERE (data->>'status') = 'claim_draft'
-         AND COALESCE((data->>'airtime') = 'true', false)
-         AND NULLIF(TRIM(data->>'airtime_network'), '') IS NOT NULL
-         AND NULLIF(TRIM(data->>'airtime_number'), '') IS NOT NULL`
-    );
-    for (const row of drafts.rows) {
-      const d = row.data || {};
-      const network = String(d.airtime_network || '').trim();
-      const phone = String(d.airtime_number || '').trim();
-      const exists = await query(
-        `SELECT id FROM airtime_requests WHERE policy_number = $1 AND phone_number = $2 AND network = $3`,
-        [row.policy_number || null, phone, network]
-      );
-      if (exists.rows.length > 0) continue;
+    if (!exists.rows[0]?.ex) return;
 
-      // Look up case_id from cases table using policy_number
-      let caseId = null;
-      if (row.policy_number) {
-        const caseResult = await query(
-          `SELECT id FROM cases WHERE policy_number = $1 LIMIT 1`,
-          [row.policy_number]
-        );
-        if (caseResult.rows.length > 0) {
-          caseId = caseResult.rows[0].id;
-        }
-      }
-
-      const amount = getPlanAirtimeAmount(d.plan_name) || 0;
-      const res = await query(
-        `INSERT INTO airtime_requests (
-          case_id, policy_number, beneficiary_name, network, phone_number, amount,
+    await query(`
+      INSERT INTO airtime_requests (
+        case_id, policy_number, beneficiary_name, network, phone_number, amount,
         status, requested_by, requested_by_email, requested_by_role, operator_notes, operator_phone, requested_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8,$9,$10,$11, $12)
-      RETURNING *`,
-        [
-          caseId,
-          row.policy_number || null,
-          d.nok_name || null,
-          network,
-          phone,
-          parseFloat(amount || 0) || 0,
-          null,
-          null,
-          null,
-          'Auto from claim draft',
-          null,
-          row.created_at || new Date()
-        ]
-      );
-
-    }
-  } catch (_) {
-    return;
+      )
+      SELECT 
+        (SELECT id FROM cases WHERE cases.policy_number = cd.policy_number LIMIT 1),
+        cd.policy_number, 
+        cd.data->>'nok_name', 
+        TRIM(cd.data->>'airtime_network'), 
+        TRIM(cd.data->>'airtime_number'),
+        ${PLAN_AMOUNT_JSON_SQL},
+        'pending', null, null, 'Auto from claim draft', null, null,
+        cd.created_at
+      FROM claim_drafts cd
+      WHERE (cd.data->>'status') = 'claim_draft'
+        AND COALESCE((cd.data->>'airtime') = 'true', false)
+        AND NULLIF(TRIM(cd.data->>'airtime_network'), '') IS NOT NULL
+        AND NULLIF(TRIM(cd.data->>'airtime_number'), '') IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM airtime_requests ar
+          WHERE ar.policy_number = cd.policy_number
+            AND ar.phone_number = TRIM(cd.data->>'airtime_number')
+            AND ar.network = TRIM(cd.data->>'airtime_network')
+        )
+    `);
+  } catch (e) {
+    console.error('Error in generateAirtimeRequestsFromDrafts:', e.message);
   }
 }
 
 async function generateAirtimeRequestsFromCases() {
   await ensureAirtimeTable();
   try {
-    const cases = await query(
-      `SELECT id, policy_number, nok_name, plan_name, airtime, airtime_network, airtime_number, status, claim_date
-       FROM cases
-       WHERE airtime = true
-         AND NULLIF(TRIM(airtime_network), '') IS NOT NULL
-         AND NULLIF(TRIM(airtime_number), '') IS NOT NULL
-         AND claim_date >= '2025-12-08'
-         AND status NOT IN ('completed','cancelled','archived')`
-    );
-    for (const c of cases.rows) {
-      const network = String(c.airtime_network || '').trim();
-      const phone = String(c.airtime_number || '').trim();
-      const exists = await query(
-        `SELECT id FROM airtime_requests WHERE policy_number = $1 AND phone_number = $2 AND network = $3`,
-        [c.policy_number || null, phone, network]
-      );
-      if (exists.rows.length > 0) continue;
-      const amount = getPlanAirtimeAmount(c.plan_name) || 0;
-      await query(
-        `INSERT INTO airtime_requests (
-          case_id, policy_number, beneficiary_name, network, phone_number, amount,
-          status, requested_by, requested_by_email, requested_by_role, operator_notes, operator_phone
-        ) VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8,$9,$10,$11)`,
-        [
-          c.id || null,
-          c.policy_number || null,
-          c.nok_name || null,
-          network,
-          phone,
-          parseFloat(amount || 0) || 0,
-          null,
-          null,
-          null,
-          'Auto from case scan',
-          null
-        ]
-      );
-    }
-  } catch (_) {
-    return;
+    await query(`
+      INSERT INTO airtime_requests (
+        case_id, policy_number, beneficiary_name, network, phone_number, amount,
+        status, requested_by, requested_by_email, requested_by_role, operator_notes, operator_phone
+      )
+      SELECT 
+        id, policy_number, nok_name, TRIM(airtime_network), TRIM(airtime_number), 
+        ${PLAN_AMOUNT_CASE_SQL},
+        'pending', null, null, 'Auto from case scan', null, null
+      FROM cases c
+      WHERE c.airtime = true 
+        AND NULLIF(TRIM(c.airtime_network), '') IS NOT NULL
+        AND NULLIF(TRIM(c.airtime_number), '') IS NOT NULL
+        AND c.claim_date >= '2025-12-08'
+        AND c.status NOT IN ('completed','cancelled','archived')
+        AND NOT EXISTS (
+          SELECT 1 FROM airtime_requests ar 
+          WHERE ar.policy_number = c.policy_number 
+            AND ar.phone_number = TRIM(c.airtime_number) 
+            AND ar.network = TRIM(c.airtime_network)
+        )
+    `);
+  } catch (e) {
+    console.error('Error in generateAirtimeRequestsFromCases:', e.message);
   }
 }
 

@@ -42,7 +42,7 @@ if (supabaseUrl && supabaseKey) {
 
 // Middleware - CORS (allow all origins in development)
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
+  origin: process.env.NODE_ENV === 'production'
     ? process.env.FRONTEND_URL || 'https://admintfs.onrender.com'
     : '*', // Allow all origins in development
   credentials: true
@@ -83,16 +83,13 @@ if (fs.existsSync(clientBuildPath)) {
 // If client build is not present (e.g., backend-only deploy), redirect known app routes to frontend origin
 else {
   const frontendOrigin = process.env.FRONTEND_URL || 'https://tfs-digital.onrender.com';
-  const clientRoutes = [
-    '/', '/login', '/register', '/forgot-password', '/reset-password',
-    '/dashboard', '/cases', '/airtime-requests', '/stock-management',
-    '/vehicles', '/repatriation-trips'
-  ];
-  clientRoutes.forEach(route => {
-    app.get(route, (req, res) => {
-      const to = `${frontendOrigin}${req.path}`;
-      res.redirect(to);
-    });
+  // Redirect all non-API routes to the frontend origin
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    const to = `${frontendOrigin}${req.originalUrl}`;
+    res.redirect(to);
   });
 }
 
