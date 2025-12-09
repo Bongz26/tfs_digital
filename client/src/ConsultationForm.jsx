@@ -1,5 +1,6 @@
 // src/components/ConsultationForm.jsx
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { createCase, lookupCase } from './api/cases';
 import { createAirtimeRequest } from './api/sms';
 import { saveDraft as saveDraftServer, getDraftByPolicy as getDraftServer, getLastDraft as getLastDraftServer, deleteDraftByPolicy as deleteDraftServer, listDrafts as listDraftsServer } from './api/claimDrafts';
@@ -243,8 +244,8 @@ const PLAN_BENEFITS = {
     crucifix: 1,
     flower: 1,
     airtime: 200,
-    tombstone:1,
-    cow:1,
+    tombstone: 1,
+    cow: 1,
     service: "1 Service (Incl. Hearse & Family Cars & Deco)"
   },
 };
@@ -383,6 +384,24 @@ export default function ConsultationForm() {
   const [draftQuery, setDraftQuery] = useState('');
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [serverDrafts, setServerDrafts] = useState([]);
+  const location = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const policy = params.get('policy');
+    if (policy) {
+      const load = async () => {
+        try {
+          const serverDraft = await getDraftServer(policy);
+          if (serverDraft && serverDraft.data) {
+            setForm(prev => ({ ...prev, ...serverDraft.data }));
+            setMessage('Draft loaded from link');
+          }
+        } catch (e) { }
+      };
+      load();
+    }
+  }, [location.search]);
 
   useEffect(() => {
     const timeout = setTimeout(async () => {
@@ -421,7 +440,7 @@ export default function ConsultationForm() {
           }));
           setMessage('Existing case data auto-filled');
         }
-      } catch (e) {}
+      } catch (e) { }
     }, 400);
     return () => clearTimeout(timeout);
   }, [form.deceased_id, form.policy_number, form.deceased_name, form.nok_contact]);
@@ -570,7 +589,7 @@ export default function ConsultationForm() {
         const raw = window.localStorage.getItem(key);
         const data = JSON.parse(raw);
         if (data && typeof data === 'object') arr.push({ key, data });
-      } catch (e) {}
+      } catch (e) { }
     }
     return arr.sort((a, b) => String(b.data?.saved_at || '').localeCompare(String(a.data?.saved_at || '')));
   };
@@ -607,7 +626,7 @@ export default function ConsultationForm() {
         setDraftQuery('');
         return;
       }
-    } catch (e) {}
+    } catch (e) { }
     const key = `tfs_claim_draft_${policy}`;
     loadDraftKey(key);
   };
@@ -637,7 +656,7 @@ export default function ConsultationForm() {
     try {
       const policy = String(key || '').replace('tfs_claim_draft_', '');
       if (policy) {
-        try { await deleteDraftServer(policy); } catch (_) {}
+        try { await deleteDraftServer(policy); } catch (_) { }
       }
       window.localStorage.removeItem(key);
       setMessage('Draft deleted');
@@ -731,7 +750,7 @@ export default function ConsultationForm() {
         const detail = serverErr?.details || serverErr?.hint || serverErr?.error;
         setMessage(`Remote save failed: ${detail || err.message}`);
       }
-      
+
       const key = `tfs_claim_draft_${data.policy_number}`;
       const stamped = { ...data, saved_at: new Date().toISOString() };
       window.localStorage.setItem(key, JSON.stringify(stamped));
@@ -827,7 +846,7 @@ export default function ConsultationForm() {
               <li key={i}>{b}</li>
             ))}
             {(() => {
-              const extras = ['Flower','Grocery','Catering','Tombstone','Bus','Cow','Sheep','Airtime'];
+              const extras = ['Flower', 'Grocery', 'Catering', 'Tombstone', 'Bus', 'Cow', 'Sheep', 'Airtime'];
               const map = {
                 Flower: data.requires_flower,
                 Grocery: data.requires_grocery,
@@ -881,7 +900,7 @@ export default function ConsultationForm() {
               <li>Cashback: R{(data.cover_amount || 0).toLocaleString()}</li>
             )}
             {(() => {
-              const extras = ['Flower','Grocery','Catering','Tombstone','Bus','Cow','Sheep','Airtime'];
+              const extras = ['Flower', 'Grocery', 'Catering', 'Tombstone', 'Bus', 'Cow', 'Sheep', 'Airtime'];
               const map = {
                 Flower: data.requires_flower,
                 Grocery: data.requires_grocery,
@@ -944,7 +963,7 @@ export default function ConsultationForm() {
               <li>Cashback: R{(data.cover_amount || 0).toLocaleString()}</li>
             )}
             {(() => {
-              const extras = ['Flower','Grocery','Catering','Tombstone','Bus','Cow','Sheep','Airtime'];
+              const extras = ['Flower', 'Grocery', 'Catering', 'Tombstone', 'Bus', 'Cow', 'Sheep', 'Airtime'];
               const map = {
                 Flower: data.requires_flower,
                 Grocery: data.requires_grocery,
@@ -996,10 +1015,10 @@ export default function ConsultationForm() {
         {benefits.grocery && <li>{benefits.grocery}</li>}
         {benefits.groceries && <li>{benefits.groceries}</li>}
         {benefits.service && <li>{benefits.service}</li>}
-        
+
         <li>Programmes Selected: {data.programs}</li>
         {(() => {
-          const extras = ['Flower','Grocery','Catering','Tombstone','Bus','Cow','Sheep','Airtime'];
+          const extras = ['Flower', 'Grocery', 'Catering', 'Tombstone', 'Bus', 'Cow', 'Sheep', 'Airtime'];
           const map = {
             Flower: data.requires_flower,
             Grocery: data.requires_grocery,
@@ -1082,12 +1101,12 @@ export default function ConsultationForm() {
                                 setDraftsOpen(false);
                                 setDraftQuery('');
                               }
-                            } catch (e) {}
+                            } catch (e) { }
                           }} className="px-3 py-1 rounded bg-green-600 text-white text-sm">Load</button>
                           <button type="button" onClick={async () => {
                             const reason = window.prompt('Enter reason for deletion');
                             if (reason == null) return;
-                            try { await deleteDraftServer(d.policy_number, reason); } catch (_) {}
+                            try { await deleteDraftServer(d.policy_number, reason); } catch (_) { }
                             setServerDrafts(prev => prev.filter(x => x.policy_number !== d.policy_number));
                           }} className="px-3 py-1 rounded bg-red-600 text-white text-sm">Delete</button>
                         </div>
@@ -1515,7 +1534,7 @@ export default function ConsultationForm() {
             </div>
           </div>
 
-          
+
 
           {/* SUBMIT BUTTONS */}
           <div className="p-8 bg-gray-50 border-t flex gap-4">
@@ -1547,112 +1566,116 @@ export default function ConsultationForm() {
             body * { visibility: hidden !important; }
             #tfs-print-root, #tfs-print-root * { visibility: visible !important; }
             #tfs-print-root {
-              position: fixed; left: 0; top: 0;
-              width: 210mm; min-height: 297mm;
-              padding: 6mm; box-sizing: border-box;
-              font-size: 9pt;
+              position: absolute; left: 0; top: 0;
+              width: 210mm;
+              padding: 5mm; box-sizing: border-box;
+              font-size: 8pt;
+              background: white;
             }
             /* Condense spacing to fit one page */
-            #tfs-print-root .mb-4 { margin-bottom: 6px !important; }
-            #tfs-print-root .mb-2 { margin-bottom: 4px !important; }
-            #tfs-print-root .py-2 { padding-top: 4px !important; padding-bottom: 4px !important; }
-            #tfs-print-root .p-2 { padding: 4px !important; }
-            #tfs-print-root .p-4 { padding: 6px !important; }
-            #tfs-print-root .p-6 { padding: 8px !important; }
-            #tfs-print-root table { page-break-inside: avoid; }
+            #tfs-print-root .mb-4 { margin-bottom: 4px !important; }
+            #tfs-print-root .mb-2 { margin-bottom: 2px !important; }
+            #tfs-print-root .py-2 { padding-top: 2px !important; padding-bottom: 2px !important; }
+            #tfs-print-root .p-2 { padding: 2px !important; }
+            #tfs-print-root .p-4 { padding: 4px !important; }
+            #tfs-print-root .p-6 { padding: 4px !important; }
+            #tfs-print-root h1 { font-size: 14pt !important; margin-bottom: 4px !important; }
+            #tfs-print-root h2 { font-size: 11pt !important; padding: 2px !important; margin-bottom: 4px !important; }
+            #tfs-print-root table { width: 100%; border-collapse: collapse; page-break-inside: avoid; }
+            #tfs-print-root td { border: 1px solid #ccc; }
           }`}</style>
-          <div id="tfs-print-root" className="hidden print:block" style={{ margin: '0 auto', fontFamily: 'Arial, sans-serif', fontSize: '10pt', padding: '0' }}>
-          <div className="flex justify-between mb-4">
-            <h1 className="text-2xl font-bold text-red-800">THUSANANG FUNERAL SERVICES</h1>
-            <p className="text-right">RESPECTFUL | PROFESSIONAL | DIGNIFIED<br />Head Office Phuthaditjhaba<br />Site 1, Portion 2, Beirut<br />Tel: 08000 145 74 | After Hours: 073 750 0857<br />Cell No / WhatsApp: 071 480 5050 / 073 073 1580<br />info@thusanangfs.co.za<br />www.thusanangfs.co.za<br />AN AUTHORISED SERVICE PROVIDER | FSP: 39701</p>
-          </div>
+          <div id="tfs-print-root" className="hidden print:block" style={{ margin: '0 auto', fontFamily: 'Arial, sans-serif', fontSize: '8pt', padding: '0' }}>
+            <div className="flex justify-between mb-4">
+              <h1 className="text-2xl font-bold text-red-800">THUSANANG FUNERAL SERVICES</h1>
+              <p className="text-right">RESPECTFUL | PROFESSIONAL | DIGNIFIED<br />Head Office Phuthaditjhaba<br />Site 1, Portion 2, Beirut<br />Tel: 08000 145 74 | After Hours: 073 750 0857<br />Cell No / WhatsApp: 071 480 5050 / 073 073 1580<br />info@thusanangfs.co.za<br />www.thusanangfs.co.za<br />AN AUTHORISED SERVICE PROVIDER | FSP: 39701</p>
+            </div>
 
-          {printMode === 'receipt' ? (
-            <>
-              <h2 className="text-xl font-bold text-center bg-red-600 text-white py-2 mb-4">CLAIM RECEIPT</h2>
-              <p><strong>Policy Number:</strong> {printedData.policy_number}</p>
-              <p><strong>Deceased Names:</strong> {printedData.deceased_name}</p>
-              <p><strong>Claimant Names:</strong> {printedData.nok_name}</p>
-              <p><strong>Contact Details:</strong> {printedData.nok_contact}</p>
-              <p><strong>Cleansing:</strong> {printedData.cleansing_date} {printedData.cleansing_time && (`• ${printedData.cleansing_time}`)}</p>
-              
-              <h3 className="font-bold mt-4">Plan Benefits:</h3>
-              {renderBenefitsList(printedData)}
-            </>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <table className="w-full border-collapse">
+            {printMode === 'receipt' ? (
+              <>
+                <h2 className="text-xl font-bold text-center bg-red-600 text-white py-2 mb-4">CLAIM RECEIPT</h2>
+                <p><strong>Policy Number:</strong> {printedData.policy_number}</p>
+                <p><strong>Deceased Names:</strong> {printedData.deceased_name}</p>
+                <p><strong>Claimant Names:</strong> {printedData.nok_name}</p>
+                <p><strong>Contact Details:</strong> {printedData.nok_contact}</p>
+                <p><strong>Cleansing:</strong> {printedData.cleansing_date} {printedData.cleansing_time && (`• ${printedData.cleansing_time}`)}</p>
+
+                <h3 className="font-bold mt-4">Plan Benefits:</h3>
+                {renderBenefitsList(printedData)}
+              </>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <table className="w-full border-collapse">
+                    <tbody>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">CLAIM DATE</td><td className="border p-2">{formatDateForBoxes(printedData.claim_date).map((char, i) => <span key={i} className="inline-block w-6 text-center border border-black mx-1">{char}</span>)}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">POLICY NUMBER</td><td className="border p-2">{printedData.policy_number}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">DECEASED NAMES</td><td className="border p-2">{printedData.deceased_name}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">CLAIMANT NAMES</td><td className="border p-2">{printedData.nok_name}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">CONTACT DETAILS</td><td className="border p-2">{printedData.nok_contact}</td></tr>
+                    </tbody>
+                  </table>
+                  <table className="w-full border-collapse">
+                    <tbody>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">CLEANSING</td><td className="border p-2">DATE: {printedData.cleansing_date} TIME: {printedData.cleansing_time}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">DELIVERY</td><td className="border p-2">DATE: {printedData.delivery_date} TIME: {printedData.delivery_time}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">SERVICE</td><td className="border p-2">DATE: {printedData.service_date} TIME: {printedData.service_time}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">CHURCH</td><td className="border p-2">DATE: {printedData.church_date} TIME: {printedData.church_time}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">SERVICE VENUE</td><td className="border p-2">{printedData.venue_name}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <h2 className="text-center bg-red-600 text-white py-2 mb-2">CHECK LIST</h2>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <table className="w-full border-collapse">
+                    <tbody>
+
+                      <tr><td className="border p-2 font-semibold bg-gray-50">CASKET/COFFIN TYPE</td><td className="border p-2">{printedData.casket_type}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">CASKET/COFFIN COLOUR</td><td className="border p-2">{printedData.casket_colour}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">COW</td><td className="border p-2">{printedData.requires_cow ? 'Yes' : 'None'}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">SHEEP</td><td className="border p-2">{printedData.requires_sheep ? 'Yes' : 'None'}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">TOMBSTONE</td><td className="border p-2">{printedData.requires_tombstone ? 'Yes' : 'None'}</td></tr>
+                    </tbody>
+                  </table>
+                  <table className="w-full border-collapse">
+                    <tbody>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">FLOWER</td><td className="border p-2">{printedData.requires_flower ? 'Yes' : 'None'}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">BUS</td><td className="border p-2">{printedData.requires_bus ? 'Yes' : 'None'}</td></tr>
+                      {printedData.plan_category !== 'specials' && (
+                        <tr><td className="border p-2 font-semibold bg-gray-50">PROGRAMMES</td><td className="border p-2">{printedData.programs || 'None'}</td></tr>
+                      )}
+                      <tr><td className="border p-2 font-semibold bg-gray-50">CATERING</td><td className="border p-2">{printedData.requires_catering ? 'Yes' : 'None'}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">GROCERY</td><td className="border p-2">{(() => { const isSpecial = printedData.plan_category === 'specials'; const benefits = isSpecial ? (SPECIAL_PLAN_BENEFITS[printedData.plan_name] || {}) : (PLAN_BENEFITS[printedData.plan_name] || {}); if (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0) { return benefits.grocery_items.join(', '); } if (benefits.grocery) { return String(benefits.grocery); } if (benefits.groceries) { return String(benefits.groceries); } return printedData.requires_grocery ? 'Selected (items not specified)' : 'None'; })()}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">TOP-UP AMOUNT R</td><td className="border p-2">{printedData.top_up_amount || 'None'}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">AIRTIME</td><td className="border p-2">{printedData.airtime ? 'Yes' : 'None'}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">NETWORK</td><td className="border p-2">{printedData.airtime ? (printedData.airtime_network || 'Provided') : 'None'}</td></tr>
+                      <tr><td className="border p-2 font-semibold bg-gray-50">NUMBER</td><td className="border p-2">{printedData.airtime ? (printedData.airtime_number || 'Provided') : 'None'}</td></tr>
+                      {printedData.plan_category !== 'specials' && (
+                        <tr><td className="border p-2 font-semibold bg-gray-50">CASHBACK AMOUNT</td><td className="border p-2">R{printedData.cashback_amount.toLocaleString()}</td></tr>
+                      )}
+                      <tr><td className="border p-2 font-semibold bg-gray-50">AMOUNT TO BANK</td><td className="border p-2">R{printedData.amount_to_bank.toLocaleString()}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <table className="w-full border-collapse mb-4">
                   <tbody>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">CLAIM DATE</td><td className="border p-2">{formatDateForBoxes(printedData.claim_date).map((char, i) => <span key={i} className="inline-block w-6 text-center border border-black mx-1">{char}</span>)}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">POLICY NUMBER</td><td className="border p-2">{printedData.policy_number}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">DECEASED NAMES</td><td className="border p-2">{printedData.deceased_name}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">CLAIMANT NAMES</td><td className="border p-2">{printedData.nok_name}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">CONTACT DETAILS</td><td className="border p-2">{printedData.nok_contact}</td></tr>
+                    <tr><td className="border p-2">OFFICE PERSONNEL</td><td className="border p-2">{printedData.office_personnel1}</td><td className="border p-2">CLIENT NAME</td><td className="border p-2">{printedData.client_name1}</td></tr>
+                    <tr><td className="border p-2">DATE</td><td className="border p-2">{printedData.date1}</td><td className="border p-2">DATE</td><td className="border p-2">{printedData.date1}</td></tr>
                   </tbody>
                 </table>
+
+                <h2 className="text-center bg-red-600 text-white py-2 mb-2">SIGN OFF</h2>
                 <table className="w-full border-collapse">
                   <tbody>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">CLEANSING</td><td className="border p-2">DATE: {printedData.cleansing_date} TIME: {printedData.cleansing_time}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">DELIVERY</td><td className="border p-2">DATE: {printedData.delivery_date} TIME: {printedData.delivery_time}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">SERVICE</td><td className="border p-2">DATE: {printedData.service_date} TIME: {printedData.service_time}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">CHURCH</td><td className="border p-2">DATE: {printedData.church_date} TIME: {printedData.church_time}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">SERVICE VENUE</td><td className="border p-2">{printedData.venue_name}</td></tr>
+                    <tr><td className="border p-2">OFFICE PERSONNEL</td><td className="border p-2">{printedData.office_personnel2}</td><td className="border p-2">CLIENT NAME</td><td className="border p-2">{printedData.client_name2}</td></tr>
+                    <tr><td className="border p-2">DATE</td><td className="border p-2">{printedData.date2}</td><td className="border p-2">DATE</td><td className="border p-2">{printedData.date2}</td></tr>
                   </tbody>
                 </table>
-              </div>
+              </>
+            )}
 
-              <h2 className="text-center bg-red-600 text-white py-2 mb-2">CHECK LIST</h2>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <table className="w-full border-collapse">
-                  <tbody>
-                    
-                    <tr><td className="border p-2 font-semibold bg-gray-50">CASKET/COFFIN TYPE</td><td className="border p-2">{printedData.casket_type}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">CASKET/COFFIN COLOUR</td><td className="border p-2">{printedData.casket_colour}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">COW</td><td className="border p-2">{printedData.requires_cow ? 'Yes' : 'None'}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">SHEEP</td><td className="border p-2">{printedData.requires_sheep ? 'Yes' : 'None'}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">TOMBSTONE</td><td className="border p-2">{printedData.requires_tombstone ? 'Yes' : 'None'}</td></tr>
-                  </tbody>
-                </table>
-                <table className="w-full border-collapse">
-                  <tbody>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">FLOWER</td><td className="border p-2">{printedData.requires_flower ? 'Yes' : 'None'}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">BUS</td><td className="border p-2">{printedData.requires_bus ? 'Yes' : 'None'}</td></tr>
-                    {printedData.plan_category !== 'specials' && (
-                      <tr><td className="border p-2 font-semibold bg-gray-50">PROGRAMMES</td><td className="border p-2">{printedData.programs || 'None'}</td></tr>
-                    )}
-                    <tr><td className="border p-2 font-semibold bg-gray-50">CATERING</td><td className="border p-2">{printedData.requires_catering ? 'Yes' : 'None'}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">GROCERY</td><td className="border p-2">{(() => { const isSpecial = printedData.plan_category === 'specials'; const benefits = isSpecial ? (SPECIAL_PLAN_BENEFITS[printedData.plan_name] || {}) : (PLAN_BENEFITS[printedData.plan_name] || {}); if (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0) { return benefits.grocery_items.join(', '); } if (benefits.grocery) { return String(benefits.grocery); } if (benefits.groceries) { return String(benefits.groceries); } return printedData.requires_grocery ? 'Selected (items not specified)' : 'None'; })()}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">TOP-UP AMOUNT R</td><td className="border p-2">{printedData.top_up_amount || 'None'}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">AIRTIME</td><td className="border p-2">{printedData.airtime ? 'Yes' : 'None'}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">NETWORK</td><td className="border p-2">{printedData.airtime ? (printedData.airtime_network || 'Provided') : 'None'}</td></tr>
-                    <tr><td className="border p-2 font-semibold bg-gray-50">NUMBER</td><td className="border p-2">{printedData.airtime ? (printedData.airtime_number || 'Provided') : 'None'}</td></tr>
-                    {printedData.plan_category !== 'specials' && (
-                      <tr><td className="border p-2 font-semibold bg-gray-50">CASHBACK AMOUNT</td><td className="border p-2">R{printedData.cashback_amount.toLocaleString()}</td></tr>
-                    )}
-                    <tr><td className="border p-2 font-semibold bg-gray-50">AMOUNT TO BANK</td><td className="border p-2">R{printedData.amount_to_bank.toLocaleString()}</td></tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <table className="w-full border-collapse mb-4">
-                <tbody>
-                  <tr><td className="border p-2">OFFICE PERSONNEL</td><td className="border p-2">{printedData.office_personnel1}</td><td className="border p-2">CLIENT NAME</td><td className="border p-2">{printedData.client_name1}</td></tr>
-                  <tr><td className="border p-2">DATE</td><td className="border p-2">{printedData.date1}</td><td className="border p-2">DATE</td><td className="border p-2">{printedData.date1}</td></tr>
-                </tbody>
-              </table>
-
-              <h2 className="text-center bg-red-600 text-white py-2 mb-2">SIGN OFF</h2>
-              <table className="w-full border-collapse">
-                <tbody>
-                  <tr><td className="border p-2">OFFICE PERSONNEL</td><td className="border p-2">{printedData.office_personnel2}</td><td className="border p-2">CLIENT NAME</td><td className="border p-2">{printedData.client_name2}</td></tr>
-                  <tr><td className="border p-2">DATE</td><td className="border p-2">{printedData.date2}</td><td className="border p-2">DATE</td><td className="border p-2">{printedData.date2}</td></tr>
-                </tbody>
-              </table>
-            </>
-          )}
-
-          <p className="text-center mt-4 text-lg font-bold">RESPECTFUL | PROFESSIONAL | DIGNIFIED</p>
+            <p className="text-center mt-4 text-lg font-bold">RESPECTFUL | PROFESSIONAL | DIGNIFIED</p>
           </div>
         </>
       )}

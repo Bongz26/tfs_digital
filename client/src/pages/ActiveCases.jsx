@@ -53,7 +53,7 @@ export default function ActiveCases() {
               }
               const diffMs = funeralDate.getTime() - dayStart.getTime();
               const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-              const okStatuses = ['preparation','in_progress','completed','archived','cancelled'];
+              const okStatuses = ['preparation', 'in_progress', 'completed', 'archived', 'cancelled'];
               if (diffDays <= 1 && diffDays >= 0 && !okStatuses.includes((c.status || '').toLowerCase())) {
                 warning_prep_required = true;
               }
@@ -98,7 +98,7 @@ export default function ActiveCases() {
       }
     };
 
-        fetchData();
+    fetchData();
   }, [page, limit, search, statusFilter]);
 
   useEffect(() => {
@@ -119,7 +119,7 @@ export default function ActiveCases() {
       (async () => {
         try {
           await sendActiveCasesAlerts('khumalo4sure@gmail.com');
-        } catch (e) {}
+        } catch (e) { }
       })();
     }
   }, [cases]);
@@ -214,7 +214,9 @@ export default function ActiveCases() {
       alert(`Status updated to: ${getStatusConfig(newStatus).label}`);
     } catch (err) {
       console.error('Status change error:', err);
-      alert(`Failed to update status: ${err.message || err.response?.data?.error}`);
+      const serverError = err.response?.data?.error;
+      const details = err.response?.data?.details;
+      alert(`Failed to update status: ${serverError || err.message}${details ? `\nDetails: ${details}` : ''}`);
     } finally {
       setChangingStatus(prev => {
         const newState = { ...prev };
@@ -412,7 +414,7 @@ export default function ActiveCases() {
                 </thead>
                 <tbody>
                   {cases.map(c => (
-                  <tr key={c.id} className="border-b hover:bg-gray-50">
+                    <tr key={c.id} className="border-b hover:bg-gray-50">
                       <td className="p-3 sm:p-4">
                         <div className="font-semibold text-gray-800 text-sm">{c.case_number}</div>
                       </td>
@@ -473,7 +475,7 @@ export default function ActiveCases() {
                               </div>
                             )}
                           </div>
-                          ) : (
+                        ) : (
                           c.funeral_time && (
                             <div className="text-xs text-gray-600">{c.funeral_time}</div>
                           )
@@ -721,10 +723,10 @@ export default function ActiveCases() {
                     })()}
                   </div>
 
-                    <div className="text-xs text-gray-600 mb-3 space-y-1">
-                      <div>
-                        Funeral: {new Date(c.funeral_date).toLocaleDateString()}
-                        {c.status === 'intake' ? (
+                  <div className="text-xs text-gray-600 mb-3 space-y-1">
+                    <div>
+                      Funeral: {new Date(c.funeral_date).toLocaleDateString()}
+                      {c.status === 'intake' ? (
                         <div className="mt-1">
                           {editingFuneralTime[c.id] ? (
                             <div className="flex items-center gap-2">
@@ -770,62 +772,62 @@ export default function ActiveCases() {
                             </span>
                           )}
                         </div>
-                        ) : (
-                          c.funeral_time && ` at ${c.funeral_time}`
-                        )}
-                      </div>
-                      {c.warning_past_funeral_date && (
-                        <div className="text-xs text-red-600">⚠ Funeral date passed; update status</div>
-                      )}
-                      {c.warning_prep_required && (
-                        <div className="text-xs text-orange-600">⚠ Preparation status required</div>
-                      )}
-                      {c.roster && c.roster.length > 0 ? (
-                        <div className="text-green-600 font-medium">
-                          ✓ Assigned ({c.roster.length} vehicle{c.roster.length > 1 ? 's' : ''})
-                        </div>
                       ) : (
+                        c.funeral_time && ` at ${c.funeral_time}`
+                      )}
+                    </div>
+                    {c.warning_past_funeral_date && (
+                      <div className="text-xs text-red-600">⚠ Funeral date passed; update status</div>
+                    )}
+                    {c.warning_prep_required && (
+                      <div className="text-xs text-orange-600">⚠ Preparation status required</div>
+                    )}
+                    {c.roster && c.roster.length > 0 ? (
+                      <div className="text-green-600 font-medium">
+                        ✓ Assigned ({c.roster.length} vehicle{c.roster.length > 1 ? 's' : ''})
+                      </div>
+                    ) : (
                       <div className="text-red-600 font-medium">
                         ⚠ Not Assigned
                       </div>
                     )}
-        
-      </div>
 
-      {/* CANCELLED CASES */}
-      <div className="bg-white p-4 sm:p-6 md:p-8 rounded-xl shadow-lg border-t-4 border-gray-500 mb-4 sm:mb-6">
-        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6 text-center">
-          Cancelled Cases
-        </h2>
-        {cancelled.length === 0 ? (
-          <div className="text-center text-gray-500 py-6 sm:py-8">
-            <p className="text-base sm:text-lg mb-2">No cancelled cases.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-gray-100 border-b">
-                  <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Case Number</th>
-                  <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Deceased Name</th>
-                  <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Funeral Date</th>
-                  <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cancelled.map(c => (
-                  <tr key={c.id} className="border-b">
-                    <td className="p-3 sm:p-4 text-sm">{c.case_number}</td>
-                    <td className="p-3 sm:p-4 text-sm">{c.deceased_name}</td>
-                    <td className="p-3 sm:p-4 text-sm">{c.funeral_date ? new Date(c.funeral_date).toLocaleDateString() : '—'}</td>
-                    <td className="p-3 sm:p-4 text-sm">{c.updated_at ? new Date(c.updated_at).toLocaleString() : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                  </div>
+
+                  {/* CANCELLED CASES */}
+                  <div className="bg-white p-4 sm:p-6 md:p-8 rounded-xl shadow-lg border-t-4 border-gray-500 mb-4 sm:mb-6">
+                    <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-4 sm:mb-6 text-center">
+                      Cancelled Cases
+                    </h2>
+                    {cancelled.length === 0 ? (
+                      <div className="text-center text-gray-500 py-6 sm:py-8">
+                        <p className="text-base sm:text-lg mb-2">No cancelled cases.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="bg-gray-100 border-b">
+                              <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Case Number</th>
+                              <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Deceased Name</th>
+                              <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Funeral Date</th>
+                              <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Updated</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {cancelled.map(c => (
+                              <tr key={c.id} className="border-b">
+                                <td className="p-3 sm:p-4 text-sm">{c.case_number}</td>
+                                <td className="p-3 sm:p-4 text-sm">{c.deceased_name}</td>
+                                <td className="p-3 sm:p-4 text-sm">{c.funeral_date ? new Date(c.funeral_date).toLocaleDateString() : '—'}</td>
+                                <td className="p-3 sm:p-4 text-sm">{c.updated_at ? new Date(c.updated_at).toLocaleString() : '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Status Change */}
                   {getNextStatuses(c.status).length > 0 && (

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { listAirtimeRequests, updateAirtimeRequestStatus } from '../api/sms';
 
+// Airtime Requests Page - Updated with hyperlinks
 export default function AirtimeRequests() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -134,10 +136,29 @@ export default function AirtimeRequests() {
                   {filtered.map(r => (
                     <tr key={r.id} className="hover:bg-gray-50">
                       <td className="px-4 py-2 text-sm text-gray-600">
-                        {r.requested_at ? new Date(r.requested_at).toLocaleString() : ''}
+                        {r.requested_at ? (() => {
+                          const d = new Date(r.requested_at);
+                          d.setHours(d.getHours() + 2);
+                          return d.toLocaleString();
+                        })() : ''}
                       </td>
                       <td className="px-4 py-2 text-sm">
-                        <div className="font-semibold">{r.policy_number || '-'}</div>
+                        {r.case_id ? (
+                          <Link
+                            to={`/cases/${r.case_id}`}
+                            className="font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            {r.policy_number || '-'}
+                          </Link>
+                        ) : (
+                          <Link
+                            to={`/?policy=${r.policy_number}`}
+                            className="font-semibold text-blue-600 hover:text-blue-800 hover:underline"
+                            title="Open Draft"
+                          >
+                            {r.policy_number || '-'} (Draft)
+                          </Link>
+                        )}
                         <div className="text-gray-500">{r.case_number ? `Case ${r.case_number}` : ''}</div>
                       </td>
                       <td className="px-4 py-2 text-sm">
