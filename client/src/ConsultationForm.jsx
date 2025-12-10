@@ -372,7 +372,8 @@ export default function ConsultationForm() {
     date1: '',
     office_personnel2: '',
     client_name2: '',
-    date2: ''
+    date2: '',
+    burial_place: ''
   });
 
   const [message, setMessage] = useState('');
@@ -1472,6 +1473,10 @@ export default function ConsultationForm() {
               </div>
               <div><label>Service Venue</label><input value={form.venue_name} onChange={e => handleInputChange('venue_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
               <div><label>Full Address (GPS) <span className="text-red-600">*</span></label><input required value={form.venue_address} onChange={e => handleInputChange('venue_address', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+              <div className="md:col-span-2">
+                <label>Burial Place</label>
+                <input value={form.burial_place} onChange={e => handleInputChange('burial_place', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder="e.g. Avalon Cemetery" />
+              </div>
             </div>
           </div>
 
