@@ -110,8 +110,8 @@ exports.searchCases = async (req, res) => {
 
 // --- GET ALL CASES ---
 exports.getAllCases = async (req, res) => {
-  try {
-    const { status, exclude } = req.query;
+    try {
+        const { status, exclude } = req.query;
 
         const supabase = req.app?.locals?.supabase;
         if (supabase) {
@@ -187,7 +187,7 @@ exports.getAllCases = async (req, res) => {
         }
         const result = await query(sql, params);
         res.json({ success: true, cases: result.rows });
-  } catch (err) {
+    } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, error: 'Failed to fetch cases', details: err.message });
     }
@@ -220,7 +220,8 @@ exports.createCase = async (req, res) => {
         programs, top_up_amount, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
         legacy_plan_name,
-        status
+        status,
+        burial_place
     } = req.body;
 
     try {
@@ -300,7 +301,7 @@ exports.createCase = async (req, res) => {
         casket_type, casket_colour, delivery_date, delivery_time, intake_day,
         programs, top_up_amount, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
-        legacy_plan_name, benefit_mode, status)
+        legacy_plan_name, benefit_mode, status, burial_place)
        VALUES (
         $1,$2,$3,
         $4,$5,$6,$7,$8,
@@ -313,7 +314,7 @@ exports.createCase = async (req, res) => {
         $33,$34,$35,$36,$37,
         $38,$39,$40,$41,$42,
         $43,$44,$45,
-        $46,$47,$48)
+        $46,$47,$48,$49)
        RETURNING *`,
             [
                 finalCaseNumber, claim_date || null, policy_number || null,
@@ -327,7 +328,7 @@ exports.createCase = async (req, res) => {
                 casket_type || null, casket_colour || null, delivery_date || null, delivery_time || null, intake_day,
                 programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, !!airtime, airtime_network || null, airtime_number || null,
                 cover_amount != null ? cover_amount : 0, cashback_amount != null ? cashback_amount : 0, amount_to_bank != null ? amount_to_bank : 0,
-                legacy_plan_name || null, benefit_mode || null, status || 'confirmed'
+                legacy_plan_name || null, benefit_mode || null, status || 'confirmed', burial_place || null
             ]
         );
 
@@ -515,18 +516,18 @@ exports.assignVehicle = async (req, res) => {
                 'SELECT id, name FROM drivers WHERE name = $1 AND active = true',
                 [driver_name.trim()]
             );
-        if (driverResult.rows.length === 0) {
-            console.log(`⚠️  Driver "${driver_name}" not found in drivers table, but allowing assignment`);
-        }
-        // Prevent duplicate driver assignment to the same case
-        const dupDriver = await client.query(
-            `SELECT 1 FROM roster WHERE case_id = $1 AND LOWER(driver_name) = LOWER($2) AND status != 'completed'`,
-            [caseId, driver_name.trim()]
-        );
-        if (dupDriver.rows.length > 0) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ success: false, error: 'This driver is already assigned to this case' });
-        }
+            if (driverResult.rows.length === 0) {
+                console.log(`⚠️  Driver "${driver_name}" not found in drivers table, but allowing assignment`);
+            }
+            // Prevent duplicate driver assignment to the same case
+            const dupDriver = await client.query(
+                `SELECT 1 FROM roster WHERE case_id = $1 AND LOWER(driver_name) = LOWER($2) AND status != 'completed'`,
+                [caseId, driver_name.trim()]
+            );
+            if (dupDriver.rows.length > 0) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ success: false, error: 'This driver is already assigned to this case' });
+            }
         }
 
         const assignedDriver = driver_name && driver_name.trim() !== ''
@@ -571,8 +572,8 @@ exports.assignVehicle = async (req, res) => {
 
 // --- UPDATE CASE STATUS ---
 exports.updateCaseStatus = async (req, res) => {
-  const { id } = req.params;
-  const { status, notes } = req.body;
+    const { id } = req.params;
+    const { status, notes } = req.body;
 
     const validStatuses = ['intake', 'confirmed', 'preparation', 'scheduled', 'in_progress', 'completed', 'archived', 'cancelled'];
     if (!status || !validStatuses.includes(status)) {
@@ -581,74 +582,74 @@ exports.updateCaseStatus = async (req, res) => {
 
     // Enforce minimum vehicles for operational statuses
     try {
-      if (['scheduled','in_progress'].includes(status)) {
-        const caseRes = await query('SELECT plan_name FROM cases WHERE id = $1', [id]);
-        const planName = (caseRes.rows[0] && caseRes.rows[0].plan_name) || '';
-        const minVehicles = (planName && /premium/i.test(planName)) ? 3 : 2;
-        const rosterRes = await query('SELECT COUNT(*)::int AS cnt FROM roster WHERE case_id = $1', [id]);
-        const assigned = (rosterRes.rows[0] && rosterRes.rows[0].cnt) || 0;
-        if (assigned < minVehicles) {
-          return res.status(400).json({
-            success: false,
-            error: `Assign at least ${minVehicles} vehicle(s) before setting status to ${status}`,
-            required_min_vehicles: minVehicles,
-            assigned_vehicles: assigned
-          });
+        if (['scheduled', 'in_progress'].includes(status)) {
+            const caseRes = await query('SELECT plan_name FROM cases WHERE id = $1', [id]);
+            const planName = (caseRes.rows[0] && caseRes.rows[0].plan_name) || '';
+            const minVehicles = (planName && /premium/i.test(planName)) ? 3 : 2;
+            const rosterRes = await query('SELECT COUNT(*)::int AS cnt FROM roster WHERE case_id = $1', [id]);
+            const assigned = (rosterRes.rows[0] && rosterRes.rows[0].cnt) || 0;
+            if (assigned < minVehicles) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Assign at least ${minVehicles} vehicle(s) before setting status to ${status}`,
+                    required_min_vehicles: minVehicles,
+                    assigned_vehicles: assigned
+                });
+            }
         }
-      }
     } catch (e) {
-      console.warn('Status update precheck failed:', e.message);
+        console.warn('Status update precheck failed:', e.message);
     }
 
-  try {
-    if (status === 'cancelled') {
-      const reason = (notes || '').trim();
-      if (!reason) {
-        return res.status(400).json({ success: false, error: 'Cancellation reason is required' });
-      }
-    }
-    const caseCheck = await query('SELECT id, status FROM cases WHERE id = $1', [id]);
-    if (caseCheck.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Case not found' });
-    }
+    try {
+        if (status === 'cancelled') {
+            const reason = (notes || '').trim();
+            if (!reason) {
+                return res.status(400).json({ success: false, error: 'Cancellation reason is required' });
+            }
+        }
+        const caseCheck = await query('SELECT id, status FROM cases WHERE id = $1', [id]);
+        if (caseCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Case not found' });
+        }
 
-    const oldStatus = caseCheck.rows[0].status;
+        const oldStatus = caseCheck.rows[0].status;
 
-    const result = await query(
-      `UPDATE cases 
+        const result = await query(
+            `UPDATE cases 
       SET status = $1, updated_at = NOW()
       WHERE id = $2
       RETURNING *`,
-      [status, id]
-    );
+            [status, id]
+        );
 
-    console.log(`✅ Case ${id} status changed: ${oldStatus} → ${status}`);
+        console.log(`✅ Case ${id} status changed: ${oldStatus} → ${status}`);
 
-    try {
-      await query(
-        `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
+        try {
+            await query(
+                `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-          req.user?.id || null,
-          req.user?.email || null,
-          'case_status_change',
-          'case',
-          id,
-          JSON.stringify({ status: oldStatus }),
-          JSON.stringify({ status, notes: notes || null }),
-          req.ip,
-          req.headers['user-agent']
-        ]
-      );
-    } catch (e) {
-      console.warn('Audit log failed (case status):', e.message);
-    }
+                [
+                    req.user?.id || null,
+                    req.user?.email || null,
+                    'case_status_change',
+                    'case',
+                    id,
+                    JSON.stringify({ status: oldStatus }),
+                    JSON.stringify({ status, notes: notes || null }),
+                    req.ip,
+                    req.headers['user-agent']
+                ]
+            );
+        } catch (e) {
+            console.warn('Audit log failed (case status):', e.message);
+        }
 
-    res.json({
-      success: true,
-      message: `Status updated from ${oldStatus} to ${status}`,
-      case: result.rows[0]
-    });
+        res.json({
+            success: true,
+            message: `Status updated from ${oldStatus} to ${status}`,
+            case: result.rows[0]
+        });
 
     } catch (err) {
         console.error('❌ Error updating case status:', err);
@@ -754,53 +755,53 @@ exports.getCaseById = async (req, res) => {
 };
 
 exports.getCaseAuditLog = async (req, res) => {
-  const { id } = req.params;
-  try {
-    const caseCheck = await query('SELECT id FROM cases WHERE id = $1', [id]);
-    if (caseCheck.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Case not found' });
-    }
-    const result = await query(
-      `SELECT id, user_id, user_email, action, old_values, new_values, ip_address, user_agent
+    const { id } = req.params;
+    try {
+        const caseCheck = await query('SELECT id FROM cases WHERE id = $1', [id]);
+        if (caseCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Case not found' });
+        }
+        const result = await query(
+            `SELECT id, user_id, user_email, action, old_values, new_values, ip_address, user_agent
        FROM audit_log
        WHERE resource_type = 'case' AND resource_id = $1 AND action = 'case_status_change'
        ORDER BY id DESC`,
-      [id]
-    );
-    const logs = result.rows.map(row => {
-      let notes = null;
-      try {
-        const nv = typeof row.new_values === 'string' ? JSON.parse(row.new_values) : row.new_values;
-        notes = nv?.notes || null;
-      } catch (e) {}
-      return { id: row.id, user_id: row.user_id, user_email: row.user_email, action: row.action, old_values: row.old_values, new_values: row.new_values, notes };
-    });
-    res.json({ success: true, logs });
-  } catch (err) {
-    res.status(500).json({ success: false, error: 'Failed to fetch audit log' });
-  }
+            [id]
+        );
+        const logs = result.rows.map(row => {
+            let notes = null;
+            try {
+                const nv = typeof row.new_values === 'string' ? JSON.parse(row.new_values) : row.new_values;
+                notes = nv?.notes || null;
+            } catch (e) { }
+            return { id: row.id, user_id: row.user_id, user_email: row.user_email, action: row.action, old_values: row.old_values, new_values: row.new_values, notes };
+        });
+        res.json({ success: true, logs });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to fetch audit log' });
+    }
 };
 
 exports.getCancelledCases = async (req, res) => {
-  try {
-    const supabase = req.app?.locals?.supabase;
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('cases')
-        .select('*')
-        .eq('status', 'cancelled')
-        .order('updated_at', { ascending: false });
-      if (error) {
-        console.warn('⚠️ Supabase read failed in getCancelledCases, falling back to DB:', error.message);
-      } else {
-        return res.json({ success: true, cases: Array.isArray(data) ? data : [] });
-      }
+    try {
+        const supabase = req.app?.locals?.supabase;
+        if (supabase) {
+            const { data, error } = await supabase
+                .from('cases')
+                .select('*')
+                .eq('status', 'cancelled')
+                .order('updated_at', { ascending: false });
+            if (error) {
+                console.warn('⚠️ Supabase read failed in getCancelledCases, falling back to DB:', error.message);
+            } else {
+                return res.json({ success: true, cases: Array.isArray(data) ? data : [] });
+            }
+        }
+        const result = await query(
+            `SELECT * FROM cases WHERE status = 'cancelled' ORDER BY updated_at DESC`
+        );
+        res.json({ success: true, cases: result.rows });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to fetch cancelled cases' });
     }
-    const result = await query(
-      `SELECT * FROM cases WHERE status = 'cancelled' ORDER BY updated_at DESC`
-    );
-    res.json({ success: true, cases: result.rows });
-  } catch (err) {
-    res.status(500).json({ success: false, error: 'Failed to fetch cancelled cases' });
-  }
 };

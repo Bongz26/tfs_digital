@@ -235,8 +235,8 @@ async function normalizeAndDeduplicateAirtimeRequests() {
     DELETE FROM airtime_requests ar
     USING (
       SELECT id, ROW_NUMBER() OVER (
-        PARTITION BY UPPER(TRIM(policy_number)), UPPER(TRIM(network)), TRIM(phone_number)
-        ORDER BY requested_at DESC
+        PARTITION BY UPPER(REGEXP_REPLACE(policy_number, '\s+', '', 'g')), UPPER(TRIM(network)), REGEXP_REPLACE(TRIM(phone_number), '\s+', '', 'g')
+        ORDER BY (CASE WHEN status != 'pending' THEN 1 ELSE 0 END) DESC, requested_at DESC
       ) rn
       FROM airtime_requests
     ) d
@@ -245,7 +245,20 @@ async function normalizeAndDeduplicateAirtimeRequests() {
 
   // Now create the unique index after deduplication
   try {
-    await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_airtime_requests_unique ON airtime_requests (policy_number, network, phone_number)`);
+    await query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_indexes WHERE indexname = 'idx_airtime_requests_unique_norm'
+        ) THEN
+          CREATE UNIQUE INDEX idx_airtime_requests_unique_norm ON airtime_requests (
+            UPPER(REGEXP_REPLACE(policy_number, '\\s+', '', 'g')),
+            UPPER(TRIM(network)),
+            REGEXP_REPLACE(TRIM(phone_number), '\\s+', '', 'g')
+          );
+        END IF;
+      END $$;
+    `);
   } catch (_) { }
 }
 
@@ -352,6 +365,7 @@ const PLAN_AMOUNT_JSON_SQL = `
 
 async function generateAirtimeRequestsFromDrafts() {
   await ensureAirtimeTable();
+  await ensureAirtimeArchiveTable();
   try {
     // Check table exists logic preserved
     const exists = await query(
@@ -383,9 +397,15 @@ async function generateAirtimeRequestsFromDrafts() {
         AND NULLIF(TRIM(cd.data->>'airtime_number'), '') IS NOT NULL
         AND NOT EXISTS (
           SELECT 1 FROM airtime_requests ar
-          WHERE ar.policy_number = cd.policy_number
-            AND ar.phone_number = TRIM(cd.data->>'airtime_number')
-            AND ar.network = TRIM(cd.data->>'airtime_network')
+          WHERE UPPER(REGEXP_REPLACE(ar.policy_number, '\s+', '', 'g')) = UPPER(REGEXP_REPLACE(cd.policy_number, '\s+', '', 'g'))
+            AND REGEXP_REPLACE(TRIM(ar.phone_number), '\s+', '', 'g') = REGEXP_REPLACE(TRIM(cd.data->>'airtime_number'), '\s+', '', 'g') 
+            AND UPPER(TRIM(ar.network)) = UPPER(TRIM(cd.data->>'airtime_network'))
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM airtime_requests_archive ara
+          WHERE UPPER(REGEXP_REPLACE(ara.policy_number, '\s+', '', 'g')) = UPPER(REGEXP_REPLACE(cd.policy_number, '\s+', '', 'g'))
+            AND REGEXP_REPLACE(TRIM(ara.phone_number), '\s+', '', 'g') = REGEXP_REPLACE(TRIM(cd.data->>'airtime_number'), '\s+', '', 'g')
+            AND UPPER(TRIM(ara.network)) = UPPER(TRIM(cd.data->>'airtime_network'))
         )
     `);
   } catch (e) {
@@ -395,6 +415,7 @@ async function generateAirtimeRequestsFromDrafts() {
 
 async function generateAirtimeRequestsFromCases() {
   await ensureAirtimeTable();
+  await ensureAirtimeArchiveTable();
   try {
     await query(`
       INSERT INTO airtime_requests (
@@ -409,13 +430,21 @@ async function generateAirtimeRequestsFromCases() {
       WHERE c.airtime = true 
         AND NULLIF(TRIM(c.airtime_network), '') IS NOT NULL
         AND NULLIF(TRIM(c.airtime_number), '') IS NOT NULL
-        AND c.claim_date >= '2025-12-08'
         AND c.status NOT IN ('completed','cancelled','archived')
         AND NOT EXISTS (
           SELECT 1 FROM airtime_requests ar 
-          WHERE ar.policy_number = c.policy_number 
-            AND ar.phone_number = TRIM(c.airtime_number) 
-            AND ar.network = TRIM(c.airtime_network)
+          WHERE (ar.case_id = c.id)
+             OR (
+                  UPPER(REGEXP_REPLACE(ar.policy_number, '\s+', '', 'g')) = UPPER(REGEXP_REPLACE(c.policy_number, '\s+', '', 'g'))
+                  AND REGEXP_REPLACE(TRIM(ar.phone_number), '\s+', '', 'g') = REGEXP_REPLACE(TRIM(c.airtime_number), '\s+', '', 'g') 
+                  AND UPPER(TRIM(ar.network)) = UPPER(TRIM(c.airtime_network))
+             )
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM airtime_requests_archive ara
+          WHERE UPPER(REGEXP_REPLACE(ara.policy_number, '\s+', '', 'g')) = UPPER(REGEXP_REPLACE(c.policy_number, '\s+', '', 'g'))
+            AND REGEXP_REPLACE(TRIM(ara.phone_number), '\s+', '', 'g') = REGEXP_REPLACE(TRIM(c.airtime_number), '\s+', '', 'g')
+            AND UPPER(TRIM(ara.network)) = UPPER(TRIM(c.airtime_network))
         )
     `);
   } catch (e) {
@@ -494,8 +523,8 @@ router.get('/airtime-requests', requireMinRole('staff'), async (req, res) => {
     const result = await query(`
       WITH d AS (
         SELECT *, ROW_NUMBER() OVER (
-          PARTITION BY UPPER(TRIM(policy_number)), UPPER(TRIM(network)), TRIM(phone_number)
-          ORDER BY requested_at DESC
+          PARTITION BY UPPER(REGEXP_REPLACE(policy_number, '\s+', '', 'g')), UPPER(TRIM(network)), REGEXP_REPLACE(TRIM(phone_number), '\s+', '', 'g')
+          ORDER BY (CASE WHEN status != 'pending' THEN 1 ELSE 0 END) DESC, requested_at DESC
         ) rn
         FROM airtime_requests
       )
@@ -504,12 +533,11 @@ router.get('/airtime-requests', requireMinRole('staff'), async (req, res) => {
         COALESCE(d.case_id, c2.id) as case_id,
         c.case_number, 
         c.deceased_name, 
-        c.status
+        c.status AS case_status
       FROM d
       LEFT JOIN cases c ON d.case_id = c.id
       LEFT JOIN cases c2 ON d.policy_number = c2.policy_number AND d.case_id IS NULL
       WHERE d.rn = 1
-        AND d.requested_at::date >= '2025-12-08'
         AND (
           c.status IS NULL
           OR c.status NOT IN ('completed','cancelled','archived')
