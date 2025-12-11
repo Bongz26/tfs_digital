@@ -333,8 +333,112 @@ exports.createCase = async (req, res) => {
         );
 
         console.log('✅ [POST /api/cases] Case created successfully:', result.rows[0]?.id, result.rows[0]?.case_number);
+        const created = result.rows[0];
+        try {
+            const nameStr = String(casket_type || '').trim();
+            const colorStr = String(casket_colour || '').trim();
+            if (nameStr) {
+                let inv;
+                if (colorStr) {
+                    inv = await query(
+                        "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) ORDER BY stock_quantity DESC LIMIT 1",
+                        [nameStr, colorStr]
+                    );
+                } else {
+                    inv = await query(
+                        "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) ORDER BY stock_quantity DESC LIMIT 1",
+                        [nameStr]
+                    );
+                }
+                if (inv.rows.length === 0) {
+                    let fallback;
+                    if (colorStr) {
+                        fallback = await query(
+                            "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) ORDER BY stock_quantity DESC LIMIT 1",
+                            [nameStr, colorStr]
+                        );
+                    } else {
+                        fallback = await query(
+                            "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) ORDER BY stock_quantity DESC LIMIT 1",
+                            [nameStr]
+                        );
+                    }
+                    inv = fallback;
+                }
+                if (inv.rows.length) {
+                    const item = inv.rows[0];
+                    const previous = item.stock_quantity || 0;
+                    const nextQty = previous > 0 ? previous - 1 : 0;
+                    await query('UPDATE inventory SET stock_quantity=$1, updated_at=NOW() WHERE id=$2', [nextQty, item.id]);
+                    try {
+                        await query(
+                            `INSERT INTO stock_movements (inventory_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
+                             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                            [item.id, 'sale', -1, previous, nextQty, 'Case consumption', (req.user?.email) || 'system']
+                        );
+                    } catch (_) {}
+                    try {
+                        const to = process.env.INVENTORY_ALERTS_TO || process.env.ALERTS_TO || process.env.AIRTIME_OPERATOR_EMAIL;
+                        const host = process.env.SMTP_HOST;
+                        const port = parseInt(process.env.SMTP_PORT || '587', 10);
+                        const user = process.env.SMTP_USER;
+                        const pass = process.env.SMTP_PASS;
+                        if (to && host && user && pass) {
+                            const low = await query(`
+                                SELECT id, name, category, sku, stock_quantity, COALESCE(reserved_quantity,0) AS reserved_quantity,
+                                       low_stock_threshold, location, model, color
+                                FROM inventory
+                                ORDER BY category, name
+                            `);
+                            const items = (low.rows || []).map(r => ({
+                                ...r,
+                                available_quantity: (r.stock_quantity || 0) - (r.reserved_quantity || 0)
+                            })).filter(r => r.available_quantity <= 1);
+                            if (items.length) {
+                                const nodemailer = require('nodemailer');
+                                const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+                                const from = process.env.ALERTS_FROM || user;
+                                const subject = `Low Stock Alert: ${items.length} item(s) at qty ≤ 1`;
+                                const htmlRows = items.map(i => `
+                                    <tr>
+                                      <td style="padding:6px;border:1px solid #ddd;">${i.name}${i.color ? ' • ' + i.color : ''}</td>
+                                      <td style="padding:6px;border:1px solid #ddd;">${i.category}</td>
+                                      <td style="padding:6px;border:1px solid #ddd;">${i.stock_quantity}</td>
+                                      <td style="padding:6px;border:1px solid #ddd;">${i.reserved_quantity}</td>
+                                      <td style="padding:6px;border:1px solid #ddd;">${i.available_quantity}</td>
+                                      <td style="padding:6px;border:1px solid #ddd;">Threshold ${i.low_stock_threshold}</td>
+                                    </tr>
+                                `).join('');
+                                const html = `
+                                  <div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;">
+                                    <p>Low stock items at or below 1 available:</p>
+                                    <table style="border-collapse:collapse;min-width:520px;">
+                                      <thead>
+                                        <tr>
+                                          <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Item</th>
+                                          <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Category</th>
+                                          <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Stock</th>
+                                          <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Reserved</th>
+                                          <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Available</th>
+                                          <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Status</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        ${htmlRows}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                `;
+                                const text = items.map(i => `${i.name} ${i.color || ''} | ${i.category} | stock=${i.stock_quantity} reserved=${i.reserved_quantity} available=${i.available_quantity} threshold=${i.low_stock_threshold}`).join('\n');
+                                await transporter.sendMail({ from, to, subject, text, html });
+                            }
+                        }
+                    } catch (_) {}
+                }
+            }
+        } catch (_) {}
 
-        res.json({ success: true, case: result.rows[0] });
+        res.json({ success: true, case: created });
     } catch (err) {
         console.error('❌ [POST /api/cases] Error creating case:', err);
         res.status(500).json({

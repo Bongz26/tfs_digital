@@ -7,6 +7,7 @@ router.get('/', inventoryController.getAllInventory);
 
 // GET inventory stats
 router.get('/stats', inventoryController.getInventoryStats);
+router.get('/low-stock', inventoryController.getLowStockDetailed);
 
 // POST create new inventory item
 router.post('/', inventoryController.createInventoryItem);

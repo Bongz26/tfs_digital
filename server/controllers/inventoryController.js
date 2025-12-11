@@ -1,4 +1,62 @@
 const { query, getClient } = require('../config/db');
+const nodemailer = require('nodemailer');
+
+async function maybeNotifyLowStock(threshold = 1) {
+    try {
+        const to = process.env.INVENTORY_ALERTS_TO || process.env.ALERTS_TO || process.env.AIRTIME_OPERATOR_EMAIL;
+        const host = process.env.SMTP_HOST;
+        const port = parseInt(process.env.SMTP_PORT || '587', 10);
+        const user = process.env.SMTP_USER;
+        const pass = process.env.SMTP_PASS;
+        if (!to || !host || !user || !pass) return;
+        const rows = await query(`
+            SELECT id, name, category, sku, stock_quantity, COALESCE(reserved_quantity,0) AS reserved_quantity,
+                   low_stock_threshold, location, model, color
+            FROM inventory
+            ORDER BY category, name
+        `);
+        const items = (rows.rows || []).map(r => ({
+            ...r,
+            available_quantity: (r.stock_quantity || 0) - (r.reserved_quantity || 0)
+        })).filter(r => r.available_quantity <= threshold);
+        if (items.length === 0) return;
+        const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+        const from = process.env.ALERTS_FROM || user;
+        const subject = `Low Stock Alert: ${items.length} item(s) at qty ≤ ${threshold}`;
+        const htmlRows = items.map(i => `
+            <tr>
+              <td style="padding:6px;border:1px solid #ddd;">${i.name}${i.color ? ' • ' + i.color : ''}</td>
+              <td style="padding:6px;border:1px solid #ddd;">${i.category}</td>
+              <td style="padding:6px;border:1px solid #ddd;">${i.stock_quantity}</td>
+              <td style="padding:6px;border:1px solid #ddd;">${i.reserved_quantity}</td>
+              <td style="padding:6px;border:1px solid #ddd;">${i.available_quantity}</td>
+              <td style="padding:6px;border:1px solid #ddd;">Threshold ${i.low_stock_threshold}</td>
+            </tr>
+        `).join('');
+        const html = `
+          <div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;">
+            <p>Low stock items at or below ${threshold} available:</p>
+            <table style="border-collapse:collapse;min-width:520px;">
+              <thead>
+                <tr>
+                  <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Item</th>
+                  <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Category</th>
+                  <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Stock</th>
+                  <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Reserved</th>
+                  <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Available</th>
+                  <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${htmlRows}
+              </tbody>
+            </table>
+          </div>
+        `;
+        const text = items.map(i => `${i.name} ${i.color || ''} | ${i.category} | stock=${i.stock_quantity} reserved=${i.reserved_quantity} available=${i.available_quantity} threshold=${i.low_stock_threshold}`).join('\n');
+        await transporter.sendMail({ from, to, subject, text, html });
+    } catch (_) { }
+}
 
 // --- GET ALL INVENTORY ---
 exports.getAllInventory = async (req, res) => {
@@ -80,6 +138,39 @@ exports.getInventoryStats = async (req, res) => {
     }
 };
 
+exports.getLowStockDetailed = async (req, res) => {
+    try {
+        const tableCheck = await query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'inventory'
+      );
+    `);
+        if (!tableCheck.rows[0].exists) {
+            return res.status(500).json({ success: false, error: 'Database table not found' });
+        }
+        const { category } = req.query;
+        const params = [];
+        let sql = `SELECT id, name, category, sku, stock_quantity, reserved_quantity, low_stock_threshold, location, notes, model, color
+                   FROM inventory`;
+        if (category && category !== 'all') {
+            sql += ` WHERE category = $1`;
+            params.push(category);
+        }
+        sql += ` ORDER BY category, name`;
+        const result = await query(sql, params);
+        const rows = (result.rows || []).map(r => ({
+            ...r,
+            available_quantity: (r.stock_quantity || 0) - (r.reserved_quantity || 0),
+            is_low_stock: ((r.stock_quantity || 0) - (r.reserved_quantity || 0)) <= (r.low_stock_threshold || 0)
+        })).filter(r => r.is_low_stock);
+        res.json({ success: true, items: rows });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to fetch low stock', details: err.message });
+    }
+};
+
 // --- UPDATE STOCK QUANTITY ---
 exports.updateStockQuantity = async (req, res) => {
     const { id } = req.params;
@@ -94,6 +185,7 @@ exports.updateStockQuantity = async (req, res) => {
         await query('UPDATE inventory SET stock_quantity=$1, updated_at=NOW() WHERE id=$2', [stock_quantity, id]);
 
         const is_low_stock = stock_quantity <= itemResult.rows[0].low_stock_threshold;
+        try { await maybeNotifyLowStock(1); } catch (_) {}
         res.json({ success: true, stock_quantity, is_low_stock });
     } catch (err) {
         console.error('❌ Error updating stock:', err);
@@ -129,6 +221,7 @@ exports.adjustStock = async (req, res) => {
         }
 
         const is_low_stock = new_quantity <= itemResult.rows[0].low_stock_threshold;
+        try { await maybeNotifyLowStock(1); } catch (_) {}
         res.json({ success: true, new_quantity, is_low_stock });
     } catch (err) {
         console.error('❌ Error adjusting stock:', err);
@@ -384,6 +477,7 @@ exports.completeStockTake = async (req, res) => {
         );
 
         await client.query('COMMIT');
+        try { await maybeNotifyLowStock(1); } catch (_) {}
 
         res.json({ success: true, message: 'Stock take completed', items_updated: items.rows.filter(i => i.physical_quantity !== null).length });
     } catch (err) {
