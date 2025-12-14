@@ -1,5 +1,6 @@
 import axios from "axios";
 import { API_HOST } from "./config";
+import { getAccessToken } from "./auth";
 
 const BASE_URL = `${API_HOST}/api/roster`;
 
@@ -9,6 +10,19 @@ export const fetchRoster = async () => {
         return res.data.roster || [];
     } catch (err) {
         console.error("Error fetching roster:", err.response || err);
+        throw err;
+    }
+};
+
+export const updateRoster = async (id, data) => {
+    try {
+        const token = getAccessToken();
+        const res = await axios.patch(`${BASE_URL}/${id}`, data, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        return res.data.roster;
+    } catch (err) {
+        console.error(`Error updating roster ${id}:`, err.response || err);
         throw err;
     }
 };

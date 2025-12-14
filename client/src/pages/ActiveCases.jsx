@@ -3,11 +3,15 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getStatusConfig, getNextStatuses, suggestStatus, getStatusBadgeProps } from '../utils/caseStatus';
 import { fetchActiveCases, sendActiveCasesAlerts } from '../api/activeCases';
+import { updateRoster } from '../api/roster';
 import { fetchDrivers } from '../api/drivers';
 import { assignVehicle, updateCaseStatus, updateFuneralTime as apiUpdateFuneralTime, fetchCancelledCases } from '../api/cases';
 import { fetchCaseAuditLog } from '../api/cases';
+import { useAuth } from '../context/AuthContext';
+import { updateCaseVenue } from '../api/cases';
 
 export default function ActiveCases() {
+  const { isAdmin } = useAuth();
   const [cases, setCases] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [drivers, setDrivers] = useState([]);
@@ -27,6 +31,9 @@ export default function ActiveCases() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [total, setTotal] = useState(0);
+  const [editDriver, setEditDriver] = useState({});
+  const [editVenueName, setEditVenueName] = useState({});
+  const [editBurialPlace, setEditBurialPlace] = useState({});
 
   // Fetch active cases and vehicles in one call
   useEffect(() => {
@@ -188,6 +195,28 @@ export default function ActiveCases() {
     if (x === 'vito') return 'Mercedes-Benz Vito';
     if (x === 'hearse') return 'Hearse';
     return (t ? String(t).replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Vehicle');
+  };
+
+  const handleUpdateRosterDriver = async (rosterId, caseId) => {
+    const driver = editDriver[rosterId];
+    if (!driver || !driver.name) {
+      alert('Please select a driver');
+      return;
+    }
+    try {
+      await updateRoster(rosterId, { driver_name: driver.name });
+      const { cases: casesData, vehicles: vehiclesData } = await fetchActiveCases();
+      setCases(casesData);
+      setVehicles(vehiclesData);
+      setEditDriver(prev => {
+        const next = { ...prev };
+        delete next[rosterId];
+        return next;
+      });
+      alert('Driver updated');
+    } catch (err) {
+      alert(err.response?.data?.error || err.message || 'Failed to update driver');
+    }
   };
 
   const handleChangeCaseStatus = async (caseId, newStatus) => {
@@ -428,7 +457,7 @@ export default function ActiveCases() {
                         <div className="text-gray-800 text-sm">
                           {new Date(c.funeral_date).toLocaleDateString()}
                         </div>
-                        {c.status === 'intake' ? (
+        {(isAdmin() || c.status === 'intake') ? (
                           <div className="mt-1">
                             {editingFuneralTime[c.id] ? (
                               <div className="flex items-center gap-2">
@@ -534,6 +563,48 @@ export default function ActiveCases() {
                             );
                           })()}
                         </div>
+                      </td>
+                      <td className="p-3 sm:p-4">
+                        {isAdmin() && (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              className="text-xs border border-gray-300 rounded px-2 py-1 w-full"
+                              placeholder="Service venue"
+                              value={editVenueName[c.id] ?? ''}
+                              onChange={e => setEditVenueName(prev => ({ ...prev, [c.id]: e.target.value }))}
+                            />
+                            <input
+                              type="text"
+                              className="text-xs border border-gray-300 rounded px-2 py-1 w-full"
+                              placeholder="Burial place"
+                              value={editBurialPlace[c.id] ?? ''}
+                              onChange={e => setEditBurialPlace(prev => ({ ...prev, [c.id]: e.target.value }))}
+                            />
+                            <button
+                              className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
+                              disabled={!editVenueName[c.id] && !editBurialPlace[c.id]}
+                              onClick={async () => {
+                                try {
+                                  const payload = {};
+                                  if (editVenueName[c.id]) payload.venue_name = editVenueName[c.id];
+                                  if (editBurialPlace[c.id]) payload.burial_place = editBurialPlace[c.id];
+                                  await updateCaseVenue(c.id, payload);
+                                  const { cases: casesData, vehicles: vehiclesData } = await fetchActiveCases({ page, limit, search, status: statusFilter });
+                                  setCases(casesData);
+                                  setVehicles(vehiclesData);
+                                  setEditVenueName(prev => { const n = { ...prev }; delete n[c.id]; return n; });
+                                  setEditBurialPlace(prev => { const n = { ...prev }; delete n[c.id]; return n; });
+                                  alert('Case venue updated');
+                                } catch (err) {
+                                  alert(err.response?.data?.error || err.message || 'Failed to update case venue');
+                                }
+                              }}
+                            >
+                              Save Case
+                            </button>
+                          </div>
+                        )}
                       </td>
                       <td className="p-3 sm:p-4">
                         {c.roster && c.roster.length > 0 ? (
@@ -676,9 +747,32 @@ export default function ActiveCases() {
                               ✓ Vehicle(s) Assigned ({c.roster.length})
                             </div>
                             {c.roster.map((r, idx) => (
-                              <div key={idx} className="text-xs text-gray-600">
-                                {(r.assignment_role ? (r.assignment_role === 'hearse' ? 'Hearse' : 'Family') + ' • ' : '')}
-                                Driver: {r.driver_name || 'TBD'}
+                              <div key={idx} className="flex items-center gap-2 text-xs text-gray-600">
+                                <span>
+                                  {(r.assignment_role ? (r.assignment_role === 'hearse' ? 'Hearse' : 'Family') + ' • ' : '')}
+                                  Driver: {r.driver_name || 'TBD'}
+                                </span>
+                                <select
+                                  className="border border-gray-300 rounded px-2 py-1 text-xs"
+                                  value={editDriver[r.id]?.id || ''}
+                                  onChange={e => {
+                                    const driverId = e.target.value;
+                                    const d = drivers.find(d => d.id === parseInt(driverId));
+                                    setEditDriver(prev => ({ ...prev, [r.id]: d || null }));
+                                  }}
+                                >
+                                  <option value="">Change driver...</option>
+                                  {drivers.map(d => (
+                                    <option key={d.id} value={d.id}>{d.name}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  className="bg-blue-600 text-white px-2 py-1 rounded"
+                                  onClick={() => handleUpdateRosterDriver(r.id, c.id)}
+                                  disabled={!editDriver[r.id]}
+                                >
+                                  Update
+                                </button>
                               </div>
                             ))}
                             {c.roster.length < (c.required_min_vehicles || 1) && (
@@ -726,7 +820,7 @@ export default function ActiveCases() {
                   <div className="text-xs text-gray-600 mb-3 space-y-1">
                     <div>
                       Funeral: {new Date(c.funeral_date).toLocaleDateString()}
-                      {c.status === 'intake' ? (
+                      {(isAdmin || c.status === 'intake') ? (
                         <div className="mt-1">
                           {editingFuneralTime[c.id] ? (
                             <div className="flex items-center gap-2">
@@ -960,11 +1054,34 @@ export default function ActiveCases() {
                       <div className="text-xs text-gray-600 text-center">Assigned: {c.roster?.length || 0} / {c.required_min_vehicles || 1}</div>
                     </div>
                   ) : (
-                    <div className="text-center pt-2">
+                    <div className="text-center pt-2 space-y-2">
                       {c.roster.map((r, idx) => (
-                        <div key={idx} className="text-xs text-gray-600">
-                          {(r.assignment_role ? (r.assignment_role === 'hearse' ? 'Hearse' : 'Family') + ' • ' : '')}
-                          Driver: {r.driver_name || 'TBD'}
+                        <div key={idx} className="flex items-center justify-center gap-2 text-xs text-gray-600">
+                          <span>
+                            {(r.assignment_role ? (r.assignment_role === 'hearse' ? 'Hearse' : 'Family') + ' • ' : '')}
+                            Driver: {r.driver_name || 'TBD'}
+                          </span>
+                          <select
+                            className="border border-gray-300 rounded px-2 py-1 text-xs"
+                            value={editDriver[r.id]?.id || ''}
+                            onChange={e => {
+                              const driverId = e.target.value;
+                              const d = drivers.find(d => d.id === parseInt(driverId));
+                              setEditDriver(prev => ({ ...prev, [r.id]: d || null }));
+                            }}
+                          >
+                            <option value="">Change driver...</option>
+                            {drivers.map(d => (
+                              <option key={d.id} value={d.id}>{d.name}</option>
+                            ))}
+                          </select>
+                          <button
+                            className="bg-blue-600 text-white px-2 py-1 rounded"
+                            onClick={() => handleUpdateRosterDriver(r.id, c.id)}
+                            disabled={!editDriver[r.id]}
+                          >
+                            Update
+                          </button>
                         </div>
                       ))}
                       <div className="text-xs text-gray-600">Assigned: {c.roster.length} / {c.required_min_vehicles || 1}</div>

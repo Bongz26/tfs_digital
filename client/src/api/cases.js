@@ -72,6 +72,19 @@ export const updateFuneralTime = async (id, funeralTime, funeralDate) => {
     }
 };
 
+export const updateCaseVenue = async (id, data) => {
+    try {
+        const token = getAccessToken();
+        const res = await axios.patch(`${BASE_URL}/${id}/venue`, data, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        return res.data.case;
+    } catch (err) {
+        console.error(`Error updating case venue ${id}:`, err.response || err);
+        throw err;
+    }
+};
+
 export const assignVehicle = async (caseId, assignmentData) => {
     try {
         const token = getAccessToken();

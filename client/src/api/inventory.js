@@ -30,6 +30,20 @@ export const fetchInventoryStats = async () => {
     }
 };
 
+export const fetchLowStockItems = async (category = 'all') => {
+    try {
+        const token = getAccessToken();
+        const params = category && category !== 'all' ? `?category=${category}` : '';
+        const res = await axios.get(`${BASE_URL}/low-stock${params}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        return res.data.items || [];
+    } catch (err) {
+        console.error("Error fetching low stock items:", err.response || err);
+        throw err;
+    }
+};
+
 export const createInventoryItem = async (itemData) => {
     try {
         const token = getAccessToken();

@@ -2,12 +2,28 @@
 import React, { useEffect, useState } from 'react';
 import { API_HOST } from '../api/config';
 import { getAccessToken } from '../api/auth';
+import { useAuth } from '../context/AuthContext';
+import { fetchDrivers } from '../api/drivers';
+import { updateRoster } from '../api/roster';
+import { updateCaseVenue, updateFuneralTime } from '../api/cases';
 
 export default function VehicleCalendar() {
   const [roster, setRoster] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('upcoming');
   const [authError, setAuthError] = useState('');
+  const { isAdmin } = useAuth();
+  const [drivers, setDrivers] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
+  const [editDriver, setEditDriver] = useState({});
+  const [editVehicle, setEditVehicle] = useState({});
+  const [editStatus, setEditStatus] = useState({});
+  const [editPickupTime, setEditPickupTime] = useState({});
+  const [saving, setSaving] = useState({});
+  const [editVenueName, setEditVenueName] = useState({});
+  const [editBurialPlace, setEditBurialPlace] = useState({});
+  const [editCaseFuneralTime, setEditCaseFuneralTime] = useState({});
+  const [caseFuneralTimeValues, setCaseFuneralTimeValues] = useState({});
 
   useEffect(() => {
     const API_URL = API_HOST;
@@ -29,6 +45,18 @@ export default function VehicleCalendar() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    const token = getAccessToken();
+    if (!isAdmin()) return;
+    fetchDrivers().then(setDrivers).catch(() => setDrivers([]));
+    fetch(`${API_HOST}/api/vehicles`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then(j => setVehicles(j.vehicles || []))
+      .catch(() => setVehicles([]));
+  }, [isAdmin]);
 
   const filteredRoster = roster.filter(item => {
     if (!item.funeral_date) return viewMode !== 'past';
@@ -95,6 +123,24 @@ export default function VehicleCalendar() {
       map.set(name, existing);
     });
     return Array.from(map.values()).sort((a, b) => a.driver_name.localeCompare(b.driver_name));
+  };
+
+  const groupByDriverSet = items => {
+    const cases = groupByCase(items);
+    const map = new Map();
+    cases.forEach(cg => {
+      const drivers = Array.from(new Set(
+        (cg.assignments || [])
+          .map(a => String(a.driver_name || '').trim())
+          .filter(n => n && n.toLowerCase() !== 'tbd')
+      ));
+      if (drivers.length < 2) return;
+      const key = drivers.slice().sort((a, b) => a.localeCompare(b)).join(' & ');
+      const existing = map.get(key) || { key, drivers: drivers.slice().sort((a, b) => a.localeCompare(b)), cases: [] };
+      existing.cases.push(cg);
+      map.set(key, existing);
+    });
+    return Array.from(map.values()).filter(g => g.cases.length >= 2).sort((a, b) => b.cases.length - a.cases.length || a.key.localeCompare(b.key));
   };
 
   if (loading) {
@@ -167,7 +213,7 @@ export default function VehicleCalendar() {
           <div className="mb-4 text-center">
             <p className="text-gray-600">
               {viewMode === 'drivers' ? (
-                <>Showing <span className="font-bold text-red-600">{groupByDriver(sortedRoster).length}</span> driver group{groupByDriver(sortedRoster).length !== 1 ? 's' : ''}</>
+                <>Showing <span className="font-bold text-red-600">{groupByDriverSet(sortedRoster).length}</span> driver group{groupByDriverSet(sortedRoster).length !== 1 ? 's' : ''}</>
               ) : (
                 <>Showing <span className="font-bold text-red-600">{groupByCase(sortedRoster).length}</span> case{groupByCase(sortedRoster).length !== 1 ? 's' : ''}</>
               )}
@@ -176,34 +222,161 @@ export default function VehicleCalendar() {
 
           {viewMode === 'drivers' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {groupByDriver(sortedRoster).map(group => (
-                <div key={group.driver_name} className="bg-white border-l-4 border-red-600 rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-200">
+              {groupByDriverSet(sortedRoster).map(group => (
+                <div key={group.key} className="bg-white border-l-4 border-red-600 rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow duration-200">
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-lg font-bold text-red-700">{group.driver_name}</h3>
-                    <span className="text-sm text-gray-500">{group.assignments.length} assignment{group.assignments.length !== 1 ? 's' : ''}</span>
+                    <h3 className="text-lg font-bold text-red-700">{group.key}</h3>
+                    <span className="text-sm text-gray-500">{group.cases.length} case{group.cases.length !== 1 ? 's' : ''}</span>
                   </div>
-                  <div className="space-y-3">
-                    {group.assignments.map((a, idx) => (
-                      <div key={idx} className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-                        <p className="text-yellow-700 text-sm">
-                          🚗 {a.vehicle_type ? a.vehicle_type.toUpperCase().replace('_', ' ') : '—'} — {a.reg_number || '—'}
-                        </p>
-                        <p className="text-gray-800 text-sm font-semibold mt-1">
-                          {a.case_number || `CASE-${a.case_id}`}
-                        </p>
-                        <p className="text-gray-600 text-xs">
-                          {a.deceased_name || '—'} • {a.venue_name || '—'}
-                        </p>
-                        <div className="mt-2 flex justify-end">
-                          <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                            a.status === 'scheduled'
-                              ? 'bg-blue-100 text-blue-700'
-                              : a.status === 'en_route'
-                              ? 'bg-orange-100 text-orange-700'
-                              : 'bg-green-100 text-green-700'
-                          }`}>
-                            {a.status?.toUpperCase() || 'PENDING'}
-                          </span>
+                  <div className="space-y-4">
+                    {group.cases.map(cg => (
+                      <div key={cg.case_id} className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-gray-800 font-semibold">{cg.case_number || `CASE-${cg.case_id}`}</span>
+                          <span className="text-sm text-gray-500">{cg.funeral_date ? new Date(cg.funeral_date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' }) : 'Date TBA'}</span>
+                        </div>
+                        <div className="space-y-2">
+                          {cg.assignments.filter(a => group.drivers.includes(String(a.driver_name || '').trim())).map(a => (
+                            <div key={a.id || `${cg.case_id}-${a.reg_number}-${a.driver_name}`} className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                              <p className="text-yellow-800 font-semibold flex items-center">👤 {a.driver_name || 'Driver not assigned'}</p>
+                              <p className="text-yellow-700 text-sm">🚗 {a.vehicle_type ? a.vehicle_type.toUpperCase().replace('_', ' ') : '—'} — {a.reg_number || '—'}</p>
+                              <div className="mt-2 flex justify-end">
+                                <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                                  a.status === 'scheduled'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : a.status === 'en_route'
+                                    ? 'bg-orange-100 text-orange-700'
+                                    : 'bg-green-100 text-green-700'
+                                }`}>
+                                  {a.status?.toUpperCase() || 'PENDING'}
+                                </span>
+                              </div>
+                              {isAdmin() && (
+                                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <select
+                                    className="border rounded px-2 py-1 text-sm"
+                                    value={editDriver[a.id]?.id || ''}
+                                    onChange={e => {
+                                      const did = parseInt(e.target.value);
+                                      const d = drivers.find(x => x.id === did) || null;
+                                      setEditDriver(prev => ({ ...prev, [a.id]: d }));
+                                    }}
+                                  >
+                                    <option value="">Change driver</option>
+                                    {drivers.map(d => (
+                                      <option key={d.id} value={d.id}>{d.name}</option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    className="border rounded px-2 py-1 text-sm"
+                                    value={editVehicle[a.id]?.id || ''}
+                                    onChange={e => {
+                                      const vid = parseInt(e.target.value);
+                                      const v = vehicles.find(x => x.id === vid) || null;
+                                      setEditVehicle(prev => ({ ...prev, [a.id]: v }));
+                                    }}
+                                  >
+                                    <option value="">Change vehicle</option>
+                                    {vehicles.map(v => (
+                                      <option key={v.id} value={v.id}>{(v.type || '').toUpperCase().replace('_',' ')} • {v.reg_number}</option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    className="border rounded px-2 py-1 text-sm"
+                                    value={editStatus[a.id] || ''}
+                                    onChange={e => setEditStatus(prev => ({ ...prev, [a.id]: e.target.value }))}
+                                  >
+                                    <option value="">Change status</option>
+                                    <option value="scheduled">scheduled</option>
+                                    <option value="en_route">en_route</option>
+                                    <option value="completed">completed</option>
+                                  </select>
+                                  <input
+                                    type="datetime-local"
+                                    className="border rounded px-2 py-1 text-sm"
+                                    value={editPickupTime[a.id] || ''}
+                                    onChange={e => setEditPickupTime(prev => ({ ...prev, [a.id]: e.target.value }))}
+                                  />
+                                  <button
+                                    className="bg-blue-600 text-white px-3 py-1 rounded text-sm disabled:bg-gray-400"
+                                    disabled={saving[a.id] || (!editDriver[a.id] && !editVehicle[a.id] && !editStatus[a.id] && !editPickupTime[a.id])}
+                                    onClick={async () => {
+                                      const payload = {};
+                                      if (editDriver[a.id]) payload.driver_name = editDriver[a.id].name;
+                                      if (editVehicle[a.id]) payload.vehicle_id = editVehicle[a.id].id;
+                                      if (editStatus[a.id]) payload.status = editStatus[a.id];
+                                      if (editPickupTime[a.id]) payload.pickup_time = editPickupTime[a.id];
+                                      setSaving(prev => ({ ...prev, [a.id]: true }));
+                                      try {
+                                        await updateRoster(a.id, payload);
+                                        const token = getAccessToken();
+                                        const res = await fetch(`${API_HOST}/api/roster`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                                        const json = await res.json();
+                                        setRoster(json.roster || []);
+                                        setEditDriver(prev => { const n = { ...prev }; delete n[a.id]; return n; });
+                                        setEditVehicle(prev => { const n = { ...prev }; delete n[a.id]; return n; });
+                                        setEditStatus(prev => { const n = { ...prev }; delete n[a.id]; return n; });
+                                        setEditPickupTime(prev => { const n = { ...prev }; delete n[a.id]; return n; });
+                                      } catch (err) {
+                                        alert(err.response?.data?.error || err.message || 'Failed to update');
+                                      } finally {
+                                        setSaving(prev => ({ ...prev, [a.id]: false }));
+                                      }
+                                    }}
+                                  >
+                                    Save
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          {isAdmin() && (
+                            <div className="mt-3 p-3 rounded-lg border border-gray-200 bg-white">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  className="border rounded px-2 py-1 text-sm"
+                                  placeholder="Service venue"
+                                  value={editVenueName[cg.case_id] ?? ''}
+                                  onChange={e => setEditVenueName(prev => ({ ...prev, [cg.case_id]: e.target.value }))}
+                                />
+                                <input
+                                  type="text"
+                                  className="border rounded px-2 py-1 text-sm"
+                                  placeholder="Burial place"
+                                  value={editBurialPlace[cg.case_id] ?? ''}
+                                  onChange={e => setEditBurialPlace(prev => ({ ...prev, [cg.case_id]: e.target.value }))}
+                                />
+                              </div>
+                              <div className="mt-2 flex justify-end">
+                                <button
+                                  className="bg-green-600 text-white px-3 py-1 rounded text-sm disabled:bg-gray-400"
+                                  disabled={saving[`case-${cg.case_id}`] || (!editVenueName[cg.case_id] && !editBurialPlace[cg.case_id])}
+                                  onClick={async () => {
+                                    const payload = {};
+                                    if (editVenueName[cg.case_id]) payload.venue_name = editVenueName[cg.case_id];
+                                    if (editBurialPlace[cg.case_id]) payload.burial_place = editBurialPlace[cg.case_id];
+                                    setSaving(prev => ({ ...prev, [`case-${cg.case_id}`]: true }));
+                                    try {
+                                      await updateCaseVenue(cg.case_id, payload);
+                                      const token = getAccessToken();
+                                      const res = await fetch(`${API_HOST}/api/roster`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                                      const json = await res.json();
+                                      setRoster(json.roster || []);
+                                      setEditVenueName(prev => { const n = { ...prev }; delete n[cg.case_id]; return n; });
+                                      setEditBurialPlace(prev => { const n = { ...prev }; delete n[cg.case_id]; return n; });
+                                    } catch (err) {
+                                      alert(err.response?.data?.error || err.message || 'Failed to update case');
+                                    } finally {
+                                      setSaving(prev => ({ ...prev, [`case-${cg.case_id}`]: false }));
+                                    }
+                                  }}
+                                >
+                                  Save Case
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -231,6 +404,57 @@ export default function VehicleCalendar() {
                   <p className="text-gray-800 font-semibold text-xl mb-2">{group.deceased_name || 'Deceased Name Not Available'}</p>
                   <p className="text-gray-600 text-sm mb-1">📍 <span className="font-medium">{group.venue_name || 'Venue To Be Announced'}</span></p>
                   <p className="text-gray-600 text-sm mb-1">⏰ Funeral Time: <span className="font-medium">{group.funeral_time || 'Time To Be Announced'}</span></p>
+                  {isAdmin() && (
+                    <div className="mt-2 flex items-center gap-2">
+                      {editCaseFuneralTime[group.case_id] ? (
+                        <>
+                          <input
+                            type="time"
+                            className="border rounded px-2 py-1 text-sm"
+                            value={caseFuneralTimeValues[group.case_id] || group.funeral_time || ''}
+                            onChange={e => setCaseFuneralTimeValues(prev => ({ ...prev, [group.case_id]: e.target.value }))}
+                          />
+                          <button
+                            className="bg-green-600 text-white px-3 py-1 rounded text-sm"
+                            onClick={async () => {
+                              try {
+                                await updateFuneralTime(group.case_id, caseFuneralTimeValues[group.case_id] || group.funeral_time);
+                                const token = getAccessToken();
+                                const res = await fetch(`${API_HOST}/api/roster`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                                const json = await res.json();
+                                setRoster(json.roster || []);
+                                setEditCaseFuneralTime(prev => { const n = { ...prev }; delete n[group.case_id]; return n; });
+                                setCaseFuneralTimeValues(prev => { const n = { ...prev }; delete n[group.case_id]; return n; });
+                              } catch (err) {
+                                alert(err.response?.data?.error || err.message || 'Failed to update funeral time');
+                              }
+                            }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="bg-gray-400 text-white px-3 py-1 rounded text-sm"
+                            onClick={() => {
+                              setEditCaseFuneralTime(prev => { const n = { ...prev }; delete n[group.case_id]; return n; });
+                              setCaseFuneralTimeValues(prev => { const n = { ...prev }; delete n[group.case_id]; return n; });
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          className="text-blue-600 text-xs underline"
+                          onClick={() => {
+                            setEditCaseFuneralTime(prev => ({ ...prev, [group.case_id]: true }));
+                            setCaseFuneralTimeValues(prev => ({ ...prev, [group.case_id]: group.funeral_time || '' }));
+                          }}
+                        >
+                          Edit Time
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {group.delivery_date && group.delivery_time && (
                     <p className="text-gray-600 text-sm mb-1">🚚 Delivery: <span className="font-medium">{new Date(group.delivery_date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })} at {group.delivery_time}</span></p>
                   )}
@@ -250,6 +474,83 @@ export default function VehicleCalendar() {
                             {a.status?.toUpperCase() || 'PENDING'}
                           </span>
                         </div>
+                        {isAdmin() && (
+                          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <select
+                              className="border rounded px-2 py-1 text-sm"
+                              value={editDriver[a.id]?.id || ''}
+                              onChange={e => {
+                                const did = parseInt(e.target.value);
+                                const d = drivers.find(x => x.id === did) || null;
+                                setEditDriver(prev => ({ ...prev, [a.id]: d }));
+                              }}
+                            >
+                              <option value="">Change driver</option>
+                              {drivers.map(d => (
+                                <option key={d.id} value={d.id}>{d.name}</option>
+                              ))}
+                            </select>
+                            <select
+                              className="border rounded px-2 py-1 text-sm"
+                              value={editVehicle[a.id]?.id || ''}
+                              onChange={e => {
+                                const vid = parseInt(e.target.value);
+                                const v = vehicles.find(x => x.id === vid) || null;
+                                setEditVehicle(prev => ({ ...prev, [a.id]: v }));
+                              }}
+                            >
+                              <option value="">Change vehicle</option>
+                              {vehicles.map(v => (
+                                <option key={v.id} value={v.id}>{(v.type || '').toUpperCase().replace('_',' ')} • {v.reg_number}</option>
+                              ))}
+                            </select>
+                            <select
+                              className="border rounded px-2 py-1 text-sm"
+                              value={editStatus[a.id] || ''}
+                              onChange={e => setEditStatus(prev => ({ ...prev, [a.id]: e.target.value }))}
+                            >
+                              <option value="">Change status</option>
+                              <option value="scheduled">scheduled</option>
+                              <option value="en_route">en_route</option>
+                              <option value="completed">completed</option>
+                            </select>
+                            <input
+                              type="datetime-local"
+                              className="border rounded px-2 py-1 text-sm"
+                              value={editPickupTime[a.id] || ''}
+                              onChange={e => setEditPickupTime(prev => ({ ...prev, [a.id]: e.target.value }))}
+                            />
+                            <button
+                              className="bg-blue-600 text-white px-3 py-1 rounded text-sm disabled:bg-gray-400"
+                              disabled={saving[a.id] || (!editDriver[a.id] && !editVehicle[a.id] && !editStatus[a.id] && !editPickupTime[a.id])}
+                              onClick={async () => {
+                                const payload = {};
+                                if (editDriver[a.id]) payload.driver_name = editDriver[a.id].name;
+                                if (editVehicle[a.id]) payload.vehicle_id = editVehicle[a.id].id;
+                                if (editStatus[a.id]) payload.status = editStatus[a.id];
+                                if (editPickupTime[a.id]) payload.pickup_time = editPickupTime[a.id];
+                                setSaving(prev => ({ ...prev, [a.id]: true }));
+                                try {
+                                  await updateRoster(a.id, payload);
+                                  const token = getAccessToken();
+                                  const res = await fetch(`${API_HOST}/api/roster`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+                                  const json = await res.json();
+                                  setRoster(json.roster || []);
+                                  setEditDriver(prev => { const n = { ...prev }; delete n[a.id]; return n; });
+                                  setEditVehicle(prev => { const n = { ...prev }; delete n[a.id]; return n; });
+                                  setEditStatus(prev => { const n = { ...prev }; delete n[a.id]; return n; });
+                                  setEditPickupTime(prev => { const n = { ...prev }; delete n[a.id]; return n; });
+                                } catch (err) {
+                                  alert(err.response?.data?.error || err.message || 'Failed to update');
+                                } finally {
+                                  setSaving(prev => ({ ...prev, [a.id]: false }));
+                                }
+                              }}
+                            >
+                              Save
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

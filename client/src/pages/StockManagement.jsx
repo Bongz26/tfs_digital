@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { API_HOST } from '../api/config';
 import { getAccessToken } from '../api/auth';
 import StockTakeModal from '../components/StockTake/StockTakeModal';
@@ -57,11 +57,18 @@ export default function StockManagement() {
   });
   const [editItem, setEditItem] = useState(null);
   const [showEditForm, setShowEditForm] = useState(false);
+  const [movements, setMovements] = useState([]);
+  const [loadingMovements, setLoadingMovements] = useState(false);
+  const [groupByCase, setGroupByCase] = useState(false);
+  const [usageByCase, setUsageByCase] = useState([]);
+  const [loadingUsageByCase, setLoadingUsageByCase] = useState(false);
+  const [usageFrom, setUsageFrom] = useState('');
+  const [usageTo, setUsageTo] = useState('');
 
   const API_URL = API_HOST;
 
   // Fetch inventory data
-  const fetchInventory = async (category = 'all') => {
+  const fetchInventory = useCallback(async (category = 'all') => {
     try {
       setLoading(true);
       console.log('Fetching inventory, category:', category);
@@ -79,7 +86,8 @@ export default function StockManagement() {
       if (data.success) {
         const withLowStock = data.inventory.map(item => ({
           ...item,
-          is_low_stock: (item.stock_quantity - (item.reserved_quantity || 0)) <= item.low_stock_threshold
+          available_quantity: (item.stock_quantity || 0) - (item.reserved_quantity || 0),
+          is_low_stock: ((item.stock_quantity || 0) - (item.reserved_quantity || 0)) <= (item.low_stock_threshold || 0)
         }));
         setInventory(withLowStock);
       } else setError(data.error);
@@ -89,11 +97,96 @@ export default function StockManagement() {
     } finally {
       setLoading(false);
     }
+  }, [API_URL]);
+
+  const fetchMovements = useCallback(async () => {
+    try {
+      setLoadingMovements(true);
+      const token = getAccessToken();
+      const params = new URLSearchParams();
+      params.append('category', 'all');
+      if (usageFrom) params.append('from', usageFrom);
+      if (usageTo) params.append('to', usageTo);
+      const response = await fetch(`${API_URL}/api/inventory/movements?${params.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      const rows = (data.movements || []).filter(m => String(m.category).toLowerCase() === 'coffin');
+      setMovements(rows);
+    } catch (err) {
+      setMovements([]);
+    } finally {
+      setLoadingMovements(false);
+    }
+  }, [API_URL, usageFrom, usageTo]);
+
+  const fetchUsageByCase = useCallback(async () => {
+    try {
+      setLoadingUsageByCase(true);
+      const token = getAccessToken();
+      const params = new URLSearchParams();
+      if (usageFrom) params.append('from', usageFrom);
+      if (usageTo) params.append('to', usageTo);
+      const url = params.toString() ? `${API_URL}/api/inventory/coffin-usage-by-case?${params.toString()}` : `${API_URL}/api/inventory/coffin-usage-by-case`;
+      const response = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      setUsageByCase(data.cases || []);
+    } catch (err) {
+      setUsageByCase([]);
+    } finally {
+      setLoadingUsageByCase(false);
+    }
+  }, [API_URL, usageFrom, usageTo]);
+
+  const logCoffinUsage = async (item) => {
+    try {
+      const token = getAccessToken();
+      let caseId = null;
+      const caseNumber = prompt(`Link to case number (optional) for "${item.name}" usage:`);
+      if (caseNumber && caseNumber.trim()) {
+        try {
+          const resp = await fetch(`${API_URL}/api/cases/lookup?case_number=${encodeURIComponent(caseNumber.trim())}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          });
+          if (resp.ok) {
+            const d = await resp.json();
+            if (d.success && d.case?.id) caseId = d.case.id;
+          }
+        } catch (_) {}
+      }
+      const body = {
+        quantity_change: -1,
+        reason: caseId ? 'Case consumption' : 'Manual usage',
+        case_id: caseId,
+        movement_type: 'sale'
+      };
+      const response = await fetch(`${API_URL}/api/inventory/${item.id}/adjust`, {
+        method: 'POST',
+        headers: token ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } : { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      if (data.success) {
+        await fetchInventory(activeTab === 'low' ? 'all' : activeTab);
+        await fetchStats();
+        await fetchMovements();
+        alert('Usage logged');
+      } else {
+        alert(data.error || 'Failed to log usage');
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to log usage');
+    }
   };
   
   
   // Fetch stats
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const token = getAccessToken();
       const response = await fetch(`${API_URL}/api/inventory/stats`, {
@@ -106,12 +199,12 @@ export default function StockManagement() {
     } catch (err) {
       console.error('Stats error:', err);
     }
-  };
+  }, [API_URL]);
 
   useEffect(() => {
     fetchInventory();
     fetchStats();
-  }, []);
+  }, [fetchInventory, fetchStats]);
 
   const updateStock = async (itemId, newQuantity, reason = 'Manual adjustment') => {
     try {
@@ -235,6 +328,11 @@ export default function StockManagement() {
       </div>
 
       {/* ALERTS */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+          {error}
+        </div>
+      )}
       {lowStockItems.length > 0 && (
         <div className="bg-red-100 border-l-4 border-red-600 p-6 mb-8 rounded-r-lg shadow">
           <div className="flex justify-between items-center">
@@ -248,6 +346,20 @@ export default function StockManagement() {
             >
               View All
             </button>
+          </div>
+        </div>
+      )}
+
+      {lowStockItems.filter(i => i.category === 'coffin').length > 0 && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-600 p-4 mb-6 rounded-r-lg shadow">
+          <p className="font-semibold text-yellow-800">Casket/Coffin items are low in stock</p>
+          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+            {lowStockItems.filter(i => i.category === 'coffin').slice(0, 5).map(i => (
+              <div key={`low-${i.id}`} className="text-sm text-yellow-800 flex justify-between">
+                <span>{i.name}{i.color ? ` • ${i.color}` : ''}</span>
+                <span>Qty {i.stock_quantity} • Threshold {i.low_stock_threshold}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -283,13 +395,17 @@ export default function StockManagement() {
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
           {/* TABS */}
           <div className="flex flex-wrap gap-2 w-full lg:w-auto">
-            {['all', 'coffin', 'tent', 'chair', 'grocery', 'low'].map(tab => (
+              {['all', 'coffin', 'usage', 'tent', 'chair', 'grocery', 'low'].map(tab => (
               <button
                 key={tab}
                 onClick={() => {
                   setActiveTab(tab);
                   // ALWAYS fetch all for low stock tab
-                  fetchInventory(tab === 'low' ? 'all' : tab);
+                  if (tab === 'usage') {
+                    if (groupByCase) fetchUsageByCase(); else fetchMovements();
+                  } else {
+                    fetchInventory(tab === 'low' ? 'all' : tab);
+                  }
                 }}
                 className={`px-3 sm:px-4 py-2 rounded-lg font-semibold capitalize text-sm sm:text-base transition-all ${
                   activeTab === tab
@@ -297,7 +413,7 @@ export default function StockManagement() {
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300 hover:shadow-sm'
                 }`}
               >
-                {tab === 'all' ? 'All Items' : tab === 'low' ? 'Low Stock' : tab}
+                {tab === 'all' ? 'All Items' : tab === 'low' ? 'Low Stock' : tab === 'usage' ? 'Coffin Usage' : tab}
               </button>
             ))}
           </div>
@@ -529,8 +645,110 @@ export default function StockManagement() {
         </div>
       )}
 
-      {/* INVENTORY TABLE */}
+      {activeTab === 'usage' ? (
+        <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-600">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-red-800">Coffin Usage History</h2>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={usageFrom}
+                onChange={(e) => setUsageFrom(e.target.value)}
+                className="px-2 py-1 border rounded"
+              />
+              <span className="text-gray-500">to</span>
+              <input
+                type="date"
+                value={usageTo}
+                onChange={(e) => setUsageTo(e.target.value)}
+                className="px-2 py-1 border rounded"
+              />
+              <button
+                onClick={() => { if (groupByCase) fetchUsageByCase(); else fetchMovements(); }}
+                className="px-3 py-1 rounded bg-gray-200 text-gray-800"
+              >
+                Apply
+              </button>
+              <button
+                onClick={() => { const next = !groupByCase; setGroupByCase(next); next ? fetchUsageByCase() : fetchMovements(); }}
+                className={`px-3 py-1 rounded ${groupByCase ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800'}`}
+              >
+                {groupByCase ? 'Grouped by Case' : 'List Movements'}
+              </button>
+            </div>
+          </div>
+          {!groupByCase && (loadingMovements ? (
+            <div className="p-4 text-center text-gray-600">Loading usage...</div>
+          ) : movements.length === 0 ? (
+            <div className="p-4 text-center text-gray-500">No movements found</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-100 border-b">
+                    <th className="p-3 text-left font-semibold text-gray-700">Date</th>
+                    <th className="p-3 text-left font-semibold text-gray-700">Item</th>
+                    <th className="p-3 text-left font-semibold text-gray-700">Movement</th>
+                    <th className="p-3 text-left font-semibold text-gray-700">Change</th>
+                    <th className="p-3 text-left font-semibold text-gray-700">Prev → New</th>
+                    <th className="p-3 text-left font-semibold text-gray-700">Case</th>
+                    <th className="p-3 text-left font-semibold text-gray-700">Recorded By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {movements.map(m => (
+                    <tr key={m.id} className="border-b hover:bg-gray-50">
+                      <td className="p-3 text-sm text-gray-700">{new Date(m.created_at).toLocaleString()}</td>
+                      <td className="p-3 text-sm text-gray-800">{m.name}{m.color ? ` • ${m.color}` : ''}</td>
+                      <td className="p-3 text-sm">{m.movement_type}</td>
+                      <td className="p-3 text-sm">{m.quantity_change}</td>
+                      <td className="p-3 text-sm">{m.previous_quantity} → {m.new_quantity}</td>
+                      <td className="p-3 text-sm">{m.case_number ? `${m.case_number} • ${m.deceased_name || ''}` : '—'}</td>
+                      <td className="p-3 text-sm">{m.recorded_by || 'system'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+          {groupByCase && (loadingUsageByCase ? (
+            <div className="p-4 text-center text-gray-600">Loading summary...</div>
+          ) : usageByCase.length === 0 ? (
+            <div className="p-4 text-center text-gray-500">No coffin usage found</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-100 border-b">
+                    <th className="p-3 text-left font-semibold text-gray-700">Case</th>
+                    <th className="p-3 text-left font-semibold text-gray-700">Deceased</th>
+                    <th className="p-3 text-left font-semibold text-gray-700">Items</th>
+                    <th className="p-3 text-left font-semibold text-gray-700">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usageByCase.map(row => (
+                    <tr key={row.case_id} className="border-b hover:bg-gray-50">
+                      <td className="p-3 text-sm text-gray-800">{row.case_number}</td>
+                      <td className="p-3 text-sm text-gray-700">{row.deceased_name}</td>
+                      <td className="p-3 text-sm text-gray-700">
+                        {(Array.isArray(row.items) ? row.items : []).map((it, idx) => (
+                          <span key={idx} className="inline-block mr-2 mb-1 px-2 py-1 bg-gray-100 rounded">
+                            {it.name}{it.color ? ` • ${it.color}` : ''} × {it.quantity}
+                          </span>
+                        ))}
+                      </td>
+                      <td className="p-3 text-sm text-gray-800 font-semibold">{row.total_coffins || 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      ) : (
       <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-600">
+        {/* INVENTORY TABLE */}
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-red-800">
             {activeTab === 'all' ? 'All Inventory' : 
@@ -632,6 +850,14 @@ export default function StockManagement() {
                         >
                           Edit
                         </button>
+                        {item.category === 'coffin' && (
+                          <button
+                            onClick={() => logCoffinUsage(item)}
+                            className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 text-sm"
+                          >
+                            Log Usage
+                          </button>
+                        )}
                         <button
                           onClick={async () => {
                             const newQty = prompt(`Update stock for "${item.name}" (current: ${item.stock_quantity})`);
@@ -664,7 +890,7 @@ export default function StockManagement() {
                         </button>
                         <button
                           onClick={async () => {
-                            const val = prompt(`Set low stock alert for \"${item.name}\" (current: ${item.low_stock_threshold})`);
+                            const val = prompt(`Set low stock alert for "${item.name}" (current: ${item.low_stock_threshold})`);
                             if (val !== null) {
                               const parsed = parseInt(val);
                               if (!isNaN(parsed) && parsed >= 0) {
@@ -686,6 +912,7 @@ export default function StockManagement() {
           </table>
         </div>
       </div>
+      )}
 
       {/* Stock Take Modal */}
       <StockTakeModal

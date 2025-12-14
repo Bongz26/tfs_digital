@@ -806,6 +806,15 @@ export default function ConsultationForm() {
       setPrintedData(data);
       setPrintMode('full');
       setTimeout(() => window.print(), 500);
+      try { await deleteDraftServer(form.policy_number, 'submitted'); } catch (_) {}
+      try {
+        const key = `tfs_claim_draft_${form.policy_number}`;
+        window.localStorage.removeItem(key);
+        const lastKey = window.localStorage.getItem('tfs_claim_draft_last');
+        if (lastKey === key) {
+          window.localStorage.removeItem('tfs_claim_draft_last');
+        }
+      } catch (_) {}
       // Reset form after confirmation
       setForm(prev => ({
         ...prev,
