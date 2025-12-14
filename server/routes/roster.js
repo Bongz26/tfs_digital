@@ -1,6 +1,7 @@
 // server/routes/roster.js
 const express = require('express');
 const router = express.Router();
+const { query } = require('../config/db');
 
 router.get('/', async (req, res) => {
   try {
@@ -22,7 +23,8 @@ router.get('/', async (req, res) => {
           funeral_time,
           delivery_date,
           delivery_time,
-          venue_name
+          venue_name,
+          burial_place
         ),
         vehicles:vehicle_id (
           id,
@@ -57,6 +59,7 @@ router.get('/', async (req, res) => {
         delivery_date: caseData?.delivery_date || null,
         delivery_time: caseData?.delivery_time || null,
         venue_name: caseData?.venue_name || null,
+        burial_place: caseData?.burial_place || null,
         // Vehicle data (flattened)
         reg_number: vehicleData?.reg_number || null,
         vehicle_type: vehicleData?.type || null
@@ -76,6 +79,153 @@ router.get('/', async (req, res) => {
       error: err.message,
       roster: [] 
     });
+  }
+});
+
+// PATCH /api/roster/:id - update driver or status
+router.patch('/:id', async (req, res) => {
+  try {
+    const supabase = req.app.locals.supabase;
+    const id = parseInt(req.params.id, 10);
+    const { driver_name, status, pickup_time, assignment_role, vehicle_id } = req.body || {};
+
+    const updates = {};
+    if (driver_name != null) updates.driver_name = String(driver_name);
+    if (status != null) updates.status = String(status);
+    if (pickup_time != null) updates.pickup_time = String(pickup_time);
+    if (assignment_role != null) updates.assignment_role = String(assignment_role);
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, error: 'No valid fields to update' });
+    }
+
+    // If changing vehicle, perform conflict checks
+    if (vehicle_id != null) {
+      const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
+      const BUFFER_HOURS = 2;
+      if (supabase) {
+        const { data: currentRoster, error: rosterErr } = await supabase
+          .from('roster')
+          .select('id, case_id, status')
+          .eq('id', id)
+          .limit(1);
+        if (rosterErr) throw rosterErr;
+        const current = Array.isArray(currentRoster) ? currentRoster[0] : currentRoster;
+        if (!current) return res.status(404).json({ success: false, error: 'Roster entry not found' });
+
+        const { data: caseRow, error: caseErr } = await supabase
+          .from('cases')
+          .select('id, funeral_date, funeral_time')
+          .eq('id', current.case_id)
+          .limit(1);
+        if (caseErr) throw caseErr;
+        const c = Array.isArray(caseRow) ? caseRow[0] : caseRow;
+        if (!c) return res.status(404).json({ success: false, error: 'Case not found for roster entry' });
+
+        if (c.funeral_date) {
+          const { data: sameDayAssignments, error: confErr } = await supabase
+            .from('roster')
+            .select(`id, case_id, status, cases:case_id (funeral_date, funeral_time, case_number, deceased_name)`) 
+            .neq('status', 'completed')
+            .eq('vehicle_id', vehicle_id)
+            .neq('case_id', current.case_id);
+          if (confErr) throw confErr;
+          const conflicts = (sameDayAssignments || []).filter(a => a.cases?.funeral_date === c.funeral_date);
+          if (conflicts.length) {
+            if (!c.funeral_time) {
+              if (!isAdmin) {
+                return res.status(400).json({ success: false, error: 'Cannot assign vehicle: case has no funeral time and vehicle has same-day assignments' });
+              }
+            }
+            const currentStart = new Date(`${c.funeral_date}T${c.funeral_time}`);
+            const currentEnd = new Date(currentStart.getTime() + BUFFER_HOURS * 3600 * 1000);
+            for (const a of conflicts) {
+              const ft = a.cases?.funeral_time;
+              if (!ft) {
+                if (!isAdmin) {
+                  return res.status(400).json({ success: false, error: `Time conflict: vehicle assigned to ${a.cases?.case_number || 'another case'} without specific time` });
+                }
+              }
+              const aStart = new Date(`${a.cases.funeral_date}T${ft}`);
+              const aEnd = new Date(aStart.getTime() + BUFFER_HOURS * 3600 * 1000);
+              if (currentStart < aEnd && currentEnd > aStart) {
+                if (!isAdmin) {
+                  return res.status(400).json({ success: false, error: `Time conflict with ${a.cases?.case_number || 'another case'} at ${ft}` });
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // DB path
+        const currentRes = await query('SELECT id, case_id, status FROM roster WHERE id = $1', [id]);
+        if (currentRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Roster entry not found' });
+        const current = currentRes.rows[0];
+        const caseRes = await query('SELECT id, funeral_date, funeral_time FROM cases WHERE id = $1', [current.case_id]);
+        if (caseRes.rows.length === 0) return res.status(404).json({ success: false, error: 'Case not found for roster entry' });
+        const c = caseRes.rows[0];
+        if (c.funeral_date) {
+          const confRes = await query(
+            `SELECT r.case_id, c.funeral_date, c.funeral_time, c.case_number, c.deceased_name
+             FROM roster r JOIN cases c ON r.case_id = c.id
+             WHERE r.vehicle_id = $1 AND r.case_id != $2 AND r.status != 'completed' AND c.funeral_date = $3`,
+            [vehicle_id, current.case_id, c.funeral_date]
+          );
+          const conflicts = confRes.rows;
+          const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
+          if (conflicts.length) {
+            if (!c.funeral_time) {
+              if (!isAdmin) {
+                return res.status(400).json({ success: false, error: 'Cannot assign vehicle: case has no funeral time and vehicle has same-day assignments' });
+              }
+            }
+            const start = new Date(`${c.funeral_date}T${c.funeral_time}`);
+            const end = new Date(start.getTime() + BUFFER_HOURS * 3600 * 1000);
+            for (const a of conflicts) {
+              if (!a.funeral_time) {
+                if (!isAdmin) {
+                  return res.status(400).json({ success: false, error: `Time conflict: vehicle assigned to ${a.case_number} without specific time` });
+                }
+              }
+              const aStart = new Date(`${a.funeral_date}T${a.funeral_time}`);
+              const aEnd = new Date(aStart.getTime() + BUFFER_HOURS * 3600 * 1000);
+              if (start < aEnd && end > aStart) {
+                if (!isAdmin) {
+                  return res.status(400).json({ success: false, error: `Time conflict with ${a.case_number} at ${a.funeral_time}` });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('roster')
+        .update(updates)
+        .eq('id', id)
+        .select('*')
+        .limit(1);
+      if (error) throw error;
+      return res.json({ success: true, roster: Array.isArray(data) ? data[0] : data });
+    }
+
+    const fields = [];
+    const values = [];
+    let idx = 1;
+    for (const [k, v] of Object.entries(updates)) {
+      fields.push(`${k} = $${idx++}`);
+      values.push(v);
+    }
+    values.push(id);
+    const sql = `UPDATE roster SET ${fields.join(', ')}, updated_at = NOW() WHERE id = $${idx} RETURNING *`;
+    const result = await query(sql, values);
+    if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Roster entry not found' });
+    res.json({ success: true, roster: result.rows[0] });
+  } catch (err) {
+    console.error('Roster update error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

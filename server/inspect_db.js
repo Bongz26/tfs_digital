@@ -10,20 +10,20 @@ async function run() {
         const res = await pool.query(`
       SELECT column_name, data_type 
       FROM information_schema.columns 
-      WHERE table_name = 'claim_drafts'
+      WHERE table_name = 'stock_movements'
     `);
-        console.log('Columns:', res.rows);
+        console.log('stock_movements columns:', res.rows);
 
-        const drafts = await pool.query(`SELECT * FROM claim_drafts LIMIT 1`);
-        console.log('Sample Draft:', drafts.rows[0]);
+        const countRes = await pool.query(`SELECT COUNT(*)::int AS cnt FROM stock_movements`);
+        console.log('stock_movements count:', countRes.rows[0]);
 
-        // Check if cases exist for the policy numbers seen in the screenshot
-        // 795269, 864706, 801763
-        const cases = await pool.query(`
-      SELECT id, policy_number FROM cases 
-      WHERE policy_number IN ('795269', '864706', '801763')
-    `);
-        console.log('Matching Cases:', cases.rows);
+        const sample = await pool.query(`
+          SELECT sm.id, sm.inventory_id, sm.case_id, sm.movement_type, sm.quantity_change, sm.previous_quantity, sm.new_quantity, sm.reason, sm.recorded_by, sm.created_at
+          FROM stock_movements sm
+          ORDER BY sm.created_at DESC
+          LIMIT 5
+        `);
+        console.log('stock_movements sample:', sample.rows);
 
     } catch (e) {
         console.error(e);

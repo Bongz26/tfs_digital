@@ -372,9 +372,9 @@ exports.createCase = async (req, res) => {
                     await query('UPDATE inventory SET stock_quantity=$1, updated_at=NOW() WHERE id=$2', [nextQty, item.id]);
                     try {
                         await query(
-                            `INSERT INTO stock_movements (inventory_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
-                             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-                            [item.id, 'sale', -1, previous, nextQty, 'Case consumption', (req.user?.email) || 'system']
+                            `INSERT INTO stock_movements (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
+                             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+                            [item.id, created.id, 'sale', -1, previous, nextQty, 'Case consumption', (req.user?.email) || 'system']
                         );
                     } catch (_) {}
                     try {
@@ -438,6 +438,11 @@ exports.createCase = async (req, res) => {
             }
         } catch (_) {}
 
+        try {
+            if (policy_number) {
+                await query('DELETE FROM claim_drafts WHERE policy_number = $1', [policy_number]);
+            }
+        } catch (_) {}
         res.json({ success: true, case: created });
     } catch (err) {
         console.error('❌ [POST /api/cases] Error creating case:', err);
@@ -557,7 +562,8 @@ exports.assignVehicle = async (req, res) => {
           AND c.funeral_date = $3
       `, [vehicle_id, caseId, currentFuneralDate]);
 
-            if (conflictingAssignments.rows.length > 0) {
+        if (conflictingAssignments.rows.length > 0) {
+            const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
                 const BUFFER_HOURS = 2;
 
                 if (currentFuneralTime) {
@@ -574,32 +580,36 @@ exports.assignVehicle = async (req, res) => {
                                 (currentEndTime > assignmentTime && currentEndTime <= assignmentEndTime) ||
                                 (currentTime <= assignmentTime && currentEndTime >= assignmentEndTime)
                             ) {
+                                if (!isAdmin) {
+                                    await client.query('ROLLBACK');
+                                    return res.status(400).json({
+                                        success: false,
+                                        error: `Time conflict: Vehicle is already assigned to ${assignment.case_number} (${assignment.deceased_name}) at ${assignment.funeral_time || 'TBA'} on the same day.`,
+                                        conflict: {
+                                            case_number: assignment.case_number,
+                                            deceased_name: assignment.deceased_name,
+                                            time: assignment.funeral_time
+                                        }
+                                    });
+                                }
+                            }
+                        } else {
+                            if (!isAdmin) {
                                 await client.query('ROLLBACK');
                                 return res.status(400).json({
                                     success: false,
-                                    error: `Time conflict: Vehicle is already assigned to ${assignment.case_number} (${assignment.deceased_name}) at ${assignment.funeral_time || 'TBA'} on the same day.`,
+                                    error: `Vehicle is assigned to ${assignment.case_number} (${assignment.deceased_name}) on the same day without a specific time.`,
                                     conflict: {
                                         case_number: assignment.case_number,
-                                        deceased_name: assignment.deceased_name,
-                                        time: assignment.funeral_time
+                                        deceased_name: assignment.deceased_name
                                     }
                                 });
                             }
-                        } else {
-                            await client.query('ROLLBACK');
-                            return res.status(400).json({
-                                success: false,
-                                error: `Vehicle is assigned to ${assignment.case_number} (${assignment.deceased_name}) on the same day without a specific time.`,
-                                conflict: {
-                                    case_number: assignment.case_number,
-                                    deceased_name: assignment.deceased_name
-                                }
-                            });
                         }
                     }
                 } else {
                     const hasTimedAssignment = conflictingAssignments.rows.some(a => a.funeral_time);
-                    if (hasTimedAssignment) {
+                    if (hasTimedAssignment && !isAdmin) {
                         await client.query('ROLLBACK');
                         return res.status(400).json({
                             success: false,
@@ -712,12 +722,25 @@ exports.updateCaseStatus = async (req, res) => {
                 return res.status(400).json({ success: false, error: 'Cancellation reason is required' });
             }
         }
-        const caseCheck = await query('SELECT id, status FROM cases WHERE id = $1', [id]);
+        const caseCheck = await query('SELECT id, status, funeral_time, burial_place FROM cases WHERE id = $1', [id]);
         if (caseCheck.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Case not found' });
         }
 
         const oldStatus = caseCheck.rows[0].status;
+        const existingFuneralTime = caseCheck.rows[0].funeral_time;
+        const existingBurialPlace = caseCheck.rows[0].burial_place;
+
+        if (oldStatus === 'intake' && status !== 'intake') {
+            const missingTime = !existingFuneralTime || String(existingFuneralTime).trim() === '';
+            const missingBurial = !existingBurialPlace || String(existingBurialPlace).trim() === '';
+            if (missingTime || missingBurial) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Set funeral time and cemetery venue before changing status from intake'
+                });
+            }
+        }
 
         const result = await query(
             `UPDATE cases 
@@ -778,19 +801,19 @@ exports.updateFuneralTime = async (req, res) => {
     }
 
     try {
-        const caseCheck = await query('SELECT id, status FROM cases WHERE id = $1', [id]);
-        if (caseCheck.rows.length === 0) {
-            return res.status(404).json({ success: false, error: 'Case not found' });
-        }
+    const caseCheck = await query('SELECT id, status FROM cases WHERE id = $1', [id]);
+    if (caseCheck.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Case not found' });
+    }
 
-        const currentStatus = caseCheck.rows[0].status;
-
-        if (currentStatus !== 'intake') {
-            return res.status(400).json({
-                success: false,
-                error: `Cannot update funeral time. Case status is "${currentStatus}". Funeral time can only be changed when status is "intake".`
-            });
-        }
+    const currentStatus = caseCheck.rows[0].status;
+    const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
+    if (currentStatus !== 'intake' && !isAdmin) {
+        return res.status(400).json({
+            success: false,
+            error: `Cannot update funeral time. Case status is "${currentStatus}". Funeral time can only be changed when status is "intake".`
+        });
+    }
 
         const updateFields = [];
         const updateValues = [];
@@ -807,13 +830,13 @@ exports.updateFuneralTime = async (req, res) => {
         updateFields.push(`updated_at = NOW()`);
         updateValues.push(id);
 
-        const result = await query(
-            `UPDATE cases 
+    const result = await query(
+        `UPDATE cases 
        SET ${updateFields.join(', ')}
        WHERE id = $${paramIndex}
        RETURNING *`,
-            updateValues
-        );
+        updateValues
+    );
 
         console.log(`✅ Case ${id} funeral time updated: ${funeral_time}`);
 
@@ -830,6 +853,62 @@ exports.updateFuneralTime = async (req, res) => {
             error: 'Failed to update funeral time',
             details: err.message
         });
+    }
+};
+
+exports.updateCaseVenue = async (req, res) => {
+    const { id } = req.params;
+    const { venue_name, venue_address, venue_lat, venue_lng, burial_place } = req.body || {};
+
+    try {
+        const caseCheck = await query('SELECT id, venue_name, venue_address, venue_lat, venue_lng, burial_place FROM cases WHERE id = $1', [id]);
+        if (caseCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Case not found' });
+        }
+
+        const oldValues = caseCheck.rows[0];
+
+        const fields = [];
+        const values = [];
+        let idx = 1;
+        if (venue_name != null) { fields.push(`venue_name = $${idx++}`); values.push(String(venue_name)); }
+        if (venue_address != null) { fields.push(`venue_address = $${idx++}`); values.push(String(venue_address)); }
+        if (venue_lat != null) { fields.push(`venue_lat = $${idx++}`); values.push(String(venue_lat)); }
+        if (venue_lng != null) { fields.push(`venue_lng = $${idx++}`); values.push(String(venue_lng)); }
+        if (burial_place != null) { fields.push(`burial_place = $${idx++}`); values.push(String(burial_place)); }
+        fields.push('updated_at = NOW()');
+        values.push(id);
+
+        if (values.length <= 1) {
+            return res.status(400).json({ success: false, error: 'No valid fields to update' });
+        }
+
+        const result = await query(
+            `UPDATE cases SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
+            values
+        );
+
+        try {
+            await query(
+                `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                [
+                    req.user?.id || null,
+                    req.user?.email || null,
+                    'case_venue_update',
+                    'case',
+                    id,
+                    JSON.stringify(oldValues),
+                    JSON.stringify({ venue_name, venue_address, venue_lat, venue_lng, burial_place }),
+                    req.ip,
+                    req.headers['user-agent']
+                ]
+            );
+        } catch (e) {}
+
+        res.json({ success: true, case: result.rows[0] });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
 };
 

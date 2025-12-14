@@ -8,6 +8,10 @@ router.get('/', inventoryController.getAllInventory);
 // GET inventory stats
 router.get('/stats', inventoryController.getInventoryStats);
 router.get('/low-stock', inventoryController.getLowStockDetailed);
+router.get('/movements', inventoryController.getStockMovements);
+router.get('/coffin-usage-by-case', inventoryController.getCoffinUsageByCase);
+router.get('/coffin-usage-raw', inventoryController.getCoffinUsageRaw);
+router.post('/coffin-usage/backfill', inventoryController.backfillCoffinMovementsToCases);
 
 // POST create new inventory item
 router.post('/', inventoryController.createInventoryItem);

@@ -22,6 +22,9 @@ router.patch('/:id/status', casesController.updateCaseStatus);
 // PATCH update funeral time (only if status is 'intake')
 router.patch('/:id/funeral-time', casesController.updateFuneralTime);
 
+// PATCH update venue and burial place
+router.patch('/:id/venue', casesController.updateCaseVenue);
+
 router.get('/list/cancelled', casesController.getCancelledCases);
 
 // GET audit log for case

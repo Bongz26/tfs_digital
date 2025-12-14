@@ -2,6 +2,7 @@
 const express = require('express');
 const nodemailer = require('nodemailer');
 const router = express.Router();
+const { getAvailableVehicles } = require('../utils/vehicleConflicts');
 
 // Simple in-memory cache
 let activeCasesCache = { data: null, time: 0 };
@@ -33,12 +34,16 @@ router.get('/', async (req, res) => {
 
     let qb = supabase
       .from('cases')
-      .select('id,case_number,deceased_name,status,funeral_date,funeral_time,venue_name,venue_address,policy_number,requires_grocery', { count: 'exact' })
+      .select('id,case_number,deceased_name,status,funeral_date,funeral_time,venue_name,venue_address,burial_place,policy_number,requires_grocery', { count: 'exact' })
       .gte('funeral_date', minDate)
       .lte('funeral_date', maxDate)
       .order('funeral_date', { ascending: true });
 
-    qb = qb.in('status', statusFilter ? [statusFilter] : activeStatuses);
+    if (statusFilter && statusFilter.toLowerCase() !== 'all') {
+      qb = qb.in('status', [statusFilter]);
+    } else {
+      qb = qb.in('status', activeStatuses);
+    }
     if (search) {
       const term = `%${search}%`;
       qb = qb.or(`deceased_name.ilike.${term},case_number.ilike.${term},policy_number.ilike.${term}`);
@@ -124,58 +129,13 @@ router.get('/', async (req, res) => {
     console.log(`Active cases: ${activeCases.length}`);
 
     const casesWithRoster = activeCases.map(caseItem => {
-      // Get vehicles available for this specific case (no time conflicts)
-      const availableForCase = vehicles.filter(vehicle => {
-        // Get assignments for this vehicle
-        const vehicleAssignments = allVehicleAssignments.filter(a => a.vehicle_id === vehicle.id);
-        
-        // Check for conflicts
-        if (!caseItem.funeral_date) {
-          return true; // No date = can't check conflicts, allow all
-        }
-
-        // Check same-day assignments
-        const sameDayAssignments = vehicleAssignments.filter(a => 
-          a.funeral_date === caseItem.funeral_date && 
-          a.case_id !== caseItem.id &&
-          a.status !== 'completed'
-        );
-
-        if (sameDayAssignments.length === 0) {
-          return true; // No same-day assignments
-        }
-
-        if (!caseItem.funeral_time) {
-          // Case has no time - check if any assignment has a time
-          const hasTimedAssignment = sameDayAssignments.some(a => a.funeral_time);
-          return !hasTimedAssignment; // Available only if no timed assignments
-        }
-
-        // Check time overlap (2 hour buffer)
-        const BUFFER_HOURS = 2;
-        const currentTime = new Date(`${caseItem.funeral_date}T${caseItem.funeral_time}`);
-        const currentEndTime = new Date(currentTime.getTime() + (BUFFER_HOURS * 60 * 60 * 1000));
-
-        for (const assignment of sameDayAssignments) {
-          if (!assignment.funeral_time) {
-            return false; // Assignment has no time, assume conflict
-          }
-
-          const assignmentTime = new Date(`${assignment.funeral_date}T${assignment.funeral_time}`);
-          const assignmentEndTime = new Date(assignmentTime.getTime() + (BUFFER_HOURS * 60 * 60 * 1000));
-
-          // Check if times overlap
-          if (
-            (currentTime >= assignmentTime && currentTime < assignmentEndTime) ||
-            (currentEndTime > assignmentTime && currentEndTime <= assignmentEndTime) ||
-            (currentTime <= assignmentTime && currentEndTime >= assignmentEndTime)
-          ) {
-            return false; // Conflict found
-          }
-        }
-
-        return true; // No conflicts
-      });
+      const availableForCase = getAvailableVehicles(
+        vehicles,
+        allVehicleAssignments,
+        caseItem.funeral_date,
+        caseItem.funeral_time,
+        caseItem.id
+      );
 
       // Warning flags
       const today = new Date();

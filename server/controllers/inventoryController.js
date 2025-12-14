@@ -182,7 +182,20 @@ exports.updateStockQuantity = async (req, res) => {
             return res.status(404).json({ success: false, error: 'Item not found' });
         }
 
+        const previous = itemResult.rows[0].stock_quantity;
         await query('UPDATE inventory SET stock_quantity=$1, updated_at=NOW() WHERE id=$2', [stock_quantity, id]);
+
+        try {
+            const change = (parseInt(stock_quantity, 10) || 0) - (parseInt(previous, 10) || 0);
+            await query(
+                `INSERT INTO stock_movements 
+                 (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+                [id, null, 'adjustment', change, previous, stock_quantity, 'Manual update', (req.user?.email) || 'system']
+            );
+        } catch (movementErr) {
+            console.warn('⚠️  Could not log stock movement (updateStockQuantity):', movementErr.message);
+        }
 
         const is_low_stock = stock_quantity <= itemResult.rows[0].low_stock_threshold;
         try { await maybeNotifyLowStock(1); } catch (_) {}
@@ -196,7 +209,7 @@ exports.updateStockQuantity = async (req, res) => {
 // --- ADJUST STOCK ---
 exports.adjustStock = async (req, res) => {
     const { id } = req.params;
-    const { quantity_change, reason, case_id, recorded_by } = req.body;
+    const { quantity_change, reason, case_id, recorded_by, movement_type } = req.body;
 
     try {
         const itemResult = await query('SELECT stock_quantity, low_stock_threshold FROM inventory WHERE id=$1', [id]);
@@ -210,11 +223,12 @@ exports.adjustStock = async (req, res) => {
         await query('UPDATE inventory SET stock_quantity=$1, updated_at=NOW() WHERE id=$2', [new_quantity, id]);
 
         try {
+            const mType = (String(movement_type || '').toLowerCase() === 'sale') ? 'sale' : 'adjustment';
             await query(
                 `INSERT INTO stock_movements 
          (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-                [id, case_id || null, 'adjustment', quantity_change, previous_quantity, new_quantity, reason || 'Manual adjustment', recorded_by || 'system']
+                [id, case_id || null, mType, quantity_change, previous_quantity, new_quantity, reason || 'Manual adjustment', recorded_by || 'system']
             );
         } catch (movementErr) {
             console.warn('⚠️  Could not log stock movement:', movementErr.message);
@@ -226,6 +240,607 @@ exports.adjustStock = async (req, res) => {
     } catch (err) {
         console.error('❌ Error adjusting stock:', err);
         res.status(500).json({ success: false, error: 'Failed to adjust stock', details: err.message });
+    }
+};
+
+exports.getStockMovements = async (req, res) => {
+    try {
+        const { category = 'coffin', from, to, limit = 500 } = req.query;
+        let hasCaseId = true;
+        try {
+            const col = await query(`
+              SELECT EXISTS (
+                SELECT FROM information_schema.columns 
+                WHERE table_schema = 'public' 
+                  AND table_name = 'stock_movements' 
+                  AND column_name = 'case_id'
+              ) AS exists
+            `);
+            hasCaseId = !!(col.rows[0] && col.rows[0].exists);
+            if (!hasCaseId) {
+                try {
+                    await query(`ALTER TABLE stock_movements ADD COLUMN case_id INT REFERENCES cases(id)`);
+                    hasCaseId = true;
+                } catch (_) {}
+            }
+        } catch (_) {}
+        const params = [];
+        let where = 'WHERE 1=1';
+        if (category && category !== 'all') {
+            where += ' AND inv.category = $' + (params.push(category));
+        }
+        if (from) {
+            where += ' AND sm.created_at >= $' + (params.push(from));
+        }
+        if (to) {
+            where += ' AND sm.created_at <= $' + (params.push(to));
+        }
+        const sql = `
+            SELECT 
+              sm.id,
+              sm.inventory_id,
+              ${hasCaseId ? 'sm.case_id' : 'NULL AS case_id'},
+              sm.movement_type,
+              sm.quantity_change,
+              sm.previous_quantity,
+              sm.new_quantity,
+              sm.reason,
+              sm.recorded_by,
+              sm.created_at,
+              inv.name,
+              inv.model,
+              inv.color,
+              inv.location,
+              inv.category,
+              inv.sku,
+              inv.stock_quantity,
+              ${hasCaseId ? 'c.case_number' : 'NULL AS case_number'},
+              ${hasCaseId ? 'c.deceased_name' : 'NULL AS deceased_name'}
+            FROM stock_movements sm
+            JOIN inventory inv ON sm.inventory_id = inv.id
+            ${hasCaseId ? 'LEFT JOIN cases c ON sm.case_id = c.id' : ''}
+            ${where}
+            ORDER BY sm.created_at DESC
+            LIMIT ${Math.max(1, Math.min(parseInt(limit, 10) || 500, 2000))}
+        `;
+        const result = await query(sql, params);
+        res.json({ success: true, movements: result.rows || [] });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to fetch stock movements', details: err.message });
+    }
+};
+
+exports.getCoffinUsageByCase = async (req, res) => {
+    try {
+        let hasMovementsTable = true;
+        try {
+            const t = await query(`
+              SELECT EXISTS (
+                SELECT FROM pg_tables
+                WHERE schemaname = 'public' AND tablename = 'stock_movements'
+              ) AS exists
+            `);
+            hasMovementsTable = !!(t.rows[0] && t.rows[0].exists);
+            if (!hasMovementsTable) {
+                try {
+                    await query(`
+                      CREATE TABLE IF NOT EXISTS stock_movements (
+                        id SERIAL PRIMARY KEY,
+                        inventory_id INT NOT NULL REFERENCES inventory(id),
+                        case_id INT REFERENCES cases(id),
+                        movement_type TEXT NOT NULL,
+                        quantity_change INT NOT NULL,
+                        previous_quantity INT,
+                        new_quantity INT,
+                        reason TEXT,
+                        recorded_by TEXT,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                      )
+                    `);
+                    hasMovementsTable = true;
+                } catch (_) {}
+            }
+        } catch (_) {}
+
+        if (!hasMovementsTable) {
+            return res.json({ success: true, cases: [] });
+        }
+
+        let hasCaseId = true;
+        try {
+            const col = await query(`
+              SELECT EXISTS (
+                SELECT FROM information_schema.columns 
+                WHERE table_schema = 'public' 
+                  AND table_name = 'stock_movements' 
+                  AND column_name = 'case_id'
+              ) AS exists
+            `);
+            hasCaseId = !!(col.rows[0] && col.rows[0].exists);
+            if (!hasCaseId) {
+                try {
+                    await query(`ALTER TABLE stock_movements ADD COLUMN case_id INT REFERENCES cases(id)`);
+                    hasCaseId = true;
+                } catch (_) {}
+            }
+        } catch (_) {}
+
+        if (!hasCaseId) {
+            return res.json({ success: true, cases: [] });
+        }
+
+        const { from, to, limit = 200 } = req.query;
+        const params = [];
+        const dateWhere = [];
+        if (from) { params.push(from); dateWhere.push(`c.funeral_date >= $${params.length}`); }
+        if (to) { params.push(to); dateWhere.push(`c.funeral_date <= $${params.length}`); }
+        const sql = `
+            WITH movements AS (
+              SELECT 
+                sm.case_id, 
+                sm.inventory_id, 
+                SUM(ABS(CASE WHEN sm.quantity_change IS NOT NULL THEN sm.quantity_change ELSE 0 END)) AS qty_sum
+              FROM stock_movements sm
+              JOIN inventory inv2 ON inv2.id = sm.inventory_id
+              WHERE inv2.category = 'coffin'
+                AND sm.case_id IS NOT NULL
+                AND (
+                  sm.movement_type = 'sale' 
+                  OR (sm.movement_type = 'adjustment' AND sm.quantity_change < 0)
+                )
+              GROUP BY sm.case_id, sm.inventory_id
+            ),
+            inferred AS (
+              SELECT 
+                c.id AS case_id,
+                invMatch.id AS inventory_id,
+                1 AS qty_sum
+              FROM cases c
+              LEFT JOIN LATERAL (
+                SELECT inv2.id
+                FROM inventory inv2
+                WHERE inv2.category = 'coffin'
+                  AND (
+                    c.casket_type IS NOT NULL AND (
+                      UPPER(inv2.name) = UPPER(c.casket_type) OR UPPER(inv2.model) = UPPER(c.casket_type)
+                      OR UPPER(inv2.name) LIKE '%' || UPPER(c.casket_type) || '%'
+                      OR UPPER(c.casket_type) LIKE '%' || UPPER(inv2.name) || '%'
+                      OR UPPER(inv2.model) LIKE '%' || UPPER(c.casket_type) || '%'
+                      OR UPPER(c.casket_type) LIKE '%' || UPPER(inv2.model) || '%'
+                    )
+                  )
+                  AND (
+                    c.casket_colour IS NULL
+                    OR inv2.color IS NULL
+                    OR UPPER(inv2.color) = UPPER(c.casket_colour)
+                    OR UPPER(inv2.color) LIKE '%' || UPPER(c.casket_colour) || '%'
+                    OR UPPER(c.casket_colour) LIKE '%' || UPPER(inv2.color) || '%'
+                  )
+                ORDER BY inv2.stock_quantity DESC NULLS LAST
+                LIMIT 1
+              ) AS invMatch ON TRUE
+              WHERE invMatch.id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM movements m WHERE m.case_id = c.id)
+            ),
+            usage AS (
+              SELECT * FROM movements
+              UNION ALL
+              SELECT * FROM inferred
+            )
+            SELECT 
+              c.id AS case_id,
+              c.case_number,
+              c.deceased_name,
+              COALESCE(SUM(u.qty_sum),0) AS total_coffins,
+              COALESCE(json_agg(json_build_object('name', i.name, 'color', i.color, 'quantity', u.qty_sum)) FILTER (WHERE i.id IS NOT NULL), '[]'::json) AS items
+            FROM cases c
+            LEFT JOIN usage u ON u.case_id = c.id
+            LEFT JOIN inventory i ON i.id = u.inventory_id
+            ${dateWhere.length ? 'WHERE ' + dateWhere.join(' AND ') : ''}
+            GROUP BY c.id, c.case_number, c.deceased_name
+            ORDER BY c.funeral_date DESC NULLS LAST, c.created_at DESC
+            LIMIT ${Math.max(1, Math.min(parseInt(limit, 10) || 200, 1000))}
+        `;
+        const result = await query(sql, params);
+        res.json({ success: true, cases: result.rows || [] });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to summarize coffin usage by case', details: err.message });
+    }
+};
+
+module.exports.getCoffinUsageRaw = async (req, res) => {
+    try {
+        let hasMovementsTable = true;
+        try {
+            const t = await query(`
+              SELECT EXISTS (
+                SELECT FROM pg_tables
+                WHERE schemaname = 'public' AND tablename = 'stock_movements'
+              ) AS exists
+            `);
+            hasMovementsTable = !!(t.rows[0] && t.rows[0].exists);
+            if (!hasMovementsTable) {
+                try {
+                    await query(`
+                      CREATE TABLE IF NOT EXISTS stock_movements (
+                        id SERIAL PRIMARY KEY,
+                        inventory_id INT NOT NULL REFERENCES inventory(id),
+                        case_id INT REFERENCES cases(id),
+                        movement_type TEXT NOT NULL,
+                        quantity_change INT NOT NULL,
+                        previous_quantity INT,
+                        new_quantity INT,
+                        reason TEXT,
+                        recorded_by TEXT,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                      )
+                    `);
+                    hasMovementsTable = true;
+                } catch (_) {}
+            }
+        } catch (_) {}
+
+        if (!hasMovementsTable) {
+            return res.json({ success: true, items: [] });
+        }
+
+        let hasCaseId = true;
+        try {
+            const col = await query(`
+              SELECT EXISTS (
+                SELECT FROM information_schema.columns 
+                WHERE table_schema = 'public' 
+                  AND table_name = 'stock_movements' 
+                  AND column_name = 'case_id'
+              ) AS exists
+            `);
+            hasCaseId = !!(col.rows[0] && col.rows[0].exists);
+            if (!hasCaseId) {
+                try {
+                    await query(`ALTER TABLE stock_movements ADD COLUMN case_id INT REFERENCES cases(id)`);
+                    hasCaseId = true;
+                } catch (_) {}
+            }
+        } catch (_) {}
+
+        const { from, to, case_id, case_number, limit = 500 } = req.query;
+        const params = [];
+        const whereMov = [];
+        const whereInf = [];
+
+        whereMov.push("inv.category = 'coffin'");
+        if (hasCaseId) whereMov.push('sm.case_id IS NOT NULL');
+        whereMov.push("(sm.movement_type = 'sale' OR (sm.movement_type = 'adjustment' AND sm.quantity_change < 0))");
+        if (from) { params.push(from); whereMov.push(`sm.created_at >= $${params.length}`); }
+        if (to) { params.push(to); whereMov.push(`sm.created_at <= $${params.length}`); }
+        if (case_id) { params.push(case_id); whereMov.push(`sm.case_id = $${params.length}`); }
+        if (case_number) { params.push(case_number); whereMov.push(`c.case_number = $${params.length}`); }
+
+        if (from) { whereInf.push(`c.funeral_date >= $${params.length - (!!case_number) - (!!case_id)}`); }
+        if (to) { whereInf.push(`c.funeral_date <= $${params.length - (!!case_number) - (!!case_id)}`); }
+        if (case_id) { whereInf.push(`c.id = ${case_id}`); }
+        if (case_number) { whereInf.push(`c.case_number = '${case_number}'`); }
+
+        const sql = `
+            WITH movements AS (
+              SELECT 
+                sm.case_id,
+                c.case_number,
+                c.deceased_name,
+                sm.inventory_id,
+                inv.name,
+                inv.model,
+                inv.color,
+                sm.movement_type,
+                sm.quantity_change,
+                sm.previous_quantity,
+                sm.new_quantity,
+                sm.reason,
+                sm.recorded_by,
+                sm.created_at,
+                'movement' AS source
+              FROM stock_movements sm
+              JOIN inventory inv ON inv.id = sm.inventory_id
+              ${hasCaseId ? 'LEFT JOIN cases c ON sm.case_id = c.id' : 'LEFT JOIN cases c ON FALSE'}
+              WHERE ${whereMov.join(' AND ')}
+            ),
+            inferred AS (
+              SELECT 
+                c.id AS case_id,
+                c.case_number,
+                c.deceased_name,
+                invMatch.id AS inventory_id,
+                invMatch.name,
+                invMatch.model,
+                invMatch.color,
+                'inferred' AS movement_type,
+                -1 AS quantity_change,
+                NULL AS previous_quantity,
+                NULL AS new_quantity,
+                'Inferred from case fields' AS reason,
+                NULL AS recorded_by,
+                c.updated_at AS created_at,
+                'inferred' AS source
+              FROM cases c
+              LEFT JOIN LATERAL (
+                SELECT inv2.id, inv2.name, inv2.model, inv2.color
+                FROM inventory inv2
+                WHERE inv2.category = 'coffin'
+                  AND (
+                    c.casket_type IS NOT NULL AND (
+                      UPPER(inv2.name) = UPPER(c.casket_type) OR UPPER(inv2.model) = UPPER(c.casket_type)
+                      OR UPPER(inv2.name) LIKE '%' || UPPER(c.casket_type) || '%'
+                      OR UPPER(c.casket_type) LIKE '%' || UPPER(inv2.name) || '%'
+                      OR UPPER(inv2.model) LIKE '%' || UPPER(c.casket_type) || '%'
+                      OR UPPER(c.casket_type) LIKE '%' || UPPER(inv2.model) || '%'
+                    )
+                  )
+                  AND (
+                    c.casket_colour IS NULL
+                    OR inv2.color IS NULL
+                    OR UPPER(inv2.color) = UPPER(c.casket_colour)
+                    OR UPPER(inv2.color) LIKE '%' || UPPER(c.casket_colour) || '%'
+                    OR UPPER(c.casket_colour) LIKE '%' || UPPER(inv2.color) || '%'
+                  )
+                ORDER BY inv2.stock_quantity DESC NULLS LAST
+                LIMIT 1
+              ) AS invMatch ON TRUE
+              WHERE invMatch.id IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM movements m WHERE m.case_id = c.id)
+                ${whereInf.length ? 'AND ' + whereInf.join(' AND ') : ''}
+            )
+            SELECT * FROM movements
+            UNION ALL
+            SELECT * FROM inferred
+            ORDER BY created_at DESC
+            LIMIT ${Math.max(1, Math.min(parseInt(limit, 10) || 500, 2000))}
+        `;
+        const result = await query(sql, params);
+        res.json({ success: true, items: result.rows || [] });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to fetch coffin usage raw data', details: err.message });
+    }
+};
+
+exports.getPublicCoffinUsageRaw = async (req, res) => {
+    try {
+        let hasMovementsTable = true;
+        try {
+            const t = await query(`
+              SELECT EXISTS (
+                SELECT FROM pg_tables
+                WHERE schemaname = 'public' AND tablename = 'stock_movements'
+              ) AS exists
+            `);
+            hasMovementsTable = !!(t.rows[0] && t.rows[0].exists);
+        } catch (_) {}
+
+        const { from, to, case_number, limit = 500 } = req.query;
+        const params = [];
+        const whereMov = ["inv.category = 'coffin'"];
+        if (hasMovementsTable) {
+            whereMov.push("(sm.movement_type = 'sale' OR (sm.movement_type = 'adjustment' AND sm.quantity_change < 0))");
+            if (from) { params.push(from); whereMov.push(`sm.created_at >= $${params.length}`); }
+            if (to) { params.push(to); whereMov.push(`sm.created_at <= $${params.length}`); }
+            if (case_number) { params.push(case_number); whereMov.push(`c.case_number = $${params.length}`); }
+        }
+
+        const whereInf = [];
+        if (from) { params.push(from); whereInf.push(`c.funeral_date >= $${params.length}`); }
+        if (to) { params.push(to); whereInf.push(`c.funeral_date <= $${params.length}`); }
+        if (case_number) { params.push(case_number); whereInf.push(`c.case_number = $${params.length}`); }
+
+        const sql = `
+            WITH movements AS (
+              ${hasMovementsTable ? `
+              SELECT 
+                c.case_number,
+                c.deceased_name,
+                inv.name,
+                inv.color,
+                ABS(sm.quantity_change) AS quantity,
+                sm.created_at,
+                'movement' AS source
+              FROM stock_movements sm
+              JOIN inventory inv ON inv.id = sm.inventory_id
+              LEFT JOIN cases c ON sm.case_id = c.id
+              WHERE ${whereMov.join(' AND ')}
+              ` : `
+              SELECT NULL::text AS case_number, NULL::text AS deceased_name, NULL::text AS name, NULL::text AS color, NULL::int AS quantity, NOW() AS created_at, 'movement' AS source
+              WHERE FALSE
+              `}
+            ),
+            inferred AS (
+              SELECT 
+                c.case_number,
+                c.deceased_name,
+                invMatch.name,
+                invMatch.color,
+                1 AS quantity,
+                c.updated_at AS created_at,
+                'inferred' AS source
+              FROM cases c
+              LEFT JOIN LATERAL (
+                SELECT inv2.name, inv2.color
+                FROM inventory inv2
+                WHERE inv2.category = 'coffin'
+                  AND (
+                    c.casket_type IS NOT NULL AND (
+                      UPPER(inv2.name) = UPPER(c.casket_type) OR UPPER(inv2.model) = UPPER(c.casket_type)
+                      OR UPPER(inv2.name) LIKE '%' || UPPER(c.casket_type) || '%'
+                      OR UPPER(c.casket_type) LIKE '%' || UPPER(inv2.name) || '%'
+                      OR UPPER(inv2.model) LIKE '%' || UPPER(c.casket_type) || '%'
+                      OR UPPER(c.casket_type) LIKE '%' || UPPER(inv2.model) || '%'
+                    )
+                  )
+                  AND (
+                    c.casket_colour IS NULL
+                    OR inv2.color IS NULL
+                    OR UPPER(inv2.color) = UPPER(c.casket_colour)
+                    OR UPPER(inv2.color) LIKE '%' || UPPER(c.casket_colour) || '%'
+                    OR UPPER(c.casket_colour) LIKE '%' || UPPER(inv2.color) || '%'
+                  )
+                ORDER BY inv2.stock_quantity DESC NULLS LAST
+                LIMIT 1
+              ) AS invMatch ON TRUE
+              WHERE invMatch.name IS NOT NULL
+                AND NOT EXISTS (
+                  SELECT 1 FROM stock_movements sm
+                  WHERE sm.case_id = c.id
+                )
+                ${whereInf.length ? 'AND ' + whereInf.join(' AND ') : ''}
+            )
+            SELECT * FROM movements
+            UNION ALL
+            SELECT * FROM inferred
+            ORDER BY created_at DESC
+            LIMIT ${Math.max(1, Math.min(parseInt(limit, 10) || 500, 2000))}
+        `;
+        const result = await query(sql, params);
+        const rows = (result.rows || []).map(r => ({
+            case_number: r.case_number || null,
+            deceased_name: r.deceased_name || null,
+            item_name: r.name || null,
+            color: r.color || null,
+            quantity: r.quantity || 0,
+            source: r.source,
+            created_at: r.created_at
+        }));
+        res.json({ success: true, items: rows });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to fetch public coffin usage data', details: err.message });
+    }
+};
+
+exports.backfillCoffinMovementsToCases = async (req, res) => {
+    try {
+        let hasMovementsTable = true;
+        try {
+            const t = await query(`
+              SELECT EXISTS (
+                SELECT FROM pg_tables
+                WHERE schemaname = 'public' AND tablename = 'stock_movements'
+              ) AS exists
+            `);
+            hasMovementsTable = !!(t.rows[0] && t.rows[0].exists);
+            if (!hasMovementsTable) {
+                try {
+                    await query(`
+                      CREATE TABLE IF NOT EXISTS stock_movements (
+                        id SERIAL PRIMARY KEY,
+                        inventory_id INT NOT NULL REFERENCES inventory(id),
+                        case_id INT REFERENCES cases(id),
+                        movement_type TEXT NOT NULL,
+                        quantity_change INT NOT NULL,
+                        previous_quantity INT,
+                        new_quantity INT,
+                        reason TEXT,
+                        recorded_by TEXT,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                      )
+                    `);
+                    hasMovementsTable = true;
+                } catch (_) {}
+            }
+        } catch (_) {}
+
+        if (!hasMovementsTable) {
+            return res.json({ success: false, error: 'Missing stock_movements table' });
+        }
+
+        let hasCaseId = true;
+        try {
+            const col = await query(`
+              SELECT EXISTS (
+                SELECT FROM information_schema.columns 
+                WHERE table_schema = 'public' 
+                  AND table_name = 'stock_movements' 
+                  AND column_name = 'case_id'
+              ) AS exists
+            `);
+            hasCaseId = !!(col.rows[0] && col.rows[0].exists);
+            if (!hasCaseId) {
+                try {
+                    await query(`ALTER TABLE stock_movements ADD COLUMN case_id INT REFERENCES cases(id)`);
+                    hasCaseId = true;
+                } catch (_) {}
+            }
+        } catch (_) {}
+
+        const { limit = 500, dry_run } = req.query;
+        const movs = await query(`
+          SELECT 
+            sm.id,
+            sm.inventory_id,
+            sm.created_at,
+            sm.movement_type,
+            sm.quantity_change,
+            inv.name,
+            inv.model,
+            inv.color
+          FROM stock_movements sm
+          JOIN inventory inv ON inv.id = sm.inventory_id
+          WHERE inv.category = 'coffin'
+            AND ${hasCaseId ? 'sm.case_id IS NULL' : '1=1'}
+            AND (
+              sm.movement_type = 'sale' OR (sm.movement_type = 'adjustment' AND sm.quantity_change < 0)
+            )
+          ORDER BY sm.created_at DESC
+          LIMIT ${Math.max(1, Math.min(parseInt(limit, 10) || 500, 2000))}
+        `);
+
+        const updated = [];
+        const unmatched = [];
+
+        for (const m of (movs.rows || [])) {
+            const params = [m.name || '', m.model || '', m.color || null, m.created_at];
+            const cands = await query(`
+              SELECT 
+                c.id,
+                c.case_number,
+                c.deceased_name,
+                c.casket_type,
+                c.casket_colour,
+                c.funeral_date,
+                (
+                  CASE WHEN $1 <> '' AND c.casket_type IS NOT NULL AND (UPPER($1) = UPPER(c.casket_type) OR UPPER($2) = UPPER(c.casket_type)) THEN 70
+                       WHEN $1 <> '' AND c.casket_type IS NOT NULL AND (
+                         UPPER($1) LIKE '%' || UPPER(c.casket_type) || '%' OR UPPER(c.casket_type) LIKE '%' || UPPER($1) || '%'
+                         OR UPPER($2) LIKE '%' || UPPER(c.casket_type) || '%' OR UPPER(c.casket_type) LIKE '%' || UPPER($2) || '%'
+                       ) THEN 40
+                       ELSE 0 END
+                )
+                + (
+                  CASE WHEN $3 IS NULL OR c.casket_colour IS NULL THEN 0
+                       WHEN UPPER($3) = UPPER(c.casket_colour) THEN 30
+                       WHEN UPPER($3) LIKE '%' || UPPER(c.casket_colour) || '%' OR UPPER(c.casket_colour) LIKE '%' || UPPER($3) || '%' THEN 10
+                       ELSE 0 END
+                )
+                + (
+                  CASE WHEN c.funeral_date IS NOT NULL THEN GREATEST(0, 30 - ABS(CAST(DATE_PART('day', c.funeral_date::timestamp - $4)::int AS int))) ELSE 0 END
+                ) AS score
+              FROM cases c
+              WHERE c.casket_type IS NOT NULL OR c.casket_colour IS NOT NULL
+              ORDER BY score DESC, c.updated_at DESC NULLS LAST
+              LIMIT 3
+            `, params);
+
+            const best = (cands.rows || [])[0];
+            if (best && best.score >= 60) {
+                if (String(dry_run).toLowerCase() === 'true') {
+                    updated.push({ movement_id: m.id, case_id: best.id, score: best.score, dry_run: true });
+                } else {
+                    await query('UPDATE stock_movements SET case_id=$1 WHERE id=$2', [best.id, m.id]);
+                    updated.push({ movement_id: m.id, case_id: best.id, score: best.score });
+                }
+            } else {
+                unmatched.push({ movement_id: m.id, name: m.name, model: m.model, color: m.color, created_at: m.created_at, candidates: cands.rows || [] });
+            }
+        }
+
+        res.json({ success: true, processed: (movs.rows || []).length, updated_count: updated.length, updated, unmatched_count: unmatched.length, unmatched });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to backfill coffin movements', details: err.message });
     }
 };
 
@@ -541,7 +1156,7 @@ exports.updateInventoryItem = async (req, res) => {
         if (existing.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Inventory item not found' });
         }
-
+        const previousQty = existing.rows[0].stock_quantity;
         const result = await query(
             `UPDATE inventory SET
                 name = COALESCE($1, name),
@@ -558,6 +1173,23 @@ exports.updateInventoryItem = async (req, res) => {
              RETURNING *`,
             [name, category, sku, stock_quantity, unit_price, low_stock_threshold, location, notes, supplier_id, id]
         );
+
+        try {
+            if (stock_quantity !== undefined) {
+                const newQty = result.rows[0].stock_quantity;
+                const change = (parseInt(newQty, 10) || 0) - (parseInt(previousQty, 10) || 0);
+                if (change !== 0) {
+                    await query(
+                        `INSERT INTO stock_movements 
+                         (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
+                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+                        [id, null, 'adjustment', change, previousQty, newQty, 'Edit item', (req.user?.email) || 'system']
+                    );
+                }
+            }
+        } catch (movementErr) {
+            console.warn('⚠️  Could not log stock movement (updateInventoryItem):', movementErr.message);
+        }
 
         console.log(`✅ Updated inventory item ID ${id}`);
         res.json({ success: true, item: result.rows[0] });

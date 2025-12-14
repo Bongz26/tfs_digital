@@ -8,6 +8,7 @@ const bodyParser = require('body-parser');
 const { createClient } = require('@supabase/supabase-js');
 
 const inventoryRoutes = require('./routes/inventory');
+const inventoryController = require('./controllers/inventoryController');
 const casesRoutes = require('./routes/cases');
 const purchaseOrdersRouter = require('./routes/purchaseOrders');
 const dashboardRoutes = require('./routes/dashboard');
@@ -54,6 +55,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/inventory', requireAuth, inventoryRoutes);
+app.get('/api/public/coffin-usage-raw', inventoryController.getPublicCoffinUsageRaw);
 app.use('/api/cases', requireAuth, casesRoutes);
 app.use('/api/purchase-orders', requireAuth, purchaseOrdersRouter);
 app.use('/api/dashboard', requireAuth, dashboardRoutes);
@@ -83,13 +85,12 @@ if (fs.existsSync(clientBuildPath)) {
 // If client build is not present (e.g., backend-only deploy), redirect known app routes to frontend origin
 else {
   const frontendOrigin = process.env.FRONTEND_URL || 'https://tfs-digital.onrender.com';
-  // Redirect all non-API routes to the frontend origin
+  // Redirect all non-API routes to the frontend root to ensure SPA loads
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) {
       return next();
     }
-    const to = `${frontendOrigin}${req.originalUrl}`;
-    res.redirect(to);
+    res.redirect(`${frontendOrigin}/`);
   });
 }
 
@@ -99,7 +100,7 @@ app.use((req, res) => {
 });
 
 // Start server
-const port = process.env.PORT || 5000;
+const port = 5001;
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
   console.log(`📍 API endpoints: http://localhost:${port}/api`);
