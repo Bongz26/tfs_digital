@@ -10,8 +10,17 @@ router.get('/search', casesController.searchCases);
 // GET all cases
 router.get('/', casesController.getAllCases);
 
+// GET duplicate cases
+router.get('/duplicates', casesController.getDuplicateCases);
+
 // POST new case
 router.post('/', casesController.createCase);
+
+// POST merge duplicate cases
+router.post('/merge', casesController.mergeCases);
+
+// POST auto-merge duplicate cases by completeness
+router.post('/merge/auto', casesController.autoMergeDuplicates);
 
 // POST assign vehicle to case (creates roster entry)
 router.post('/assign/:caseId', casesController.assignVehicle);

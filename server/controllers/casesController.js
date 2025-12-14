@@ -285,6 +285,55 @@ exports.createCase = async (req, res) => {
 
         console.log('🔍 [POST /api/cases] Attempting to insert case with case_number:', finalCaseNumber);
 
+        try {
+            const idKey = String(deceased_id || '').trim();
+            const polKey = String(policy_number || '').trim();
+            const nameKey = String(deceased_name || '').trim();
+            const contactKey = String(nok_contact || '').trim();
+
+            let dup = null;
+            if (idKey) {
+                const r = await query(
+                    `SELECT id, case_number, status, created_at FROM cases 
+                     WHERE deceased_id = $1 AND status != 'cancelled' 
+                     ORDER BY created_at DESC LIMIT 1`,
+                    [idKey]
+                );
+                dup = r.rows[0] || null;
+            }
+            if (!dup && polKey) {
+                const r = await query(
+                    `SELECT id, case_number, status, created_at FROM cases 
+                     WHERE UPPER(REGEXP_REPLACE(COALESCE(policy_number,''),'\\s+','', 'g')) = UPPER(REGEXP_REPLACE($1,'\\s+','', 'g'))
+                       AND status != 'cancelled'
+                     ORDER BY created_at DESC LIMIT 1`,
+                    [polKey]
+                );
+                dup = r.rows[0] || null;
+            }
+            if (!dup && nameKey && contactKey) {
+                const r = await query(
+                    `SELECT id, case_number, status, created_at FROM cases 
+                     WHERE LOWER(deceased_name) = LOWER($1) AND nok_contact = $2
+                       AND status != 'cancelled'
+                       AND created_at >= NOW() - INTERVAL '60 days'
+                     ORDER BY created_at DESC LIMIT 1`,
+                    [nameKey, contactKey]
+                );
+                dup = r.rows[0] || null;
+            }
+            if (dup) {
+                return res.status(409).json({
+                    success: false,
+                    error: 'Duplicate case detected',
+                    details: 'A case with the same identifiers already exists',
+                    existing_case: dup
+                });
+            }
+        } catch (e) {
+            console.warn('⚠️ Duplicate-prevention check failed, proceeding with insert:', e.message);
+        }
+
         const finalFuneralDate = service_date || funeral_date; // align with frontend service_date
         const finalFuneralTime = service_time || funeral_time;
 
@@ -753,6 +802,61 @@ exports.updateCaseStatus = async (req, res) => {
         console.log(`✅ Case ${id} status changed: ${oldStatus} → ${status}`);
 
         try {
+            if (oldStatus === 'intake' && status !== 'intake') {
+                const already = await query(
+                    "SELECT 1 FROM stock_movements WHERE case_id = $1 AND movement_type = 'sale' LIMIT 1",
+                    [id]
+                );
+                if (already.rows.length === 0) {
+                    const nameStr = String(result.rows[0]?.casket_type || '').trim();
+                    const colorStr = String(result.rows[0]?.casket_colour || '').trim();
+                    if (nameStr) {
+                        let inv;
+                        if (colorStr) {
+                            inv = await query(
+                                "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) ORDER BY stock_quantity DESC LIMIT 1",
+                                [nameStr, colorStr]
+                            );
+                        } else {
+                            inv = await query(
+                                "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) ORDER BY stock_quantity DESC LIMIT 1",
+                                [nameStr]
+                            );
+                        }
+                        if (inv.rows.length === 0) {
+                            let fallback;
+                            if (colorStr) {
+                                fallback = await query(
+                                    "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) ORDER BY stock_quantity DESC LIMIT 1",
+                                    [nameStr, colorStr]
+                                );
+                            } else {
+                                fallback = await query(
+                                    "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) ORDER BY stock_quantity DESC LIMIT 1",
+                                    [nameStr]
+                                );
+                            }
+                            inv = fallback;
+                        }
+                        if (inv.rows.length) {
+                            const item = inv.rows[0];
+                            const previous = item.stock_quantity || 0;
+                            const nextQty = previous > 0 ? previous - 1 : 0;
+                            await query('UPDATE inventory SET stock_quantity=$1, updated_at=NOW() WHERE id=$2', [nextQty, item.id]);
+                            try {
+                                await query(
+                                    `INSERT INTO stock_movements (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
+                                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+                                    [item.id, id, 'sale', -1, previous, nextQty, 'Auto-logged on intake exit', (req.user?.email) || 'system']
+                                );
+                            } catch (_) {}
+                        }
+                    }
+                }
+            }
+        } catch (_) {}
+
+        try {
             await query(
                 `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
@@ -909,6 +1013,232 @@ exports.updateCaseVenue = async (req, res) => {
         res.json({ success: true, case: result.rows[0] });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
+    }
+};
+
+exports.getDuplicateCases = async (req, res) => {
+    try {
+        const dupByDeceasedId = await query(`
+            SELECT deceased_id AS key, ARRAY_AGG(id ORDER BY created_at DESC) AS case_ids
+            FROM cases
+            WHERE deceased_id IS NOT NULL AND deceased_id <> ''
+            GROUP BY deceased_id
+            HAVING COUNT(*) > 1
+        `);
+        const dupByPolicy = await query(`
+            SELECT UPPER(REGEXP_REPLACE(COALESCE(policy_number,''),'\\s+','', 'g')) AS key, ARRAY_AGG(id ORDER BY created_at DESC) AS case_ids
+            FROM cases
+            WHERE COALESCE(policy_number,'') <> ''
+            GROUP BY UPPER(REGEXP_REPLACE(COALESCE(policy_number,''),'\\s+','', 'g'))
+            HAVING COUNT(*) > 1
+        `);
+        const dupByNameContact = await query(`
+            SELECT LOWER(deceased_name) AS name_key, nok_contact AS contact_key, ARRAY_AGG(id ORDER BY created_at DESC) AS case_ids
+            FROM cases
+            WHERE deceased_name IS NOT NULL AND nok_contact IS NOT NULL AND nok_contact <> ''
+            GROUP BY LOWER(deceased_name), nok_contact
+            HAVING COUNT(*) > 1
+        `);
+
+        const groups = [];
+        for (const row of dupByDeceasedId.rows || []) {
+            const ids = row.case_ids || [];
+            const cases = await query('SELECT * FROM cases WHERE id = ANY($1) ORDER BY created_at DESC', [ids]);
+            groups.push({ type: 'deceased_id', key: row.key, cases: cases.rows || [] });
+        }
+        for (const row of dupByPolicy.rows || []) {
+            const ids = row.case_ids || [];
+            const cases = await query('SELECT * FROM cases WHERE id = ANY($1) ORDER BY created_at DESC', [ids]);
+            groups.push({ type: 'policy_number', key: row.key, cases: cases.rows || [] });
+        }
+        for (const row of dupByNameContact.rows || []) {
+            const ids = row.case_ids || [];
+            const cases = await query('SELECT * FROM cases WHERE id = ANY($1) ORDER BY created_at DESC', [ids]);
+            groups.push({ type: 'name_contact', key: `${row.name_key}|${row.contact_key}`, cases: cases.rows || [] });
+        }
+
+        res.json({ success: true, groups });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to fetch duplicate cases', details: err.message });
+    }
+};
+
+exports.mergeCases = async (req, res) => {
+    const { survivor_id, duplicate_ids } = req.body || {};
+    if (!survivor_id || !Array.isArray(duplicate_ids) || duplicate_ids.length === 0) {
+        return res.status(400).json({ success: false, error: 'survivor_id and duplicate_ids are required' });
+    }
+    const dedupIds = Array.from(new Set(duplicate_ids.map(id => parseInt(id, 10)).filter(id => Number.isInteger(id)))).filter(id => id !== parseInt(survivor_id, 10));
+    if (dedupIds.length === 0) {
+        return res.status(400).json({ success: false, error: 'No valid duplicate ids provided' });
+    }
+
+    const client = await getClient();
+    try {
+        await client.query('BEGIN');
+
+        const survivor = await client.query('SELECT * FROM cases WHERE id = $1', [survivor_id]);
+        if (survivor.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ success: false, error: 'Survivor case not found' });
+        }
+
+        const dups = await client.query('SELECT id FROM cases WHERE id = ANY($1)', [dedupIds]);
+        if (dups.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ success: false, error: 'Duplicate cases not found' });
+        }
+
+        await client.query('UPDATE roster SET case_id = $1 WHERE case_id = ANY($2)', [survivor_id, dedupIds]);
+        await client.query('UPDATE stock_movements SET case_id = $1 WHERE case_id = ANY($2)', [survivor_id, dedupIds]);
+        await client.query("UPDATE audit_log SET resource_id = $1 WHERE resource_type = 'case' AND resource_id = ANY($2)", [survivor_id, dedupIds]);
+
+        await client.query('UPDATE cases SET status = $1, updated_at = NOW() WHERE id = ANY($2)', ['archived', dedupIds]);
+
+        try {
+            await client.query(
+                `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                [
+                    req.user?.id || null,
+                    req.user?.email || null,
+                    'merge_cases',
+                    'case',
+                    survivor_id,
+                    JSON.stringify({ merged_from: dedupIds }),
+                    JSON.stringify({ survivor_id }),
+                    req.ip,
+                    req.headers['user-agent']
+                ]
+            );
+        } catch (_) {}
+
+        await client.query('COMMIT');
+        res.json({ success: true, message: 'Cases merged', survivor_id, archived_ids: dedupIds });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ success: false, error: 'Failed to merge cases', details: err.message });
+    } finally {
+        client.release();
+    }
+};
+
+exports.autoMergeDuplicates = async (req, res) => {
+    try {
+        const dupByDeceasedId = await query(`
+            SELECT deceased_id AS key, ARRAY_AGG(id ORDER BY created_at DESC) AS case_ids
+            FROM cases
+            WHERE deceased_id IS NOT NULL AND deceased_id <> ''
+            GROUP BY deceased_id
+            HAVING COUNT(*) > 1
+        `);
+        const dupByPolicy = await query(`
+            SELECT UPPER(REGEXP_REPLACE(COALESCE(policy_number,''),'\\s+','', 'g')) AS key, ARRAY_AGG(id ORDER BY created_at DESC) AS case_ids
+            FROM cases
+            WHERE COALESCE(policy_number,'') <> ''
+            GROUP BY UPPER(REGEXP_REPLACE(COALESCE(policy_number,''),'\\s+','', 'g'))
+            HAVING COUNT(*) > 1
+        `);
+        const dupByNameContact = await query(`
+            SELECT LOWER(deceased_name) AS name_key, nok_contact AS contact_key, ARRAY_AGG(id ORDER BY created_at DESC) AS case_ids
+            FROM cases
+            WHERE deceased_name IS NOT NULL AND nok_contact IS NOT NULL AND nok_contact <> ''
+            GROUP BY LOWER(deceased_name), nok_contact
+            HAVING COUNT(*) > 1
+        `);
+
+        const groups = [];
+        const all = [];
+        for (const row of dupByDeceasedId.rows || []) { all.push({ type: 'deceased_id', key: row.key, ids: row.case_ids || [] }); }
+        for (const row of dupByPolicy.rows || []) { all.push({ type: 'policy_number', key: row.key, ids: row.case_ids || [] }); }
+        for (const row of dupByNameContact.rows || []) { all.push({ type: 'name_contact', key: `${row.name_key}|${row.contact_key}`, ids: row.case_ids || [] }); }
+
+        const client = await getClient();
+        try {
+            for (const g of all) {
+                const resCases = await client.query('SELECT * FROM cases WHERE id = ANY($1) ORDER BY created_at DESC', [g.ids]);
+                const rows = resCases.rows || [];
+                if (rows.length < 2) continue;
+
+                const present = v => {
+                    if (v == null) return false;
+                    if (typeof v === 'string') return String(v).trim() !== '';
+                    return true;
+                };
+                const score = c => {
+                    let s = 0;
+                    const base = [
+                        c.deceased_id, c.case_number, c.policy_number, c.deceased_name,
+                        c.nok_name, c.nok_contact, c.plan_category, c.plan_name, c.plan_members, c.plan_age_bracket,
+                        c.funeral_date, c.service_date, c.service_time, c.church_date, c.church_time,
+                        c.cleansing_date, c.cleansing_time, c.venue_name, c.venue_address, c.venue_lat, c.venue_lng,
+                        c.service_type, c.total_price, c.casket_type, c.casket_colour, c.delivery_date, c.delivery_time,
+                        c.intake_day, c.programs, c.top_up_amount, c.airtime, c.airtime_network, c.airtime_number,
+                        c.cover_amount, c.cashback_amount, c.amount_to_bank, c.legacy_plan_name, c.benefit_mode, c.burial_place
+                    ];
+                    for (const f of base) { if (present(f)) s += 1; }
+                    if (present(c.funeral_time)) s += 2;
+                    if (present(c.burial_place)) s += 2;
+                    if (present(c.delivery_date)) s += 2;
+                    if (present(c.delivery_time)) s += 2;
+                    if (present(c.venue_name)) s += 2;
+                    if (present(c.casket_type)) s += 2;
+                    return s;
+                };
+
+                const notCancelled = rows.filter(r => String(r.status || '').toLowerCase() !== 'cancelled');
+                const pool = notCancelled.length ? notCancelled : rows;
+                let survivor = pool[0];
+                let best = score(survivor);
+                for (const r of pool.slice(1)) {
+                    const sc = score(r);
+                    const survCreated = survivor.created_at ? new Date(survivor.created_at) : new Date(0);
+                    const rCreated = r.created_at ? new Date(r.created_at) : new Date(0);
+                    if (sc > best || (sc === best && rCreated > survCreated)) {
+                        survivor = r; best = sc;
+                    }
+                }
+
+                const survivor_id = survivor.id;
+                const duplicate_ids = rows.map(r => r.id).filter(id => id !== survivor_id);
+                if (duplicate_ids.length === 0) continue;
+
+                await client.query('BEGIN');
+                await client.query('UPDATE roster SET case_id = $1 WHERE case_id = ANY($2)', [survivor_id, duplicate_ids]);
+                await client.query('UPDATE stock_movements SET case_id = $1 WHERE case_id = ANY($2)', [survivor_id, duplicate_ids]);
+                await client.query("UPDATE audit_log SET resource_id = $1 WHERE resource_type = 'case' AND resource_id = ANY($2)", [survivor_id, duplicate_ids]);
+                await client.query('UPDATE cases SET status = $1, updated_at = NOW() WHERE id = ANY($2)', ['archived', duplicate_ids]);
+                try {
+                    await client.query(
+                        `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                        [
+                            req.user?.id || null,
+                            req.user?.email || null,
+                            'auto_merge_cases',
+                            'case',
+                            survivor_id,
+                            JSON.stringify({ merged_from: duplicate_ids, group_type: g.type, group_key: g.key }),
+                            JSON.stringify({ survivor_id }),
+                            req.ip,
+                            req.headers['user-agent']
+                        ]
+                    );
+                } catch (_) {}
+                await client.query('COMMIT');
+
+                groups.push({ type: g.type, key: g.key, survivor_id, archived_ids: duplicate_ids });
+            }
+
+            res.json({ success: true, merged: groups });
+        } catch (err) {
+            try { await client.query('ROLLBACK'); } catch (_) {}
+            res.status(500).json({ success: false, error: 'Failed auto-merge', details: err.message });
+        } finally {
+            client.release();
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to prepare auto-merge', details: err.message });
     }
 };
 
