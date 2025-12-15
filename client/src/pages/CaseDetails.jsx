@@ -31,12 +31,12 @@ export default function CaseDetails() {
           ]);
           setDrivers(drv);
           setCaseRoster((rost || []).filter(r => String(r.case_id) === String(id)));
-        } catch (_) {}
+        } catch (_) { }
         try {
           const res = await fetch(`${API_HOST}/api/vehicles`);
           const json = await res.json();
           setVehicles(json.vehicles || []);
-        } catch (_) {}
+        } catch (_) { }
       } catch (err) {
         console.error('Error fetching case:', err);
         setError('Failed to load case details.');
@@ -97,8 +97,8 @@ export default function CaseDetails() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div>
           <h2 className="font-semibold text-lg mb-2">Funeral Info</h2>
-          <p><span className="font-semibold">Date:</span> {caseData.funeral_date}</p>
-          <p><span className="font-semibold">Time:</span> {caseData.funeral_time}</p>
+          <p><span className="font-semibold">Date:</span> {caseData.funeral_date ? new Date(caseData.funeral_date).toLocaleDateString() : 'Not set'}</p>
+          <p><span className="font-semibold">Time:</span> {caseData.funeral_time ? caseData.funeral_time.slice(0, 5) : 'Not set'}</p>
           <p><span className="font-semibold">Venue:</span> {caseData.venue_name}</p>
           <p><span className="font-semibold">Address:</span> {caseData.venue_address}</p>
         </div>

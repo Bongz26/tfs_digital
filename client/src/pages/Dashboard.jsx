@@ -181,7 +181,7 @@ export default function Dashboard() {
             <input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by ID, Policy or Case No"
+              placeholder="Search by Name, ID, Policy or Case No"
               className="border border-gray-300 rounded-lg px-3 py-2 w-64 focus:ring-2 focus:ring-red-600 focus:border-red-600"
             />
             <button

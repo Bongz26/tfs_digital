@@ -32,7 +32,7 @@ const generateStockReportPDF = (inventory) => {
   const lowStockCount = inventory.filter(i => i.is_low_stock).length;
   doc.text(`Low Stock Items: ${lowStockCount}`, 14, finalY + 16);
 
-  doc.save(`Stock_Report_${new Date().toISOString().slice(0,10)}.pdf`);
+  doc.save(`Stock_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
 };
 
 
@@ -65,6 +65,7 @@ export default function StockManagement() {
   const [usageFrom, setUsageFrom] = useState('');
   const [usageTo, setUsageTo] = useState('');
   const [usageTotals, setUsageTotals] = useState({ grand_total: 0, case_count: 0 });
+  const [includeArchived, setIncludeArchived] = useState(false);
 
   const API_URL = API_HOST;
 
@@ -73,7 +74,7 @@ export default function StockManagement() {
     try {
       setLoading(true);
       console.log('Fetching inventory, category:', category);
-      const url = category === 'all' 
+      const url = category === 'all'
         ? `${API_URL}/api/inventory`
         : `${API_URL}/api/inventory?category=${category}`;
       const token = getAccessToken();
@@ -83,7 +84,7 @@ export default function StockManagement() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       console.log('Inventory response: ', data);
-  
+
       if (data.success) {
         const withLowStock = data.inventory.map(item => ({
           ...item,
@@ -129,6 +130,7 @@ export default function StockManagement() {
       const params = new URLSearchParams();
       if (usageFrom) params.append('from', usageFrom);
       if (usageTo) params.append('to', usageTo);
+      if (includeArchived) params.append('includeArchived', 'true');
       const url = params.toString() ? `${API_URL}/api/inventory/coffin-usage-by-case?${params.toString()}` : `${API_URL}/api/inventory/coffin-usage-by-case`;
       const response = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
@@ -149,7 +151,11 @@ export default function StockManagement() {
     try {
       const token = getAccessToken();
       let caseId = null;
-      const caseNumber = prompt(`Link to case number (optional) for "${item.name}" usage:`);
+      const caseNumber = prompt(`Link to case number (optional) for "${item.name}" usage:\n(Click Cancel to abort)`);
+
+      // If user clicks Cancel (null), do nothing.
+      if (caseNumber === null) return;
+
       if (caseNumber && caseNumber.trim()) {
         try {
           const resp = await fetch(`${API_URL}/api/cases/lookup?case_number=${encodeURIComponent(caseNumber.trim())}`, {
@@ -158,8 +164,11 @@ export default function StockManagement() {
           if (resp.ok) {
             const d = await resp.json();
             if (d.success && d.case?.id) caseId = d.case.id;
+            else alert(`Case "${caseNumber}" not found. Logging as unallocated.`);
+          } else {
+            alert(`Case "${caseNumber}" lookup failed. Logging as unallocated.`);
           }
-        } catch (_) {}
+        } catch (_) { }
       }
       const body = {
         quantity_change: -1,
@@ -186,8 +195,8 @@ export default function StockManagement() {
       alert(err.message || 'Failed to log usage');
     }
   };
-  
-  
+
+
   // Fetch stats
   const fetchStats = useCallback(async () => {
     try {
@@ -228,6 +237,38 @@ export default function StockManagement() {
       }
     } catch (err) {
       return { success: false, error: err.message };
+    }
+  };
+
+  const emailReport = async () => {
+    // Default start date as requested
+    const defaultStart = '2025-12-08';
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Prompt for dates
+    const startDate = prompt("Enter Start Date (YYYY-MM-DD):", defaultStart);
+    if (!startDate) return; // User cancelled
+
+    const endDate = prompt("Enter End Date (YYYY-MM-DD):", today);
+    if (!endDate) return; // User cancelled
+
+    if (!window.confirm(`Send Usage Report from ${startDate} to ${endDate} to Management Email?`)) return;
+
+    try {
+      const token = getAccessToken();
+      const response = await fetch(`${API_URL}/api/inventory/reports/email`, {
+        method: 'POST',
+        headers: token ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } : { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startDate, endDate })
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert('Report sent successfully!');
+      } else {
+        alert('Failed to send report: ' + data.error);
+      }
+    } catch (err) {
+      alert('Error sending report: ' + err.message);
     }
   };
 
@@ -302,10 +343,10 @@ export default function StockManagement() {
   };
 
   const lowStockItems = inventory.filter(item => item.is_low_stock);
-  const filteredInventory = activeTab === 'low' 
-    ? lowStockItems 
-    : activeTab === 'all' 
-      ? inventory 
+  const filteredInventory = activeTab === 'low'
+    ? lowStockItems
+    : activeTab === 'all'
+      ? inventory
       : inventory.filter(item => item.category === activeTab);
 
   if (loading) {
@@ -324,7 +365,7 @@ export default function StockManagement() {
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 max-w-7xl mx-auto bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
       {/* HEADER */}
       <div className="text-center mb-6 sm:mb-8 md:mb-10">
-        
+
         <p className="text-yellow-600 text-base sm:text-lg md:text-xl font-semibold">Live from QwaQwa • Re tšotella sechaba sa rona</p>
         <h2 className="text-2xl sm:text-3xl font-bold text-red-700 mt-4 sm:mt-6">Professional Stock Management</h2>
         <p className="text-gray-600 mt-2">Real-time inventory tracking and reporting</p>
@@ -343,7 +384,7 @@ export default function StockManagement() {
               <p className="font-bold text-red-800 text-xl">🚨 LOW STOCK ALERT</p>
               <p className="text-red-700">{lowStockItems.length} item(s) need immediate attention</p>
             </div>
-            <button 
+            <button
               onClick={() => setActiveTab('low')}
               className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
             >
@@ -398,7 +439,7 @@ export default function StockManagement() {
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center space-y-4 lg:space-y-0">
           {/* TABS */}
           <div className="flex flex-wrap gap-2 w-full lg:w-auto">
-              {['all', 'coffin', 'usage', 'tent', 'chair', 'grocery', 'low'].map(tab => (
+            {['all', 'coffin', 'usage', 'tent', 'chair', 'grocery', 'low'].map(tab => (
               <button
                 key={tab}
                 onClick={() => {
@@ -410,11 +451,10 @@ export default function StockManagement() {
                     fetchInventory(tab === 'low' ? 'all' : tab);
                   }
                 }}
-                className={`px-3 sm:px-4 py-2 rounded-lg font-semibold capitalize text-sm sm:text-base transition-all ${
-                  activeTab === tab
-                    ? 'bg-red-600 text-white shadow-md'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300 hover:shadow-sm'
-                }`}
+                className={`px-3 sm:px-4 py-2 rounded-lg font-semibold capitalize text-sm sm:text-base transition-all ${activeTab === tab
+                  ? 'bg-red-600 text-white shadow-md'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300 hover:shadow-sm'
+                  }`}
               >
                 {tab === 'all' ? 'All Items' : tab === 'low' ? 'Low Stock' : tab === 'usage' ? 'Coffin Usage' : tab}
               </button>
@@ -432,7 +472,7 @@ export default function StockManagement() {
               </svg>
               Stock Take
             </button>
-            
+
             <button
               onClick={() => setShowAddForm(true)}
               className="bg-green-600 text-white px-4 sm:px-5 py-2.5 rounded-lg hover:bg-green-700 font-semibold flex items-center justify-center transition-all shadow-md hover:shadow-lg text-sm sm:text-base min-w-[140px]"
@@ -452,6 +492,16 @@ export default function StockManagement() {
               </svg>
               Export Report
             </button>
+
+            <button
+              onClick={emailReport}
+              className="bg-purple-600 text-white px-4 sm:px-5 py-2.5 rounded-lg hover:bg-purple-700 font-semibold flex items-center justify-center transition-all shadow-md hover:shadow-lg text-sm sm:text-base min-w-[140px]"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Email Daily Report
+            </button>
           </div>
         </div>
       </div>
@@ -467,7 +517,7 @@ export default function StockManagement() {
                 <input
                   type="text"
                   value={newItem.name}
-                  onChange={(e) => setNewItem({...newItem, name: e.target.value})}
+                  onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                   placeholder="e.g., Premium Oak Casket"
                 />
@@ -476,7 +526,7 @@ export default function StockManagement() {
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Category</label>
                 <select
                   value={newItem.category}
-                  onChange={(e) => setNewItem({...newItem, category: e.target.value})}
+                  onChange={(e) => setNewItem({ ...newItem, category: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                 >
                   <option value="coffin">Casket/Coffin</option>
@@ -493,7 +543,7 @@ export default function StockManagement() {
                   <input
                     type="text"
                     value={newItem.sku}
-                    onChange={(e) => setNewItem({...newItem, sku: e.target.value})}
+                    onChange={(e) => setNewItem({ ...newItem, sku: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                     placeholder="e.g., CSK-OAK-001"
                   />
@@ -504,7 +554,7 @@ export default function StockManagement() {
                   <input
                     type="number"
                     value={newItem.stock_quantity}
-                    onChange={(e) => setNewItem({...newItem, stock_quantity: parseInt(e.target.value) || 0})}
+                    onChange={(e) => setNewItem({ ...newItem, stock_quantity: parseInt(e.target.value) || 0 })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                   />
                 </div>
@@ -516,7 +566,7 @@ export default function StockManagement() {
                   <input
                     type="number"
                     value={newItem.low_stock_threshold}
-                    onChange={(e) => setNewItem({...newItem, low_stock_threshold: parseInt(e.target.value) || 1})}
+                    onChange={(e) => setNewItem({ ...newItem, low_stock_threshold: parseInt(e.target.value) || 1 })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                   />
                 </div>
@@ -526,7 +576,7 @@ export default function StockManagement() {
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Notes</label>
                 <textarea
                   value={newItem.notes}
-                  onChange={(e) => setNewItem({...newItem, notes: e.target.value})}
+                  onChange={(e) => setNewItem({ ...newItem, notes: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                   placeholder="Additional notes about this item (optional)"
                   rows={2}
@@ -563,7 +613,7 @@ export default function StockManagement() {
                 <input
                   type="text"
                   value={editItem.name}
-                  onChange={(e) => setEditItem({...editItem, name: e.target.value})}
+                  onChange={(e) => setEditItem({ ...editItem, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                 />
               </div>
@@ -571,7 +621,7 @@ export default function StockManagement() {
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Category</label>
                 <select
                   value={editItem.category}
-                  onChange={(e) => setEditItem({...editItem, category: e.target.value})}
+                  onChange={(e) => setEditItem({ ...editItem, category: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                 >
                   <option value="coffin">Casket/Coffin</option>
@@ -591,7 +641,7 @@ export default function StockManagement() {
                   <input
                     type="text"
                     value={editItem.sku}
-                    onChange={(e) => setEditItem({...editItem, sku: e.target.value})}
+                    onChange={(e) => setEditItem({ ...editItem, sku: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                   />
                 </div>
@@ -600,7 +650,7 @@ export default function StockManagement() {
                   <input
                     type="text"
                     value={editItem.location}
-                    onChange={(e) => setEditItem({...editItem, location: e.target.value})}
+                    onChange={(e) => setEditItem({ ...editItem, location: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                   />
                 </div>
@@ -612,7 +662,7 @@ export default function StockManagement() {
                   <input
                     type="number"
                     value={editItem.low_stock_threshold}
-                    onChange={(e) => setEditItem({...editItem, low_stock_threshold: parseInt(e.target.value) || 1})}
+                    onChange={(e) => setEditItem({ ...editItem, low_stock_threshold: parseInt(e.target.value) || 1 })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                   />
                 </div>
@@ -622,7 +672,7 @@ export default function StockManagement() {
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Notes</label>
                 <textarea
                   value={editItem.notes}
-                  onChange={(e) => setEditItem({...editItem, notes: e.target.value})}
+                  onChange={(e) => setEditItem({ ...editItem, notes: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
                   placeholder="Additional notes about this item"
                   rows={3}
@@ -680,6 +730,10 @@ export default function StockManagement() {
               >
                 Apply
               </button>
+              <label className="flex items-center gap-1 text-sm ml-2">
+                <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} />
+                Include archived
+              </label>
               <button
                 onClick={() => { const next = !groupByCase; setGroupByCase(next); next ? fetchUsageByCase() : fetchMovements(); }}
                 className={`px-3 py-1 rounded ${groupByCase ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800'}`}
@@ -758,171 +812,170 @@ export default function StockManagement() {
           ))}
         </div>
       ) : (
-      <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-600">
-        {/* INVENTORY TABLE */}
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-red-800">
-            {activeTab === 'all' ? 'All Inventory' : 
-             activeTab === 'low' ? 'Low Stock Items' : 
-             `${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Items`}
-          </h2>
-          <p className="text-gray-600">
-            {filteredInventory.length} items • {
-              activeTab === 'low' ? `${lowStockItems.length} need attention` : 
-              `${inventory.filter(item => item.is_low_stock).length} low stock`
-            }
-          </p>
-        </div>
+        <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-600">
+          {/* INVENTORY TABLE */}
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-red-800">
+              {activeTab === 'all' ? 'All Inventory' :
+                activeTab === 'low' ? 'Low Stock Items' :
+                  `${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Items`}
+            </h2>
+            <p className="text-gray-600">
+              {filteredInventory.length} items • {
+                activeTab === 'low' ? `${lowStockItems.length} need attention` :
+                  `${inventory.filter(item => item.is_low_stock).length} low stock`
+              }
+            </p>
+          </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-100 border-b">
-                <th className="p-3 text-left font-semibold text-gray-700">Item Details</th>
-                <th className="p-3 text-left font-semibold text-gray-700">Stock Levels</th>
-                
-                <th className="p-3 text-left font-semibold text-gray-700">Status</th>
-                <th className="p-3 text-left font-semibold text-gray-700">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredInventory.length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="p-6 text-center text-gray-500">
-                    {activeTab === 'low' 
-                      ? '🎉 No low stock items! Everything is well stocked.' 
-                      : 'No inventory items found'}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-100 border-b">
+                  <th className="p-3 text-left font-semibold text-gray-700">Item Details</th>
+                  <th className="p-3 text-left font-semibold text-gray-700">Stock Levels</th>
+
+                  <th className="p-3 text-left font-semibold text-gray-700">Status</th>
+                  <th className="p-3 text-left font-semibold text-gray-700">Actions</th>
                 </tr>
-              ) : (
-                filteredInventory.map(item => (
-                  <tr key={item.id} className={`border-b hover:bg-gray-50 ${item.is_low_stock ? 'bg-red-50' : ''}`}>
-                    <td className="p-3">
-                      <div className="font-semibold text-gray-800">{item.name}</div>
-                      <div className="text-sm text-gray-600 flex items-center space-x-2 mt-1">
-                        <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs capitalize">{item.category}</span>
-                        <span>{item.sku && `SKU: ${item.sku}`}</span>
-                        {item.color && (
-                          <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">Color: {item.color}</span>
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">{item.location}</div>
-                      {item.notes && (
-                        <div className="text-xs text-gray-600 mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded" title={item.notes}>
-                          <span className="font-medium text-yellow-700">📝 Note:</span>{' '}
-                          {item.notes.length > 60 ? `${item.notes.substring(0, 60)}...` : item.notes}
-                        </div>
-                      )}
-                    </td>
-
-                    <td className="p-3">
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                          <span>In Stock:</span>
-                          <span className="font-semibold">{item.stock_quantity}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span>Reserved:</span>
-                          <span className="text-orange-600">{item.reserved_quantity || 0}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span>Available:</span>
-                          <span className={`font-semibold ${item.available_quantity <= item.low_stock_threshold ? 'text-red-600' : 'text-green-600'}`}>
-                            {item.available_quantity}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-
-                    
-
-                    <td className="p-3">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                        item.available_quantity <= 0
-                          ? 'bg-gray-200 text-gray-600'
-                          : item.available_quantity <= item.low_stock_threshold
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-green-100 text-green-700'
-                      }`}>
-                        {item.available_quantity <= 0
-                          ? 'Out of Stock'
-                          : item.available_quantity <= item.low_stock_threshold
-                          ? 'Low Stock'
-                          : 'In Stock'}
-                      </span>
-                    </td>
-
-                    <td className="p-3">
-                      <div className="flex flex-wrap gap-1">
-                        <button
-                          onClick={() => handleEditItem(item)}
-                          className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
-                          title="Edit item details and notes"
-                        >
-                          Edit
-                        </button>
-                        {item.category === 'coffin' && (
-                          <button
-                            onClick={() => logCoffinUsage(item)}
-                            className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 text-sm"
-                          >
-                            Log Usage
-                          </button>
-                        )}
-                        <button
-                          onClick={async () => {
-                            const newQty = prompt(`Update stock for "${item.name}" (current: ${item.stock_quantity})`);
-                            if (newQty !== null) {
-                              const parsedQty = parseInt(newQty);
-                              if (!isNaN(parsedQty)) {
-                                const result = await updateStock(item.id, parsedQty);
-                                if (!result.success) alert(`Error: ${result.error}`);
-                              }
-                            }
-                          }}
-                          className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 text-sm"
-                        >
-                          Stock
-                        </button>
-                        <button
-                          onClick={async () => {
-                            const addQty = prompt(`Add quantity for "${item.name}" (current: ${item.stock_quantity})`);
-                            if (addQty !== null) {
-                              const parsedAdd = parseInt(addQty);
-                              if (!isNaN(parsedAdd)) {
-                                const result = await updateStock(item.id, item.stock_quantity + parsedAdd, 'Added manually');
-                                if (!result.success) alert(`Error: ${result.error}`);
-                              }
-                            }
-                          }}
-                          className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
-                        >
-                          +Qty
-                        </button>
-                        <button
-                          onClick={async () => {
-                            const val = prompt(`Set low stock alert for "${item.name}" (current: ${item.low_stock_threshold})`);
-                            if (val !== null) {
-                              const parsed = parseInt(val);
-                              if (!isNaN(parsed) && parsed >= 0) {
-                                const result = await updateInventoryItem({ id: item.id, low_stock_threshold: parsed });
-                                if (!result.success) alert(`Error: ${result.error}`);
-                              }
-                            }
-                          }}
-                          className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
-                        >
-                          Threshold
-                        </button>
-                      </div>
+              </thead>
+              <tbody>
+                {filteredInventory.length === 0 ? (
+                  <tr>
+                    <td colSpan="4" className="p-6 text-center text-gray-500">
+                      {activeTab === 'low'
+                        ? '🎉 No low stock items! Everything is well stocked.'
+                        : 'No inventory items found'}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  filteredInventory.map(item => (
+                    <tr key={item.id} className={`border-b hover:bg-gray-50 ${item.is_low_stock ? 'bg-red-50' : ''}`}>
+                      <td className="p-3">
+                        <div className="font-semibold text-gray-800">{item.name}</div>
+                        <div className="text-sm text-gray-600 flex items-center space-x-2 mt-1">
+                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs capitalize">{item.category}</span>
+                          <span>{item.sku && `SKU: ${item.sku}`}</span>
+                          {item.color && (
+                            <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">Color: {item.color}</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">{item.location}</div>
+                        {item.notes && (
+                          <div className="text-xs text-gray-600 mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded" title={item.notes}>
+                            <span className="font-medium text-yellow-700">📝 Note:</span>{' '}
+                            {item.notes.length > 60 ? `${item.notes.substring(0, 60)}...` : item.notes}
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="p-3">
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-sm">
+                            <span>In Stock:</span>
+                            <span className="font-semibold">{item.stock_quantity}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span>Reserved:</span>
+                            <span className="text-orange-600">{item.reserved_quantity || 0}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span>Available:</span>
+                            <span className={`font-semibold ${item.available_quantity <= item.low_stock_threshold ? 'text-red-600' : 'text-green-600'}`}>
+                              {item.available_quantity}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+
+
+                      <td className="p-3">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${item.available_quantity <= 0
+                          ? 'bg-gray-200 text-gray-600'
+                          : item.available_quantity <= item.low_stock_threshold
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-green-100 text-green-700'
+                          }`}>
+                          {item.available_quantity <= 0
+                            ? 'Out of Stock'
+                            : item.available_quantity <= item.low_stock_threshold
+                              ? 'Low Stock'
+                              : 'In Stock'}
+                        </span>
+                      </td>
+
+                      <td className="p-3">
+                        <div className="flex flex-wrap gap-1">
+                          <button
+                            onClick={() => handleEditItem(item)}
+                            className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
+                            title="Edit item details and notes"
+                          >
+                            Edit
+                          </button>
+                          {item.category === 'coffin' && (
+                            <button
+                              onClick={() => logCoffinUsage(item)}
+                              className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 text-sm"
+                            >
+                              Log Usage
+                            </button>
+                          )}
+                          <button
+                            onClick={async () => {
+                              const newQty = prompt(`Update stock for "${item.name}" (current: ${item.stock_quantity})`);
+                              if (newQty !== null) {
+                                const parsedQty = parseInt(newQty);
+                                if (!isNaN(parsedQty)) {
+                                  const result = await updateStock(item.id, parsedQty);
+                                  if (!result.success) alert(`Error: ${result.error}`);
+                                }
+                              }
+                            }}
+                            className="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600 text-sm"
+                          >
+                            Stock
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const addQty = prompt(`Add quantity for "${item.name}" (current: ${item.stock_quantity})`);
+                              if (addQty !== null) {
+                                const parsedAdd = parseInt(addQty);
+                                if (!isNaN(parsedAdd)) {
+                                  const result = await updateStock(item.id, item.stock_quantity + parsedAdd, 'Added manually');
+                                  if (!result.success) alert(`Error: ${result.error}`);
+                                }
+                              }
+                            }}
+                            className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm"
+                          >
+                            +Qty
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const val = prompt(`Set low stock alert for "${item.name}" (current: ${item.low_stock_threshold})`);
+                              if (val !== null) {
+                                const parsed = parseInt(val);
+                                if (!isNaN(parsed) && parsed >= 0) {
+                                  const result = await updateInventoryItem({ id: item.id, low_stock_threshold: parsed });
+                                  if (!result.success) alert(`Error: ${result.error}`);
+                                }
+                              }
+                            }}
+                            className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm"
+                          >
+                            Threshold
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
       )}
 
       {/* Stock Take Modal */}

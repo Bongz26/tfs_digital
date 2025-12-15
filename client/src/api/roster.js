@@ -1,12 +1,12 @@
 import axios from "axios";
 import { API_HOST } from "./config";
-import { getAccessToken } from "./auth";
+import { getAccessToken, getAuthHeaders } from "./auth";
 
 const BASE_URL = `${API_HOST}/api/roster`;
 
 export const fetchRoster = async () => {
     try {
-        const res = await axios.get(BASE_URL);
+        const res = await axios.get(BASE_URL, { headers: getAuthHeaders() });
         return res.data.roster || [];
     } catch (err) {
         console.error("Error fetching roster:", err.response || err);
