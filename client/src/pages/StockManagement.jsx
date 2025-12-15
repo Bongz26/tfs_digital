@@ -64,6 +64,7 @@ export default function StockManagement() {
   const [loadingUsageByCase, setLoadingUsageByCase] = useState(false);
   const [usageFrom, setUsageFrom] = useState('');
   const [usageTo, setUsageTo] = useState('');
+  const [usageTotals, setUsageTotals] = useState({ grand_total: 0, case_count: 0 });
 
   const API_URL = API_HOST;
 
@@ -135,8 +136,10 @@ export default function StockManagement() {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       setUsageByCase(data.cases || []);
+      setUsageTotals(data.totals || { grand_total: (data.cases || []).reduce((a, r) => a + (parseInt(r.total_coffins, 10) || 0), 0), case_count: (data.cases || []).length });
     } catch (err) {
       setUsageByCase([]);
+      setUsageTotals({ grand_total: 0, case_count: 0 });
     } finally {
       setLoadingUsageByCase(false);
     }
@@ -648,7 +651,15 @@ export default function StockManagement() {
       {activeTab === 'usage' ? (
         <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-600">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-bold text-red-800">Coffin Usage History</h2>
+            <div className="flex items-center gap-4">
+              <h2 className="text-2xl font-bold text-red-800">Coffin Usage History</h2>
+              {groupByCase && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="px-2 py-1 bg-red-100 text-red-700 rounded">Total Coffins: {usageTotals.grand_total || 0}</span>
+                  <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded">Cases: {usageTotals.case_count || 0}</span>
+                </div>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <input
                 type="date"
