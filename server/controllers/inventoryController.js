@@ -371,7 +371,7 @@ exports.getCoffinUsageByCase = async (req, res) => {
 
         const { from, to, limit = 200 } = req.query;
         const params = [];
-        const dateWhere = [];
+        const dateWhere = ["c.status NOT IN ('archived','cancelled')"];
         if (from) { params.push(from); dateWhere.push(`c.funeral_date >= $${params.length}`); }
         if (to) { params.push(to); dateWhere.push(`c.funeral_date <= $${params.length}`); }
         const sql = `
@@ -442,7 +442,9 @@ exports.getCoffinUsageByCase = async (req, res) => {
             LIMIT ${Math.max(1, Math.min(parseInt(limit, 10) || 200, 1000))}
         `;
         const result = await query(sql, params);
-        res.json({ success: true, cases: result.rows || [] });
+        const rows = result.rows || [];
+        const grandTotal = rows.reduce((acc, r) => acc + (parseInt(r.total_coffins, 10) || 0), 0);
+        res.json({ success: true, cases: rows, totals: { grand_total: grandTotal, case_count: rows.length } });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Failed to summarize coffin usage by case', details: err.message });
     }
@@ -617,7 +619,7 @@ exports.getPublicCoffinUsageRaw = async (req, res) => {
 
         const { from, to, case_number, limit = 500 } = req.query;
         const params = [];
-        const whereMov = ["inv.category = 'coffin'"];
+        const whereMov = ["inv.category = 'coffin'", "(c.status IS NULL OR c.status NOT IN ('archived','cancelled'))"];
         if (hasMovementsTable) {
             whereMov.push("(sm.movement_type = 'sale' OR (sm.movement_type = 'adjustment' AND sm.quantity_change < 0))");
             if (from) { params.push(from); whereMov.push(`sm.created_at >= $${params.length}`); }
@@ -625,7 +627,7 @@ exports.getPublicCoffinUsageRaw = async (req, res) => {
             if (case_number) { params.push(case_number); whereMov.push(`c.case_number = $${params.length}`); }
         }
 
-        const whereInf = [];
+        const whereInf = ["c.status NOT IN ('archived','cancelled')"];
         if (from) { params.push(from); whereInf.push(`c.funeral_date >= $${params.length}`); }
         if (to) { params.push(to); whereInf.push(`c.funeral_date <= $${params.length}`); }
         if (case_number) { params.push(case_number); whereInf.push(`c.case_number = $${params.length}`); }
