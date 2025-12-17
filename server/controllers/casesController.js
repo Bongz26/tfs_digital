@@ -523,30 +523,27 @@ exports.createCase = async (req, res) => {
                 }
             }
         } catch (_) { }
-    }
+
+        try {
+            if (policy_number) {
+                await query('DELETE FROM claim_drafts WHERE policy_number = $1', [policy_number]);
             }
         } catch (_) { }
-
-try {
-    if (policy_number) {
-        await query('DELETE FROM claim_drafts WHERE policy_number = $1', [policy_number]);
-    }
-} catch (_) { }
-res.json({ success: true, case: created });
+        res.json({ success: true, case: created });
     } catch (err) {
-    console.error('❌ [POST /api/cases] Error creating case:', err);
-    res.status(500).json({
-        success: false,
-        error: 'Failed to create case',
-        details: err.message,
-        code: err.code,
-        hint: err.code === '42703'
-            ? 'Missing column in database. Run migration: ALTER TABLE cases ADD COLUMN delivery_date DATE; ALTER TABLE cases ADD COLUMN delivery_time TIME;'
-            : err.code === '23502'
-                ? 'Missing required field value'
-                : undefined
-    });
-}
+        console.error('❌ [POST /api/cases] Error creating case:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to create case',
+            details: err.message,
+            code: err.code,
+            hint: err.code === '42703'
+                ? 'Missing column in database. Run migration: ALTER TABLE cases ADD COLUMN delivery_date DATE; ALTER TABLE cases ADD COLUMN delivery_time TIME;'
+                : err.code === '23502'
+                    ? 'Missing required field value'
+                    : undefined
+        });
+    }
 };
 
 // --- ASSIGN VEHICLE TO CASE ---
