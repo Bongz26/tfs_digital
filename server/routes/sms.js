@@ -530,18 +530,22 @@ router.get('/airtime-requests', requireMinRole('staff'), async (req, res) => {
       )
       SELECT 
         d.*,
-        COALESCE(d.case_id, c2.id) as case_id,
-        c.case_number, 
-        c.deceased_name, 
-        c.status AS case_status
+        COALESCE(d.case_id, c_match.id) as case_id,
+        c_match.case_number, 
+        c_match.deceased_name, 
+        c_match.status AS case_status
       FROM d
-      LEFT JOIN cases c ON d.case_id = c.id
-      LEFT JOIN cases c2 ON d.policy_number = c2.policy_number AND d.case_id IS NULL
-      WHERE d.rn = 1
-        AND (
-          c.status IS NULL
-          OR c.status NOT IN ('completed','cancelled','archived')
-        )
+      LEFT JOIN LATERAL (
+          SELECT c.id, c.case_number, c.deceased_name, c.status
+          FROM cases c
+          WHERE (c.id = d.case_id) 
+             OR (d.case_id IS NULL AND c.policy_number = d.policy_number)
+          ORDER BY 
+            (CASE WHEN c.id = d.case_id THEN 0 ELSE 1 END) ASC, -- Prioritize exact case_id match
+            (CASE WHEN c.status = 'confirmed' THEN 0 WHEN c.status = 'scheduled' THEN 1 ELSE 2 END) ASC, -- Then active statuses
+            c.created_at DESC -- Then latest
+          LIMIT 1
+      ) c_match ON TRUE
       ORDER BY d.requested_at DESC
     `);
     res.json({ success: true, requests: result.rows });
