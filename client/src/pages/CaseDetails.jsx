@@ -97,8 +97,8 @@ export default function CaseDetails() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div>
           <h2 className="font-semibold text-lg mb-2">Funeral Info</h2>
-          <p><span className="font-semibold">Date:</span> {caseData.funeral_date ? new Date(caseData.funeral_date).toLocaleDateString() : 'Not set'}</p>
-          <p><span className="font-semibold">Time:</span> {caseData.funeral_time ? caseData.funeral_time.slice(0, 5) : 'Not set'}</p>
+          <p><span className="font-semibold">Date:</span> {(caseData.service_date || caseData.funeral_date) ? new Date(caseData.service_date || caseData.funeral_date).toLocaleDateString() : 'Not set'}</p>
+          <p><span className="font-semibold">Time:</span> {(caseData.service_time || caseData.funeral_time) ? (caseData.service_time || caseData.funeral_time).slice(0, 5) : 'Not set'}</p>
           <p><span className="font-semibold">Venue:</span> {caseData.venue_name}</p>
           <p><span className="font-semibold">Address:</span> {caseData.venue_address}</p>
         </div>

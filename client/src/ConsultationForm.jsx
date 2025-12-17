@@ -332,6 +332,7 @@ export default function ConsultationForm() {
     pearl_bonus: '',
     claim_date: '',
     policy_number: '',
+    branch: 'Head Office',
     deceased_name: '',
     deceased_id: '',
     nok_name: '',
@@ -435,9 +436,7 @@ export default function ConsultationForm() {
             plan_members: found.plan_members != null ? found.plan_members : prev.plan_members,
             plan_age_bracket: found.plan_age_bracket || prev.plan_age_bracket,
             venue_name: found.venue_name || prev.venue_name,
-            venue_address: found.venue_address || prev.venue_address,
-            service_date: found.service_date || found.funeral_date || prev.service_date,
-            service_time: found.service_time || found.funeral_time || prev.service_time
+            venue_address: found.venue_address || prev.venue_address
           }));
           setMessage('Existing case data auto-filled');
         }
@@ -496,9 +495,19 @@ export default function ConsultationForm() {
   const isSpecialPlan = form.plan_category === 'specials';
 
   const getAutoCasketType = () => {
+    // If Private, always allow manual override (return form value)
+    if (form.service_type === 'private') {
+      return form.casket_type || '';
+    }
     if (isSpecialPlan) {
       return SPECIAL_PLAN_BENEFITS[form.plan_name]?.casket || '';
     }
+    // For book/standard, prioritize form value but fallback to plan if empty?
+    // No, fallback to plan ONLY if form value is untouched to avoid snap-back.
+    // Actually, useEffect keeps form.casket_type in sync. 
+    // So we can just return form.casket_type.
+    // However, to be safe during transitions, we keep the fallback ONLY if form.casket_type is undefined.
+    // But since useState initializes it to '', we should just return form.casket_type.
     return form.casket_type || PLAN_BENEFITS[form.plan_name]?.casket || '';
   };
 
@@ -806,7 +815,7 @@ export default function ConsultationForm() {
       setPrintedData(data);
       setPrintMode('full');
       setTimeout(() => window.print(), 500);
-      try { await deleteDraftServer(form.policy_number, 'submitted'); } catch (_) {}
+      try { await deleteDraftServer(form.policy_number, 'submitted'); } catch (_) { }
       try {
         const key = `tfs_claim_draft_${form.policy_number}`;
         window.localStorage.removeItem(key);
@@ -814,7 +823,7 @@ export default function ConsultationForm() {
         if (lastKey === key) {
           window.localStorage.removeItem('tfs_claim_draft_last');
         }
-      } catch (_) {}
+      } catch (_) { }
       // Reset form after confirmation
       setForm(prev => ({
         ...prev,
@@ -1147,6 +1156,14 @@ export default function ConsultationForm() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div><label>Claim Date <span className="text-red-600">*</span></label><input type="date" required value={form.claim_date} onChange={e => handleInputChange('claim_date', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
               <div><label>Policy Number <span className="text-red-600">*</span></label><input required value={form.policy_number} onChange={e => handleInputChange('policy_number', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder="Enter policy number" /></div>
+              <div>
+                <label>Branch / Location <span className="text-red-600">*</span></label>
+                <select required value={form.branch} onChange={e => handleInputChange('branch', e.target.value)} className="w-full px-4 py-3 border rounded-lg">
+                  <option value="Head Office">Head Office</option>
+                  <option value="Bethlehem Branch">Bethlehem Branch</option>
+                  <option value="Reitz Branch">Reitz Branch</option>
+                </select>
+              </div>
               <div><label>Deceased Full Name <span className="text-red-600">*</span></label><input required value={form.deceased_name} onChange={e => handleInputChange('deceased_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder="Enter deceased name" /></div>
               <div><label>ID Number</label><input value={form.deceased_id} onChange={e => handleInputChange('deceased_id', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
               <div><label>Claimant Name <span className="text-red-600">*</span></label><input required value={form.nok_name} onChange={e => handleInputChange('nok_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
@@ -1458,12 +1475,12 @@ export default function ConsultationForm() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label>Casket Type</label>
-                {isSpecialPlan ? (
+                {isSpecialPlan && form.service_type !== 'private' ? (
                   <div className="w-full px-4 py-3 bg-green-50 border border-green-300 rounded-lg font-bold text-green-800">
                     {getAutoCasketType()} (Included)
                   </div>
                 ) : (
-                  <input value={getAutoCasketType()} onChange={e => handleInputChange('casket_type', e.target.value)} className="w-full px-4 py-3 border rounded-lg" />
+                  <input value={getAutoCasketType()} onChange={e => handleInputChange('casket_type', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder={form.service_type === 'private' ? 'Enter casket details manually' : 'Auto-filled from plan'} />
                 )}
               </div>
               <div>
@@ -1569,12 +1586,13 @@ export default function ConsultationForm() {
         <div className="mt-8 text-center text-sm text-gray-600">
           <p>Toll Free: <span className="font-bold text-red-600">0800 01 4574</span> | Serving with Dignity</p>
         </div>
-      </div>
+      </div >
 
       {/* Printable Section */}
-      {printedData && printMode && (
-        <>
-          <style>{`@media print {
+      {
+        printedData && printMode && (
+          <>
+            <style>{`@media print {
             @page { size: A4; margin: 5mm; }
             html, body { margin: 0; padding: 0; }
             body * { visibility: hidden !important; }
@@ -1604,139 +1622,140 @@ export default function ConsultationForm() {
             .sign-off-label { font-size: 9px; color: #666; margin-bottom: 4px; display: block; font-weight: bold; }
           }`}</style>
 
-          <div id="tfs-print-root">
-            {/* Header */}
-            <div className="print-header flex justify-between items-start">
-              <div className="flex items-center gap-4">
-                {/* Logo Placeholder if needed */}
-                <div>
-                  <h1 className="text-2xl font-bold text-red-800 leading-none">THUSANANG</h1>
-                  <div className="text-lg font-bold text-gray-800 tracking-widest">FUNERAL SERVICES</div>
-                  <div className="text-[9px] mt-1 text-gray-500 font-semibold tracking-wider">RESPECTFUL | PROFESSIONAL | DIGNIFIED</div>
+            <div id="tfs-print-root">
+              {/* Header */}
+              <div className="print-header flex justify-between items-start">
+                <div className="flex items-center gap-4">
+                  {/* Logo Placeholder if needed */}
+                  <div>
+                    <h1 className="text-2xl font-bold text-red-800 leading-none">THUSANANG</h1>
+                    <div className="text-lg font-bold text-gray-800 tracking-widest">FUNERAL SERVICES</div>
+                    <div className="text-[9px] mt-1 text-gray-500 font-semibold tracking-wider">RESPECTFUL | PROFESSIONAL | DIGNIFIED</div>
+                  </div>
+                </div>
+                <div className="text-right text-[9px] leading-tight text-gray-600">
+                  <p><strong className="text-gray-800">Head Office:</strong> Site 1, Portion 2, Beirut, Phuthaditjhaba</p>
+                  <p className="my-0.5"><strong className="text-gray-800">Tel:</strong> 08000 145 74 | <strong className="text-gray-800">Cell:</strong> 071 480 5050</p>
+                  <p>info@thusanangfs.co.za | www.thusanangfs.co.za</p>
+                  <p className="mt-0.5 font-bold text-red-800">FSP: 39701</p>
                 </div>
               </div>
-              <div className="text-right text-[9px] leading-tight text-gray-600">
-                <p><strong className="text-gray-800">Head Office:</strong> Site 1, Portion 2, Beirut, Phuthaditjhaba</p>
-                <p className="my-0.5"><strong className="text-gray-800">Tel:</strong> 08000 145 74 | <strong className="text-gray-800">Cell:</strong> 071 480 5050</p>
-                <p>info@thusanangfs.co.za | www.thusanangfs.co.za</p>
-                <p className="mt-0.5 font-bold text-red-800">FSP: 39701</p>
-              </div>
+
+              {printMode === 'receipt' ? (
+                <div className="p-4 border-2 border-gray-800 rounded">
+                  <h2 className="text-xl font-bold text-center text-red-800 mb-6 border-b-2 border-red-800 pb-2">CLAIM RECEIPT</h2>
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                    <div className="print-row"><span className="font-bold w-32">Policy Number:</span> <span>{printedData.policy_number}</span></div>
+                    <div className="print-row"><span className="font-bold w-32">Claim Date:</span> <span>{printedData.claim_date}</span></div>
+                    <div className="print-row col-span-2"><span className="font-bold w-32">Deceased:</span> <span>{printedData.deceased_name}</span></div>
+                    <div className="print-row col-span-2"><span className="font-bold w-32">Claimant:</span> <span>{printedData.nok_name}</span></div>
+                    <div className="print-row col-span-2"><span className="font-bold w-32">Contact:</span> <span>{printedData.nok_contact}</span></div>
+                  </div>
+                  <div className="mt-6">
+                    <h3 className="font-bold border-b border-gray-300 mb-2">Plan Benefits Included:</h3>
+                    {renderBenefitsList(printedData)}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Main Details Grid */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Left Column: Personal Info */}
+                    <div className="print-section">
+                      <div className="print-section-title">CASE DETAILS</div>
+                      <div className="print-row"><div className="print-label">POLICY NUMBER</div><div className="print-value font-bold text-lg">{printedData.policy_number}</div></div>
+                      <div className="print-row"><div className="print-label">CLAIM DATE</div><div className="print-value">{printedData.claim_date}</div></div>
+                      <div className="print-row"><div className="print-label">DECEASED NAME</div><div className="print-value font-bold">{printedData.deceased_name}</div></div>
+                      <div className="print-row"><div className="print-label">CLAIMANT NAME</div><div className="print-value">{printedData.nok_name}</div></div>
+                      <div className="print-row"><div className="print-label">CONTACT</div><div className="print-value">{printedData.nok_contact}</div></div>
+                    </div>
+
+                    {/* Right Column: Logistics */}
+                    <div className="print-section">
+                      <div className="print-section-title">LOGISTICS</div>
+                      <div className="print-row"><div className="print-label">CLEANSING</div><div className="print-value">{printedData.cleansing_date} {printedData.cleansing_time}</div></div>
+                      <div className="print-row"><div className="print-label">DELIVERY</div><div className="print-value">{printedData.delivery_date} {printedData.delivery_time}</div></div>
+                      <div className="print-row"><div className="print-label">SERVICE</div><div className="print-value">{printedData.service_date} {printedData.service_time}</div></div>
+                      <div className="print-row"><div className="print-label">CHURCH</div><div className="print-value">{printedData.church_date} {printedData.church_time}</div></div>
+                      <div className="print-row"><div className="print-label">VENUE</div><div className="print-value">{printedData.venue_name}</div></div>
+                    </div>
+                  </div>
+
+                  {/* Checklist Grid (Compact) */}
+                  <div className="print-section">
+                    <div className="print-section-title">SERVICE REQUIREMENTS & CHECKLIST</div>
+                    <div className="checklist-grid">
+                      <div className="checklist-item"><span className="checklist-label">Casket Type</span> <span className="checklist-val">{printedData.casket_type}</span></div>
+                      <div className="checklist-item"><span className="checklist-label">Casket Colour</span> <span className="checklist-val">{printedData.casket_colour}</span></div>
+                      <div className="checklist-item"><span className="checklist-label">Top-Up</span> <span className="checklist-val">{printedData.top_up_amount ? `R${printedData.top_up_amount}` : '-'}</span></div>
+
+                      <div className="checklist-item"><span className="checklist-label">Cow</span> <span className="checklist-val">{printedData.requires_cow ? 'YES' : 'NO'}</span></div>
+                      <div className="checklist-item"><span className="checklist-label">Sheep</span> <span className="checklist-val">{printedData.requires_sheep ? 'YES' : 'NO'}</span></div>
+                      <div className="checklist-item"><span className="checklist-label">Tombstone</span> <span className="checklist-val">{printedData.requires_tombstone ? 'YES' : 'NO'}</span></div>
+
+                      <div className="checklist-item"><span className="checklist-label">Flower</span> <span className="checklist-val">{printedData.requires_flower ? 'YES' : 'NO'}</span></div>
+                      <div className="checklist-item"><span className="checklist-label">Bus</span> <span className="checklist-val">{printedData.requires_bus ? 'YES' : 'NO'}</span></div>
+                      <div className="checklist-item"><span className="checklist-label">Programmes</span> <span className="checklist-val">{printedData.programs || 'NO'}</span></div>
+
+                      <div className="checklist-item"><span className="checklist-label">Catering</span> <span className="checklist-val">{printedData.requires_catering ? 'YES' : 'NO'}</span></div>
+                      <div className="checklist-item"><span className="checklist-label">Airtime</span> <span className="checklist-val">{printedData.airtime ? 'YES' : 'NO'}</span></div>
+                      <div className="checklist-item"><span className="checklist-label">Network/No</span> <span className="checklist-val text-[9px]">{printedData.airtime ? `${printedData.airtime_network} ${printedData.airtime_number}` : '-'}</span></div>
+
+                      <div className="checklist-item col-span-3"><span className="checklist-label mr-2">Grocery:</span> <span className="checklist-val font-normal text-[9px]">
+                        {(() => {
+                          const isSpecial = printedData.plan_category === 'specials';
+                          const benefits = isSpecial ? (SPECIAL_PLAN_BENEFITS[printedData.plan_name] || {}) : (PLAN_BENEFITS[printedData.plan_name] || {});
+                          if (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0) return benefits.grocery_items.join(', ');
+                          if (benefits.grocery) return String(benefits.grocery);
+                          if (benefits.groceries) return String(benefits.groceries);
+                          return printedData.requires_grocery ? 'Standard Grocery Benefit' : 'None';
+                        })()}
+                      </span></div>
+
+                      <div className="checklist-item"><span className="checklist-label">Cashback</span> <span className="checklist-val">R{Number(printedData.cashback_amount || 0).toLocaleString()}</span></div>
+                      <div className="checklist-item"><span className="checklist-label">Bank Amount</span> <span className="checklist-val">R{Number(printedData.amount_to_bank || 0).toLocaleString()}</span></div>
+                      <div className="checklist-item"><span className="checklist-label">Total Value</span> <span className="checklist-val">R{Number(printedData.cover_amount || 0).toLocaleString()}</span></div>
+                    </div>
+                  </div>
+
+                  {/* Sign Off Section */}
+                  <div className="mt-2">
+                    <table className="sign-off-table">
+                      <tbody>
+                        <tr>
+                          <td width="25%">
+                            <span className="sign-off-label">OFFICE PERSONNEL</span>
+                            <div className="font-bold">{printedData.office_personnel1}</div>
+                          </td>
+                          <td width="25%">
+                            <span className="sign-off-label">SIGNATURE</span>
+                          </td>
+                          <td width="25%">
+                            <span className="sign-off-label">CLIENT NAME</span>
+                            <div className="font-bold">{printedData.client_name1}</div>
+                          </td>
+                          <td width="25%">
+                            <span className="sign-off-label">SIGNATURE</span>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td>
+                            <span className="sign-off-label">DATE</span>
+                            <div>{printedData.date1}</div>
+                          </td>
+                          <td colSpan="3" className="bg-gray-50 text-[9px] text-gray-500 italic align-middle">
+                            I acknowledge that all details above are correct and confirmed.
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </div>
-
-            {printMode === 'receipt' ? (
-              <div className="p-4 border-2 border-gray-800 rounded">
-                <h2 className="text-xl font-bold text-center text-red-800 mb-6 border-b-2 border-red-800 pb-2">CLAIM RECEIPT</h2>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                  <div className="print-row"><span className="font-bold w-32">Policy Number:</span> <span>{printedData.policy_number}</span></div>
-                  <div className="print-row"><span className="font-bold w-32">Claim Date:</span> <span>{printedData.claim_date}</span></div>
-                  <div className="print-row col-span-2"><span className="font-bold w-32">Deceased:</span> <span>{printedData.deceased_name}</span></div>
-                  <div className="print-row col-span-2"><span className="font-bold w-32">Claimant:</span> <span>{printedData.nok_name}</span></div>
-                  <div className="print-row col-span-2"><span className="font-bold w-32">Contact:</span> <span>{printedData.nok_contact}</span></div>
-                </div>
-                <div className="mt-6">
-                  <h3 className="font-bold border-b border-gray-300 mb-2">Plan Benefits Included:</h3>
-                  {renderBenefitsList(printedData)}
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Main Details Grid */}
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Left Column: Personal Info */}
-                  <div className="print-section">
-                    <div className="print-section-title">CASE DETAILS</div>
-                    <div className="print-row"><div className="print-label">POLICY NUMBER</div><div className="print-value font-bold text-lg">{printedData.policy_number}</div></div>
-                    <div className="print-row"><div className="print-label">CLAIM DATE</div><div className="print-value">{printedData.claim_date}</div></div>
-                    <div className="print-row"><div className="print-label">DECEASED NAME</div><div className="print-value font-bold">{printedData.deceased_name}</div></div>
-                    <div className="print-row"><div className="print-label">CLAIMANT NAME</div><div className="print-value">{printedData.nok_name}</div></div>
-                    <div className="print-row"><div className="print-label">CONTACT</div><div className="print-value">{printedData.nok_contact}</div></div>
-                  </div>
-
-                  {/* Right Column: Logistics */}
-                  <div className="print-section">
-                    <div className="print-section-title">LOGISTICS</div>
-                    <div className="print-row"><div className="print-label">CLEANSING</div><div className="print-value">{printedData.cleansing_date} {printedData.cleansing_time}</div></div>
-                    <div className="print-row"><div className="print-label">DELIVERY</div><div className="print-value">{printedData.delivery_date} {printedData.delivery_time}</div></div>
-                    <div className="print-row"><div className="print-label">SERVICE</div><div className="print-value">{printedData.service_date} {printedData.service_time}</div></div>
-                    <div className="print-row"><div className="print-label">CHURCH</div><div className="print-value">{printedData.church_date} {printedData.church_time}</div></div>
-                    <div className="print-row"><div className="print-label">VENUE</div><div className="print-value">{printedData.venue_name}</div></div>
-                  </div>
-                </div>
-
-                {/* Checklist Grid (Compact) */}
-                <div className="print-section">
-                  <div className="print-section-title">SERVICE REQUIREMENTS & CHECKLIST</div>
-                  <div className="checklist-grid">
-                    <div className="checklist-item"><span className="checklist-label">Casket Type</span> <span className="checklist-val">{printedData.casket_type}</span></div>
-                    <div className="checklist-item"><span className="checklist-label">Casket Colour</span> <span className="checklist-val">{printedData.casket_colour}</span></div>
-                    <div className="checklist-item"><span className="checklist-label">Top-Up</span> <span className="checklist-val">{printedData.top_up_amount ? `R${printedData.top_up_amount}` : '-'}</span></div>
-
-                    <div className="checklist-item"><span className="checklist-label">Cow</span> <span className="checklist-val">{printedData.requires_cow ? 'YES' : 'NO'}</span></div>
-                    <div className="checklist-item"><span className="checklist-label">Sheep</span> <span className="checklist-val">{printedData.requires_sheep ? 'YES' : 'NO'}</span></div>
-                    <div className="checklist-item"><span className="checklist-label">Tombstone</span> <span className="checklist-val">{printedData.requires_tombstone ? 'YES' : 'NO'}</span></div>
-
-                    <div className="checklist-item"><span className="checklist-label">Flower</span> <span className="checklist-val">{printedData.requires_flower ? 'YES' : 'NO'}</span></div>
-                    <div className="checklist-item"><span className="checklist-label">Bus</span> <span className="checklist-val">{printedData.requires_bus ? 'YES' : 'NO'}</span></div>
-                    <div className="checklist-item"><span className="checklist-label">Programmes</span> <span className="checklist-val">{printedData.programs || 'NO'}</span></div>
-
-                    <div className="checklist-item"><span className="checklist-label">Catering</span> <span className="checklist-val">{printedData.requires_catering ? 'YES' : 'NO'}</span></div>
-                    <div className="checklist-item"><span className="checklist-label">Airtime</span> <span className="checklist-val">{printedData.airtime ? 'YES' : 'NO'}</span></div>
-                    <div className="checklist-item"><span className="checklist-label">Network/No</span> <span className="checklist-val text-[9px]">{printedData.airtime ? `${printedData.airtime_network} ${printedData.airtime_number}` : '-'}</span></div>
-
-                    <div className="checklist-item col-span-3"><span className="checklist-label mr-2">Grocery:</span> <span className="checklist-val font-normal text-[9px]">
-                      {(() => {
-                        const isSpecial = printedData.plan_category === 'specials';
-                        const benefits = isSpecial ? (SPECIAL_PLAN_BENEFITS[printedData.plan_name] || {}) : (PLAN_BENEFITS[printedData.plan_name] || {});
-                        if (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0) return benefits.grocery_items.join(', ');
-                        if (benefits.grocery) return String(benefits.grocery);
-                        if (benefits.groceries) return String(benefits.groceries);
-                        return printedData.requires_grocery ? 'Standard Grocery Benefit' : 'None';
-                      })()}
-                    </span></div>
-
-                    <div className="checklist-item"><span className="checklist-label">Cashback</span> <span className="checklist-val">R{Number(printedData.cashback_amount || 0).toLocaleString()}</span></div>
-                    <div className="checklist-item"><span className="checklist-label">Bank Amount</span> <span className="checklist-val">R{Number(printedData.amount_to_bank || 0).toLocaleString()}</span></div>
-                    <div className="checklist-item"><span className="checklist-label">Total Value</span> <span className="checklist-val">R{Number(printedData.cover_amount || 0).toLocaleString()}</span></div>
-                  </div>
-                </div>
-
-                {/* Sign Off Section */}
-                <div className="mt-2">
-                  <table className="sign-off-table">
-                    <tbody>
-                      <tr>
-                        <td width="25%">
-                          <span className="sign-off-label">OFFICE PERSONNEL</span>
-                          <div className="font-bold">{printedData.office_personnel1}</div>
-                        </td>
-                        <td width="25%">
-                          <span className="sign-off-label">SIGNATURE</span>
-                        </td>
-                        <td width="25%">
-                          <span className="sign-off-label">CLIENT NAME</span>
-                          <div className="font-bold">{printedData.client_name1}</div>
-                        </td>
-                        <td width="25%">
-                          <span className="sign-off-label">SIGNATURE</span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td>
-                          <span className="sign-off-label">DATE</span>
-                          <div>{printedData.date1}</div>
-                        </td>
-                        <td colSpan="3" className="bg-gray-50 text-[9px] text-gray-500 italic align-middle">
-                          I acknowledge that all details above are correct and confirmed.
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </div>
-        </>
-      )}
-    </div>
+          </>
+        )
+      }
+    </div >
   );
 }

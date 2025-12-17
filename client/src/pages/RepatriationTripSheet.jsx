@@ -19,7 +19,8 @@ export default function RepatriationTripSheet() {
     time_in: '',
     vehicle_id: '',
     driver_id: '',
-    collection_type: ''
+    collection_type: '',
+    tag_number: ''
   });
 
   const [printMode, setPrintMode] = useState(false);
@@ -37,7 +38,7 @@ export default function RepatriationTripSheet() {
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem('tfs_last_odo_closing', String(form.odometer_closing || ''));
       }
-    } catch (e) {}
+    } catch (e) { }
     setPrintMode(true);
     setTimeout(() => window.print(), 300);
   };
@@ -48,7 +49,7 @@ export default function RepatriationTripSheet() {
         const v = window.localStorage.getItem('tfs_last_odo_closing');
         if (v !== null && v !== undefined) setLastClosingOdo(v);
       }
-    } catch (e) {}
+    } catch (e) { }
   }, []);
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export default function RepatriationTripSheet() {
         }
         const vJson = await vRes.json();
         setVehicles(Array.isArray(vJson.vehicles) ? vJson.vehicles : []);
-      } catch (e) {}
+      } catch (e) { }
       try {
         const token2 = getAccessToken();
         const dRes = await fetch(`${API_HOST}/api/drivers`, {
@@ -77,7 +78,7 @@ export default function RepatriationTripSheet() {
         }
         const dJson = await dRes.json();
         setDrivers(Array.isArray(dJson.drivers) ? dJson.drivers : []);
-      } catch (e) {}
+      } catch (e) { }
     })();
   }, []);
 
@@ -98,7 +99,7 @@ export default function RepatriationTripSheet() {
         if (json && json.success) {
           setLastClosingOdo(json.last_closing ?? '');
         }
-      } catch (e) {}
+      } catch (e) { }
     })();
   }, [form.vehicle_id]);
 
@@ -129,6 +130,10 @@ export default function RepatriationTripSheet() {
                 <input value={form.deceased_id} onChange={e => handleChange('deceased_id', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
               </div>
               <div>
+                <label className="text-sm font-semibold">Tag Number</label>
+                <input value={form.tag_number} onChange={e => handleChange('tag_number', e.target.value)} className="w-full px-4 py-2 border rounded-lg" placeholder="e.g. A123" />
+              </div>
+              <div>
                 <label className="text-sm font-semibold">Deceased Policy Number</label>
                 <input value={form.policy_number} onChange={e => handleChange('policy_number', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
               </div>
@@ -148,56 +153,56 @@ export default function RepatriationTripSheet() {
           </div>
 
           <div className="p-6">
-          <h2 className="text-lg font-bold text-red-800">Trip Information</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            <div>
-              <label className="text-sm font-semibold">Vehicle</label>
-              <select value={form.vehicle_id || ''} onChange={e => handleChange('vehicle_id', e.target.value)} className="w-full px-4 py-2 border rounded-lg">
-                <option value="">Select vehicle</option>
-                {vehicles.map(v => (
-                  <option key={v.id} value={v.id}>{v.reg_number} • {v.type}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-semibold">Driver</label>
-              <select value={form.driver_id || ''} onChange={e => handleChange('driver_id', e.target.value)} className="w-full px-4 py-2 border rounded-lg">
-                <option value="">Select driver</option>
-                {drivers.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-sm font-semibold">Collection Type</label>
-              <div className="flex items-center gap-6 mt-2">
-                <label className="inline-flex items-center gap-2">
-                  <input type="radio" name="collection_type" value="book" checked={form.collection_type === 'book'} onChange={e => handleChange('collection_type', e.target.value)} />
-                  <span>Book</span>
-                </label>
-                <label className="inline-flex items-center gap-2">
-                  <input type="radio" name="collection_type" value="private" checked={form.collection_type === 'private'} onChange={e => handleChange('collection_type', e.target.value)} />
-                  <span>Private</span>
-                </label>
+            <h2 className="text-lg font-bold text-red-800">Trip Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div>
+                <label className="text-sm font-semibold">Vehicle</label>
+                <select value={form.vehicle_id || ''} onChange={e => handleChange('vehicle_id', e.target.value)} className="w-full px-4 py-2 border rounded-lg">
+                  <option value="">Select vehicle</option>
+                  {vehicles.map(v => (
+                    <option key={v.id} value={v.id}>{v.reg_number} • {v.type}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-semibold">Driver</label>
+                <select value={form.driver_id || ''} onChange={e => handleChange('driver_id', e.target.value)} className="w-full px-4 py-2 border rounded-lg">
+                  <option value="">Select driver</option>
+                  {drivers.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-sm font-semibold">Collection Type</label>
+                <div className="flex items-center gap-6 mt-2">
+                  <label className="inline-flex items-center gap-2">
+                    <input type="radio" name="collection_type" value="book" checked={form.collection_type === 'book'} onChange={e => handleChange('collection_type', e.target.value)} />
+                    <span>Book</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input type="radio" name="collection_type" value="private" checked={form.collection_type === 'private'} onChange={e => handleChange('collection_type', e.target.value)} />
+                    <span>Private</span>
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-semibold">From</label>
+                <input value={form.from_location} onChange={e => handleChange('from_location', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+              </div>
+              <div>
+                <label className="text-sm font-semibold">Address</label>
+                <input value={form.from_address} onChange={e => handleChange('from_address', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+              </div>
+              <div>
+                <label className="text-sm font-semibold">To</label>
+                <input value={form.to_location} onChange={e => handleChange('to_location', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+              </div>
+              <div>
+                <label className="text-sm font-semibold">Address</label>
+                <input value={form.to_address} onChange={e => handleChange('to_address', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
               </div>
             </div>
-            <div>
-              <label className="text-sm font-semibold">From</label>
-              <input value={form.from_location} onChange={e => handleChange('from_location', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-            </div>
-            <div>
-              <label className="text-sm font-semibold">Address</label>
-              <input value={form.from_address} onChange={e => handleChange('from_address', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-            </div>
-            <div>
-              <label className="text-sm font-semibold">To</label>
-              <input value={form.to_location} onChange={e => handleChange('to_location', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-            </div>
-            <div>
-              <label className="text-sm font-semibold">Address</label>
-              <input value={form.to_address} onChange={e => handleChange('to_address', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-            </div>
-          </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div>
@@ -223,85 +228,87 @@ export default function RepatriationTripSheet() {
               </div>
             </div>
           </div>
-            <div className="p-6 border-t flex gap-3">
-              <button onClick={async () => {
-                try {
-                  const idVal = (form.deceased_id || '').trim();
-                  if (idVal && !/^\d{13}$/.test(idVal)) {
-                    alert('ID number must be exactly 13 digits');
-                    console.warn('Invalid ID number provided:', idVal);
-                    return;
-                  }
-                  const policyCandidate = (form.policy_number || '').trim() || (idVal && /^\d{13}$/.test(idVal) ? idVal : '');
-                  const payload = {
-                    vehicle_id: form.vehicle_id || null,
-                    driver_id: form.driver_id || null,
-                    case_id: null,
-                    deceased_name: form.deceased_name || '',
-                    deceased_id: form.deceased_id || '',
-                    policy_number: policyCandidate,
-                    family_contact_name: form.family_contact_name || '',
-                    family_contact_number: form.family_contact_number || '',
-                    date_of_death: form.date_of_death || '',
-                    from_location: form.from_location,
-                    from_address: form.from_address,
-                    to_location: form.to_location,
-                    to_address: form.to_address,
-                    odometer_closing: form.odometer_closing ? parseInt(form.odometer_closing) : null,
-                    time_out: form.time_out,
-                    time_in: form.time_in,
-                    notes: null,
-                    collection_type: form.collection_type || null,
-                    created_by: 'system'
-                  };
-                  const token = getAccessToken();
-                  const res = await fetch(`${API_HOST}/api/repatriation-trips`, {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      ...(token ? { Authorization: `Bearer ${token}` } : {})
-                    },
-                    body: JSON.stringify(payload)
-                  });
-                  const json = await res.json();
-                  if (json && json.success) {
-                    const last = json.last_closing ?? '';
-                    setLastClosingOdo(last);
-                    if (json.duplicates_found) {
-                      console.warn('Duplicate case detection info:', json.duplicate_info);
-                      alert(`Warning: Possible duplicate case detected. Matches by: ${Object.entries(json.duplicate_info || {}).filter(([_, v]) => v && v.count > 0).map(([k, v]) => `${k} (${v.count})`).join(', ')}`);
-                    }
-                    if (json.case_number) {
-                      console.log('Linked/Created case_number:', json.case_number);
-                    }
-                    alert(`Trip saved. KM traveled: ${json.trip.km_traveled ?? 'N/A'}`);
-                    setForm({
-                      deceased_name: '',
-                      deceased_id: '',
-                      policy_number: '',
-                      date_of_death: '',
-                      family_contact_name: '',
-                      family_contact_number: '',
-                      from_location: '',
-                      from_address: '',
-                      to_location: '',
-                      to_address: '',
-                      odometer_closing: '',
-                      time_out: '',
-                      time_in: '',
-                      vehicle_id: '',
-                      driver_id: '',
-                      collection_type: ''
-                    });
-                  } else {
-                    alert(`Error: ${json.error || 'Failed to save trip'}`);
-                  }
-                } catch (e) {
-                  alert('Error saving trip');
+          <div className="p-6 border-t flex gap-3">
+            <button onClick={async () => {
+              try {
+                const idVal = (form.deceased_id || '').trim();
+                if (idVal && !/^\d{13}$/.test(idVal)) {
+                  alert('ID number must be exactly 13 digits');
+                  console.warn('Invalid ID number provided:', idVal);
+                  return;
                 }
-              }} className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold">Save Trip</button>
-              <button onClick={handlePrint} className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold">Print</button>
-            </div>
+                const policyCandidate = (form.policy_number || '').trim() || (idVal && /^\d{13}$/.test(idVal) ? idVal : '');
+                const payload = {
+                  vehicle_id: form.vehicle_id || null,
+                  driver_id: form.driver_id || null,
+                  case_id: null,
+                  deceased_name: form.deceased_name || '',
+                  deceased_id: form.deceased_id || '',
+                  policy_number: policyCandidate,
+                  family_contact_name: form.family_contact_name || '',
+                  family_contact_number: form.family_contact_number || '',
+                  date_of_death: form.date_of_death || '',
+                  from_location: form.from_location,
+                  from_address: form.from_address,
+                  to_location: form.to_location,
+                  to_address: form.to_address,
+                  odometer_closing: form.odometer_closing ? parseInt(form.odometer_closing) : null,
+                  time_out: form.time_out,
+                  time_in: form.time_in,
+                  notes: null,
+                  collection_type: form.collection_type || null,
+                  tag_number: form.tag_number || null,
+                  created_by: 'system'
+                };
+                const token = getAccessToken();
+                const res = await fetch(`${API_HOST}/api/repatriation-trips`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {})
+                  },
+                  body: JSON.stringify(payload)
+                });
+                const json = await res.json();
+                if (json && json.success) {
+                  const last = json.last_closing ?? '';
+                  setLastClosingOdo(last);
+                  if (json.duplicates_found) {
+                    console.warn('Duplicate case detection info:', json.duplicate_info);
+                    alert(`Warning: Possible duplicate case detected. Matches by: ${Object.entries(json.duplicate_info || {}).filter(([_, v]) => v && v.count > 0).map(([k, v]) => `${k} (${v.count})`).join(', ')}`);
+                  }
+                  if (json.case_number) {
+                    console.log('Linked/Created case_number:', json.case_number);
+                  }
+                  alert(`Trip saved. KM traveled: ${json.trip.km_traveled ?? 'N/A'}`);
+                  setForm({
+                    deceased_name: '',
+                    deceased_id: '',
+                    policy_number: '',
+                    date_of_death: '',
+                    family_contact_name: '',
+                    family_contact_number: '',
+                    from_location: '',
+                    from_address: '',
+                    to_location: '',
+                    to_address: '',
+                    odometer_closing: '',
+                    time_out: '',
+                    time_in: '',
+                    vehicle_id: '',
+                    driver_id: '',
+                    collection_type: '',
+                    tag_number: ''
+                  });
+                } else {
+                  alert(`Error: ${json.error || 'Failed to save trip'}`);
+                }
+              } catch (e) {
+                alert('Error saving trip');
+              }
+            }} className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold">Save Trip</button>
+            <button onClick={handlePrint} className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold">Print</button>
+          </div>
         </div>
       </div>
 
@@ -315,6 +322,7 @@ export default function RepatriationTripSheet() {
               <tbody>
                 <tr><td className="border p-2 w-1/2">DECEASED NAME:</td><td className="border p-2">{form.deceased_name}</td></tr>
                 <tr><td className="border p-2">DECEASED ID NUMBER:</td><td className="border p-2">{form.deceased_id}</td></tr>
+                <tr><td className="border p-2">TAG NUMBER:</td><td className="border p-2">{form.tag_number}</td></tr>
                 <tr><td className="border p-2">DECEASED POLICY NUMBER:</td><td className="border p-2">{form.policy_number}</td></tr>
                 <tr><td className="border p-2">DATE OF DEATH:</td><td className="border p-2">{form.date_of_death}</td></tr>
                 <tr><td className="border p-2">FAMILY MEMBER CONTACTS:</td><td className="border p-2">NAME: {form.family_contact_name} • NUMBER: {form.family_contact_number}</td></tr>
