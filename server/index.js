@@ -25,7 +25,12 @@ const claimDraftsRoutes = require('./routes/claimDrafts');
 const { requireAuth, requireMinRole } = require('./middleware/auth');
 const authRoutes = require('./routes/auth');
 
+const { scheduleWeeklyReport } = require('./cron/weeklyReport');
+
 const app = express();
+
+// Initialize Scheduler
+scheduleWeeklyReport();
 
 // Initialize Supabase client for routes that need it
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -100,7 +105,7 @@ app.use((req, res) => {
 });
 
 // Start server
-const port = 5001;
+const port = process.env.PORT || 5001;
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
   console.log(`📍 API endpoints: http://localhost:${port}/api`);

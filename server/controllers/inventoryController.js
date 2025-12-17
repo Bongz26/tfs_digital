@@ -1,5 +1,6 @@
 const { query, getClient } = require('../config/db');
 const nodemailer = require('nodemailer');
+const { sendWeeklyReportLogic } = require('../cron/weeklyReport');
 
 async function maybeNotifyLowStock(threshold = 1) {
     try {
@@ -198,7 +199,7 @@ exports.updateStockQuantity = async (req, res) => {
         }
 
         const is_low_stock = stock_quantity <= itemResult.rows[0].low_stock_threshold;
-        try { await maybeNotifyLowStock(1); } catch (_) {}
+        try { await maybeNotifyLowStock(1); } catch (_) { }
         res.json({ success: true, stock_quantity, is_low_stock });
     } catch (err) {
         console.error('❌ Error updating stock:', err);
@@ -235,7 +236,7 @@ exports.adjustStock = async (req, res) => {
         }
 
         const is_low_stock = new_quantity <= itemResult.rows[0].low_stock_threshold;
-        try { await maybeNotifyLowStock(1); } catch (_) {}
+        try { await maybeNotifyLowStock(1); } catch (_) { }
         res.json({ success: true, new_quantity, is_low_stock });
     } catch (err) {
         console.error('❌ Error adjusting stock:', err);
@@ -261,9 +262,9 @@ exports.getStockMovements = async (req, res) => {
                 try {
                     await query(`ALTER TABLE stock_movements ADD COLUMN case_id INT REFERENCES cases(id)`);
                     hasCaseId = true;
-                } catch (_) {}
+                } catch (_) { }
             }
-        } catch (_) {}
+        } catch (_) { }
         const params = [];
         let where = 'WHERE 1=1';
         if (category && category !== 'all') {
@@ -338,9 +339,9 @@ exports.getCoffinUsageByCase = async (req, res) => {
                       )
                     `);
                     hasMovementsTable = true;
-                } catch (_) {}
+                } catch (_) { }
             }
-        } catch (_) {}
+        } catch (_) { }
 
         if (!hasMovementsTable) {
             return res.json({ success: true, cases: [] });
@@ -361,17 +362,20 @@ exports.getCoffinUsageByCase = async (req, res) => {
                 try {
                     await query(`ALTER TABLE stock_movements ADD COLUMN case_id INT REFERENCES cases(id)`);
                     hasCaseId = true;
-                } catch (_) {}
+                } catch (_) { }
             }
-        } catch (_) {}
+        } catch (_) { }
 
         if (!hasCaseId) {
             return res.json({ success: true, cases: [] });
         }
 
-        const { from, to, limit = 200 } = req.query;
+        const { from, to, limit = 200, includeArchived } = req.query;
         const params = [];
-        const dateWhere = ["c.status NOT IN ('archived','cancelled')"];
+        const dateWhere = [];
+        if (String(includeArchived).toLowerCase() !== 'true') {
+            dateWhere.push("c.status NOT IN ('archived','cancelled')");
+        }
         if (from) { params.push(from); dateWhere.push(`c.funeral_date >= $${params.length}`); }
         if (to) { params.push(to); dateWhere.push(`c.funeral_date <= $${params.length}`); }
         const sql = `
@@ -402,19 +406,23 @@ exports.getCoffinUsageByCase = async (req, res) => {
                 WHERE inv2.category = 'coffin'
                   AND (
                     c.casket_type IS NOT NULL AND (
-                      UPPER(inv2.name) = UPPER(c.casket_type) OR UPPER(inv2.model) = UPPER(c.casket_type)
-                      OR UPPER(inv2.name) LIKE '%' || UPPER(c.casket_type) || '%'
-                      OR UPPER(c.casket_type) LIKE '%' || UPPER(inv2.name) || '%'
-                      OR UPPER(inv2.model) LIKE '%' || UPPER(c.casket_type) || '%'
-                      OR UPPER(c.casket_type) LIKE '%' || UPPER(inv2.model) || '%'
+                      UPPER(TRIM(inv2.name)) = UPPER(TRIM(c.casket_type))
+                      OR UPPER(TRIM(inv2.model)) = UPPER(TRIM(c.casket_type))
+                      OR UPPER(REGEXP_REPLACE(inv2.name,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE(c.casket_type,'\\s+','', 'g'))
+                      OR UPPER(REGEXP_REPLACE(inv2.model,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE(c.casket_type,'\\s+','', 'g'))
+                      OR UPPER(inv2.name) LIKE '%' || UPPER(TRIM(c.casket_type)) || '%'
+                      OR UPPER(TRIM(c.casket_type)) LIKE '%' || UPPER(inv2.name) || '%'
+                      OR UPPER(inv2.model) LIKE '%' || UPPER(TRIM(c.casket_type)) || '%'
+                      OR UPPER(TRIM(c.casket_type)) LIKE '%' || UPPER(inv2.model) || '%'
                     )
                   )
                   AND (
                     c.casket_colour IS NULL
                     OR inv2.color IS NULL
-                    OR UPPER(inv2.color) = UPPER(c.casket_colour)
-                    OR UPPER(inv2.color) LIKE '%' || UPPER(c.casket_colour) || '%'
-                    OR UPPER(c.casket_colour) LIKE '%' || UPPER(inv2.color) || '%'
+                    OR UPPER(TRIM(inv2.color)) = UPPER(TRIM(c.casket_colour))
+                    OR UPPER(REGEXP_REPLACE(inv2.color,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE(c.casket_colour,'\\s+','', 'g'))
+                    OR UPPER(inv2.color) LIKE '%' || UPPER(TRIM(c.casket_colour)) || '%'
+                    OR UPPER(TRIM(c.casket_colour)) LIKE '%' || UPPER(inv2.color) || '%'
                   )
                 ORDER BY inv2.stock_quantity DESC NULLS LAST
                 LIMIT 1
@@ -431,13 +439,16 @@ exports.getCoffinUsageByCase = async (req, res) => {
               c.id AS case_id,
               c.case_number,
               c.deceased_name,
-              COALESCE(SUM(u.qty_sum),0) AS total_coffins,
-              COALESCE(json_agg(json_build_object('name', i.name, 'color', i.color, 'quantity', u.qty_sum)) FILTER (WHERE i.id IS NOT NULL), '[]'::json) AS items
+              (COALESCE(SUM(u.qty_sum),0) + CASE WHEN COALESCE(SUM(u.qty_sum),0) = 0 AND c.casket_type IS NOT NULL THEN 1 ELSE 0 END) AS total_coffins,
+              CASE 
+                WHEN COALESCE(SUM(u.qty_sum),0) = 0 AND c.casket_type IS NOT NULL THEN json_build_array(json_build_object('name', c.casket_type, 'color', c.casket_colour, 'quantity', 1))
+                ELSE COALESCE(json_agg(json_build_object('name', i.name, 'color', i.color, 'quantity', u.qty_sum)) FILTER (WHERE i.id IS NOT NULL), '[]'::json)
+              END AS items
             FROM cases c
             LEFT JOIN usage u ON u.case_id = c.id
             LEFT JOIN inventory i ON i.id = u.inventory_id
             ${dateWhere.length ? 'WHERE ' + dateWhere.join(' AND ') : ''}
-            GROUP BY c.id, c.case_number, c.deceased_name
+            GROUP BY c.id, c.case_number, c.deceased_name, c.casket_type, c.casket_colour
             ORDER BY c.funeral_date DESC NULLS LAST, c.created_at DESC
             LIMIT ${Math.max(1, Math.min(parseInt(limit, 10) || 200, 1000))}
         `;
@@ -478,9 +489,9 @@ module.exports.getCoffinUsageRaw = async (req, res) => {
                       )
                     `);
                     hasMovementsTable = true;
-                } catch (_) {}
+                } catch (_) { }
             }
-        } catch (_) {}
+        } catch (_) { }
 
         if (!hasMovementsTable) {
             return res.json({ success: true, items: [] });
@@ -501,9 +512,9 @@ module.exports.getCoffinUsageRaw = async (req, res) => {
                 try {
                     await query(`ALTER TABLE stock_movements ADD COLUMN case_id INT REFERENCES cases(id)`);
                     hasCaseId = true;
-                } catch (_) {}
+                } catch (_) { }
             }
-        } catch (_) {}
+        } catch (_) { }
 
         const { from, to, case_id, case_number, limit = 500 } = req.query;
         const params = [];
@@ -615,11 +626,14 @@ exports.getPublicCoffinUsageRaw = async (req, res) => {
               ) AS exists
             `);
             hasMovementsTable = !!(t.rows[0] && t.rows[0].exists);
-        } catch (_) {}
+        } catch (_) { }
 
-        const { from, to, case_number, limit = 500 } = req.query;
+        const { from, to, case_number, limit = 500, includeArchived } = req.query;
         const params = [];
-        const whereMov = ["inv.category = 'coffin'", "(c.status IS NULL OR c.status NOT IN ('archived','cancelled'))"];
+        const whereMov = ["inv.category = 'coffin'"];
+        if (String(includeArchived).toLowerCase() !== 'true') {
+            whereMov.push("(c.status IS NULL OR c.status NOT IN ('archived','cancelled'))");
+        }
         if (hasMovementsTable) {
             whereMov.push("(sm.movement_type = 'sale' OR (sm.movement_type = 'adjustment' AND sm.quantity_change < 0))");
             if (from) { params.push(from); whereMov.push(`sm.created_at >= $${params.length}`); }
@@ -627,7 +641,10 @@ exports.getPublicCoffinUsageRaw = async (req, res) => {
             if (case_number) { params.push(case_number); whereMov.push(`c.case_number = $${params.length}`); }
         }
 
-        const whereInf = ["c.status NOT IN ('archived','cancelled')"];
+        const whereInf = [];
+        if (String(includeArchived).toLowerCase() !== 'true') {
+            whereInf.push("c.status NOT IN ('archived','cancelled')");
+        }
         if (from) { params.push(from); whereInf.push(`c.funeral_date >= $${params.length}`); }
         if (to) { params.push(to); whereInf.push(`c.funeral_date <= $${params.length}`); }
         if (case_number) { params.push(case_number); whereInf.push(`c.case_number = $${params.length}`); }
@@ -668,19 +685,23 @@ exports.getPublicCoffinUsageRaw = async (req, res) => {
                 WHERE inv2.category = 'coffin'
                   AND (
                     c.casket_type IS NOT NULL AND (
-                      UPPER(inv2.name) = UPPER(c.casket_type) OR UPPER(inv2.model) = UPPER(c.casket_type)
-                      OR UPPER(inv2.name) LIKE '%' || UPPER(c.casket_type) || '%'
-                      OR UPPER(c.casket_type) LIKE '%' || UPPER(inv2.name) || '%'
-                      OR UPPER(inv2.model) LIKE '%' || UPPER(c.casket_type) || '%'
-                      OR UPPER(c.casket_type) LIKE '%' || UPPER(inv2.model) || '%'
+                      UPPER(TRIM(inv2.name)) = UPPER(TRIM(c.casket_type))
+                      OR UPPER(TRIM(inv2.model)) = UPPER(TRIM(c.casket_type))
+                      OR UPPER(REGEXP_REPLACE(inv2.name,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE(c.casket_type,'\\s+','', 'g'))
+                      OR UPPER(REGEXP_REPLACE(inv2.model,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE(c.casket_type,'\\s+','', 'g'))
+                      OR UPPER(inv2.name) LIKE '%' || UPPER(TRIM(c.casket_type)) || '%'
+                      OR UPPER(TRIM(c.casket_type)) LIKE '%' || UPPER(inv2.name) || '%'
+                      OR UPPER(inv2.model) LIKE '%' || UPPER(TRIM(c.casket_type)) || '%'
+                      OR UPPER(TRIM(c.casket_type)) LIKE '%' || UPPER(inv2.model) || '%'
                     )
                   )
                   AND (
                     c.casket_colour IS NULL
                     OR inv2.color IS NULL
-                    OR UPPER(inv2.color) = UPPER(c.casket_colour)
-                    OR UPPER(inv2.color) LIKE '%' || UPPER(c.casket_colour) || '%'
-                    OR UPPER(c.casket_colour) LIKE '%' || UPPER(inv2.color) || '%'
+                    OR UPPER(TRIM(inv2.color)) = UPPER(TRIM(c.casket_colour))
+                    OR UPPER(REGEXP_REPLACE(inv2.color,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE(c.casket_colour,'\\s+','', 'g'))
+                    OR UPPER(inv2.color) LIKE '%' || UPPER(TRIM(c.casket_colour)) || '%'
+                    OR UPPER(TRIM(c.casket_colour)) LIKE '%' || UPPER(inv2.color) || '%'
                   )
                 ORDER BY inv2.stock_quantity DESC NULLS LAST
                 LIMIT 1
@@ -742,9 +763,9 @@ exports.backfillCoffinMovementsToCases = async (req, res) => {
                       )
                     `);
                     hasMovementsTable = true;
-                } catch (_) {}
+                } catch (_) { }
             }
-        } catch (_) {}
+        } catch (_) { }
 
         if (!hasMovementsTable) {
             return res.json({ success: false, error: 'Missing stock_movements table' });
@@ -765,9 +786,9 @@ exports.backfillCoffinMovementsToCases = async (req, res) => {
                 try {
                     await query(`ALTER TABLE stock_movements ADD COLUMN case_id INT REFERENCES cases(id)`);
                     hasCaseId = true;
-                } catch (_) {}
+                } catch (_) { }
             }
-        } catch (_) {}
+        } catch (_) { }
 
         const { limit = 500, dry_run } = req.query;
         const movs = await query(`
@@ -843,6 +864,69 @@ exports.backfillCoffinMovementsToCases = async (req, res) => {
         res.json({ success: true, processed: (movs.rows || []).length, updated_count: updated.length, updated, unmatched_count: unmatched.length, unmatched });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Failed to backfill coffin movements', details: err.message });
+    }
+};
+
+exports.createCoffinMovementsForCases = async (req, res) => {
+    try {
+        const { case_number, dry_run, limit = 200 } = req.body || {};
+        const params = [];
+        const where = ["(c.casket_type IS NOT NULL OR c.casket_colour IS NOT NULL)"];
+        if (case_number) { params.push(case_number); where.push(`c.case_number = $${params.length}`); }
+        where.push(`NOT EXISTS (SELECT 1 FROM stock_movements sm WHERE sm.case_id = c.id AND (sm.movement_type = 'sale' OR (sm.movement_type = 'adjustment' AND sm.quantity_change < 0)))`);
+
+        const casesRes = await query(`
+            SELECT c.id, c.case_number, c.deceased_name, c.casket_type, c.casket_colour
+            FROM cases c
+            WHERE ${where.join(' AND ')}
+            ORDER BY c.updated_at DESC NULLS LAST, c.created_at DESC
+            LIMIT ${Math.max(1, Math.min(parseInt(limit, 10) || 200, 1000))}
+        `, params);
+
+        const processed = [];
+        const unmatched = [];
+
+        for (const c of (casesRes.rows || [])) {
+            const nameStr = String(c.casket_type || '').trim();
+            const colorStr = String(c.casket_colour || '').trim();
+            if (!nameStr) { unmatched.push({ case_id: c.id, case_number: c.case_number, reason: 'Missing casket_type' }); continue; }
+            let inv = await query(
+                `SELECT id, name, model, color FROM inventory WHERE category='coffin' AND (
+                    UPPER(TRIM(name)) = UPPER(TRIM($1))
+                    OR UPPER(TRIM(model)) = UPPER(TRIM($1))
+                    OR UPPER(REGEXP_REPLACE(name,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE($1,'\\s+','', 'g'))
+                    OR UPPER(REGEXP_REPLACE(model,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE($1,'\\s+','', 'g'))
+                    OR UPPER(name) LIKE '%' || UPPER(TRIM($1)) || '%'
+                    OR UPPER(TRIM($1)) LIKE '%' || UPPER(name) || '%'
+                    OR UPPER(model) LIKE '%' || UPPER(TRIM($1)) || '%'
+                    OR UPPER(TRIM($1)) LIKE '%' || UPPER(model) || '%'
+                )
+                AND (
+                    $2 IS NULL OR color IS NULL OR UPPER(TRIM(color)) = UPPER(TRIM($2))
+                    OR UPPER(REGEXP_REPLACE(color,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE($2,'\\s+','', 'g'))
+                    OR UPPER(color) LIKE '%' || UPPER(TRIM($2)) || '%'
+                    OR UPPER(TRIM($2)) LIKE '%' || UPPER(color) || '%'
+                )
+                ORDER BY id DESC LIMIT 1`,
+                [nameStr, colorStr || null]
+            );
+            const item = inv.rows[0];
+            if (!item) { unmatched.push({ case_id: c.id, case_number: c.case_number, reason: 'No inventory match', casket_type: nameStr, casket_colour: colorStr || null }); continue; }
+            if (String(dry_run).toLowerCase() === 'true') {
+                processed.push({ case_id: c.id, case_number: c.case_number, inventory_id: item.id, dry_run: true });
+            } else {
+                await query(
+                    `INSERT INTO stock_movements (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
+                     VALUES ($1,$2,'sale',-1,NULL,NULL,'Backfill from case fields', $3)`,
+                    [item.id, c.id, (req.user?.email) || 'system']
+                );
+                processed.push({ case_id: c.id, case_number: c.case_number, inventory_id: item.id });
+            }
+        }
+
+        res.json({ success: true, processed_count: processed.length, processed, unmatched_count: unmatched.length, unmatched });
+    } catch (err) {
+        res.status(500).json({ success: false, error: 'Failed to create backfill movements', details: err.message });
     }
 };
 
@@ -1094,7 +1178,7 @@ exports.completeStockTake = async (req, res) => {
         );
 
         await client.query('COMMIT');
-        try { await maybeNotifyLowStock(1); } catch (_) {}
+        try { await maybeNotifyLowStock(1); } catch (_) { }
 
         res.json({ success: true, message: 'Stock take completed', items_updated: items.rows.filter(i => i.physical_quantity !== null).length });
     } catch (err) {
@@ -1137,12 +1221,12 @@ exports.createInventoryItem = async (req, res) => {
         res.status(201).json({ success: true, item: result.rows[0] });
     } catch (err) {
         console.error('❌ Error creating inventory item:', err);
-        
+
         // Handle duplicate SKU error
         if (err.code === '23505' && err.constraint?.includes('sku')) {
             return res.status(400).json({ success: false, error: 'An item with this SKU already exists' });
         }
-        
+
         res.status(500).json({ success: false, error: 'Failed to create inventory item', details: err.message });
     }
 };
@@ -1207,7 +1291,7 @@ exports.getInventoryItem = async (req, res) => {
 
     try {
         const result = await query('SELECT * FROM inventory WHERE id = $1', [id]);
-        
+
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Inventory item not found' });
         }
@@ -1268,8 +1352,8 @@ exports.replaceInventoryWithPreset = async (req, res) => {
 
         await query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS model VARCHAR(100)`);
         await query(`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS color VARCHAR(50)`);
-        try { await query(`CREATE INDEX IF NOT EXISTS idx_inventory_model_color ON inventory (UPPER(model), UPPER(color))`); } catch (_) {}
-        try { await query(`ALTER TABLE inventory ALTER COLUMN low_stock_threshold SET DEFAULT 1`); } catch (_) {}
+        try { await query(`CREATE INDEX IF NOT EXISTS idx_inventory_model_color ON inventory (UPPER(model), UPPER(color))`); } catch (_) { }
+        try { await query(`ALTER TABLE inventory ALTER COLUMN low_stock_threshold SET DEFAULT 1`); } catch (_) { }
 
         const items = [
             { model: 'Pierce Dome', color: null, qty: 3, category: 'coffin' },
@@ -1323,5 +1407,20 @@ exports.replaceInventoryWithPreset = async (req, res) => {
     } catch (err) {
         console.error('❌ Error replacing inventory:', err);
         res.status(500).json({ success: false, error: 'Failed to replace inventory', details: err.message });
+    }
+};
+
+exports.sendWeeklyReportManual = async (req, res) => {
+    try {
+        const { days, startDate, endDate } = req.body;
+        // Pass the whole object as options
+        const result = await sendWeeklyReportLogic({ days, startDate, endDate });
+        if (result.success) {
+            res.json({ success: true, message: result.message });
+        } else {
+            res.status(500).json({ success: false, error: result.error || result.message });
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
 };

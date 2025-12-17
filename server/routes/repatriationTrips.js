@@ -9,8 +9,8 @@ router.get('/', async (req, res) => {
     let sql = 'SELECT * FROM repatriation_trips';
     const params = [];
     const where = [];
-    if (caseId) { where.push('case_id = $' + (params.push(parseInt(caseId))) ); }
-    if (vehicleId) { where.push('vehicle_id = $' + (params.push(parseInt(vehicleId))) ); }
+    if (caseId) { where.push('case_id = $' + (params.push(parseInt(caseId)))); }
+    if (vehicleId) { where.push('vehicle_id = $' + (params.push(parseInt(vehicleId)))); }
     if (where.length) sql += ' WHERE ' + where.join(' AND ');
     sql += ' ORDER BY created_at DESC';
     const result = await query(sql, params);
@@ -66,7 +66,8 @@ router.post('/', async (req, res) => {
       family_contact_number,
       date_of_death,
       policy_number,
-      collection_type
+      collection_type,
+      tag_number
     } = req.body;
 
     if (!vehicle_id || odometer_closing === undefined || odometer_closing === null) {
@@ -96,7 +97,7 @@ router.post('/', async (req, res) => {
         );
         duplicateInfo.by_name_contact.count = c3.rows[0]?.c || 0;
       }
-    } catch (e) {}
+    } catch (e) { }
 
     let finalCaseId = null;
     let finalCaseNumber = null;
@@ -212,8 +213,8 @@ router.post('/', async (req, res) => {
 
     const insertRes = await query(
       `INSERT INTO repatriation_trips 
-       (case_id, vehicle_id, driver_id, from_location, from_address, to_location, to_address, odometer_closing, km_traveled, time_out, time_in, notes, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       (case_id, vehicle_id, driver_id, from_location, from_address, to_location, to_address, odometer_closing, km_traveled, time_out, time_in, notes, created_by, tag_number)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
       [
         finalCaseId,
@@ -226,9 +227,10 @@ router.post('/', async (req, res) => {
         closingVal,
         kmTraveled,
         time_out || null,
-        time_in || null,
+        time_in,
         finalNotes,
-        created_by || null
+        created_by || null,
+        tag_number || null // Added tag_number
       ]
     );
 

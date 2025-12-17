@@ -12,6 +12,7 @@ router.get('/movements', inventoryController.getStockMovements);
 router.get('/coffin-usage-by-case', inventoryController.getCoffinUsageByCase);
 router.get('/coffin-usage-raw', inventoryController.getCoffinUsageRaw);
 router.post('/coffin-usage/backfill', inventoryController.backfillCoffinMovementsToCases);
+router.post('/coffin-usage/backfill/create', inventoryController.createCoffinMovementsForCases);
 
 // POST create new inventory item
 router.post('/', inventoryController.createInventoryItem);
@@ -51,5 +52,8 @@ router.post('/stock-take/:id/cancel', inventoryController.cancelStockTake);
 
 // POST complete stock take
 router.post('/stock-take/:id/complete', inventoryController.completeStockTake);
+
+// POST email weekly report manual trigger
+router.post('/reports/email', inventoryController.sendWeeklyReportManual);
 
 module.exports = router;

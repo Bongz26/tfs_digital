@@ -80,7 +80,7 @@ exports.searchCases = async (req, res) => {
                 const { data, error } = await supabase
                     .from('cases')
                     .select('id,case_number,deceased_name,deceased_id,policy_number,status,funeral_date,funeral_time')
-                    .or(`deceased_id.ilike.${like},case_number.ilike.${like},policy_number.ilike.${like}`)
+                    .or(`deceased_id.ilike.${like},case_number.ilike.${like},policy_number.ilike.${like},deceased_name.ilike.${like}`)
                     .order('created_at', { ascending: false })
                     .limit(limit);
                 if (error) throw error;
@@ -97,6 +97,7 @@ exports.searchCases = async (req, res) => {
             WHERE deceased_id ILIKE $1
                OR case_number ILIKE $1
                OR policy_number ILIKE $1
+               OR deceased_name ILIKE $1
             ORDER BY created_at DESC
             LIMIT $2
         `;
@@ -197,9 +198,11 @@ exports.getAllCases = async (req, res) => {
 exports.createCase = async (req, res) => {
     console.log('📥 [POST /api/cases] Request received at', new Date().toISOString());
     console.log('📦 [POST /api/cases] Request body keys:', Object.keys(req.body));
-    console.log('📦 [POST /api/cases] Delivery fields:', {
+    console.log('📦 [POST /api/cases] Date fields:', {
         delivery_date: req.body.delivery_date,
-        delivery_time: req.body.delivery_time
+        service_date: req.body.service_date,
+        funeral_date: req.body.funeral_date,
+        intake_day: req.body.intake_day
     });
 
     const {
@@ -221,7 +224,8 @@ exports.createCase = async (req, res) => {
         cover_amount, cashback_amount, amount_to_bank,
         legacy_plan_name,
         status,
-        burial_place
+        burial_place,
+        branch
     } = req.body;
 
     try {
@@ -387,68 +391,104 @@ exports.createCase = async (req, res) => {
             const nameStr = String(casket_type || '').trim();
             const colorStr = String(casket_colour || '').trim();
             if (nameStr) {
-                let inv;
-                if (colorStr) {
-                    inv = await query(
-                        "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) ORDER BY stock_quantity DESC LIMIT 1",
-                        [nameStr, colorStr]
-                    );
-                } else {
-                    inv = await query(
-                        "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) ORDER BY stock_quantity DESC LIMIT 1",
-                        [nameStr]
-                    );
+                // Determine branch to check
+                const selectedBranch = (branch || 'Head Office').trim();
+
+                // Map 'Head Office' to its sub-locations for search priority
+                let locationsToCheck = [selectedBranch];
+                if (selectedBranch === 'Head Office') {
+                    locationsToCheck = ['HQ Storeroom & showroom', 'Manekeng', 'Manekeng Showroom'];
                 }
-                if (inv.rows.length === 0) {
-                    let fallback;
+
+                let inv = { rows: [] };
+                let targetBranch = selectedBranch;
+
+                // Try finding item in each potential location (in order)
+                for (const loc of locationsToCheck) {
+                    targetBranch = loc;
+                    // Query matching Name/Color AND Location
                     if (colorStr) {
-                        fallback = await query(
-                            "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) ORDER BY stock_quantity DESC LIMIT 1",
-                            [nameStr, colorStr]
+                        inv = await query(
+                            "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) AND location = $3 LIMIT 1",
+                            [nameStr, colorStr, loc]
                         );
                     } else {
-                        fallback = await query(
-                            "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) ORDER BY stock_quantity DESC LIMIT 1",
-                            [nameStr]
+                        inv = await query(
+                            "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) AND location = $2 LIMIT 1",
+                            [nameStr, loc]
                         );
                     }
-                    inv = fallback;
+
+                    if (inv.rows.length === 0) {
+                        // Fallback: Try Model Name matches in same branch
+                        if (colorStr) {
+                            inv = await query(
+                                "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) AND location = $3 LIMIT 1",
+                                [nameStr, colorStr, loc]
+                            );
+                        } else {
+                            inv = await query(
+                                "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) AND location = $2 LIMIT 1",
+                                [nameStr, loc]
+                            );
+                        }
+                    }
+
+                    if (inv.rows.length > 0) break; // Found it!
                 }
-                if (inv.rows.length) {
+
+                if (inv.rows.length > 0) {
                     const item = inv.rows[0];
                     const previous = item.stock_quantity || 0;
-                    const nextQty = previous > 0 ? previous - 1 : 0;
+                    const nextQty = previous - 1; // Allow negative stock as per system behavior
+
                     await query('UPDATE inventory SET stock_quantity=$1, updated_at=NOW() WHERE id=$2', [nextQty, item.id]);
+
+                    // Alert if stock goes negative or was already low
+                    if (nextQty < 0) {
+                        created.stock_warning = `Stock for ${nameStr} at ${targetBranch} is now negative (${nextQty}).`;
+                    }
+
                     try {
                         await query(
                             `INSERT INTO stock_movements (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
                              VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
                             [item.id, created.id, 'sale', -1, previous, nextQty, 'Case consumption', (req.user?.email) || 'system']
                         );
-                    } catch (_) {}
-                    try {
-                        const to = process.env.INVENTORY_ALERTS_TO || process.env.ALERTS_TO || process.env.AIRTIME_OPERATOR_EMAIL;
-                        const host = process.env.SMTP_HOST;
-                        const port = parseInt(process.env.SMTP_PORT || '587', 10);
-                        const user = process.env.SMTP_USER;
-                        const pass = process.env.SMTP_PASS;
-                        if (to && host && user && pass) {
-                            const low = await query(`
+                    } catch (_) { }
+                } else {
+                    // Item not found in any valid location
+                    created.stock_warning = `Stock item '${nameStr}' not found in inventory for ${selectedBranch}. Please add it to stock.`;
+                    console.warn(`⚠️ Stock item '${nameStr}' not found at ${selectedBranch} for case ${created.case_number}`);
+                }
+            }
+        } catch (e) {
+            console.warn('Error handling stock deduction:', e);
+            created.stock_warning = 'Failed to process stock deduction.';
+        }
+        try {
+            const to = process.env.INVENTORY_ALERTS_TO || process.env.ALERTS_TO || process.env.AIRTIME_OPERATOR_EMAIL;
+            const host = process.env.SMTP_HOST;
+            const port = parseInt(process.env.SMTP_PORT || '587', 10);
+            const user = process.env.SMTP_USER;
+            const pass = process.env.SMTP_PASS;
+            if (to && host && user && pass) {
+                const low = await query(`
                                 SELECT id, name, category, sku, stock_quantity, COALESCE(reserved_quantity,0) AS reserved_quantity,
                                        low_stock_threshold, location, model, color
                                 FROM inventory
                                 ORDER BY category, name
                             `);
-                            const items = (low.rows || []).map(r => ({
-                                ...r,
-                                available_quantity: (r.stock_quantity || 0) - (r.reserved_quantity || 0)
-                            })).filter(r => r.available_quantity <= 1);
-                            if (items.length) {
-                                const nodemailer = require('nodemailer');
-                                const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
-                                const from = process.env.ALERTS_FROM || user;
-                                const subject = `Low Stock Alert: ${items.length} item(s) at qty ≤ 1`;
-                                const htmlRows = items.map(i => `
+                const items = (low.rows || []).map(r => ({
+                    ...r,
+                    available_quantity: (r.stock_quantity || 0) - (r.reserved_quantity || 0)
+                })).filter(r => r.available_quantity <= 1);
+                if (items.length) {
+                    const nodemailer = require('nodemailer');
+                    const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+                    const from = process.env.ALERTS_FROM || user;
+                    const subject = `Low Stock Alert: ${items.length} item(s) at qty ≤ 1`;
+                    const htmlRows = items.map(i => `
                                     <tr>
                                       <td style="padding:6px;border:1px solid #ddd;">${i.name}${i.color ? ' • ' + i.color : ''}</td>
                                       <td style="padding:6px;border:1px solid #ddd;">${i.category}</td>
@@ -458,7 +498,7 @@ exports.createCase = async (req, res) => {
                                       <td style="padding:6px;border:1px solid #ddd;">Threshold ${i.low_stock_threshold}</td>
                                     </tr>
                                 `).join('');
-                                const html = `
+                    const html = `
                                   <div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;">
                                     <p>Low stock items at or below 1 available:</p>
                                     <table style="border-collapse:collapse;min-width:520px;">
@@ -478,35 +518,35 @@ exports.createCase = async (req, res) => {
                                     </table>
                                   </div>
                                 `;
-                                const text = items.map(i => `${i.name} ${i.color || ''} | ${i.category} | stock=${i.stock_quantity} reserved=${i.reserved_quantity} available=${i.available_quantity} threshold=${i.low_stock_threshold}`).join('\n');
-                                await transporter.sendMail({ from, to, subject, text, html });
-                            }
-                        }
-                    } catch (_) {}
+                    const text = items.map(i => `${i.name} ${i.color || ''} | ${i.category} | stock=${i.stock_quantity} reserved=${i.reserved_quantity} available=${i.available_quantity} threshold=${i.low_stock_threshold}`).join('\n');
+                    await transporter.sendMail({ from, to, subject, text, html });
                 }
             }
-        } catch (_) {}
-
-        try {
-            if (policy_number) {
-                await query('DELETE FROM claim_drafts WHERE policy_number = $1', [policy_number]);
-            }
-        } catch (_) {}
-        res.json({ success: true, case: created });
-    } catch (err) {
-        console.error('❌ [POST /api/cases] Error creating case:', err);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to create case',
-            details: err.message,
-            code: err.code,
-            hint: err.code === '42703'
-                ? 'Missing column in database. Run migration: ALTER TABLE cases ADD COLUMN delivery_date DATE; ALTER TABLE cases ADD COLUMN delivery_time TIME;'
-                : err.code === '23502'
-                    ? 'Missing required field value'
-                    : undefined
-        });
+        } catch (_) { }
     }
+            }
+        } catch (_) { }
+
+try {
+    if (policy_number) {
+        await query('DELETE FROM claim_drafts WHERE policy_number = $1', [policy_number]);
+    }
+} catch (_) { }
+res.json({ success: true, case: created });
+    } catch (err) {
+    console.error('❌ [POST /api/cases] Error creating case:', err);
+    res.status(500).json({
+        success: false,
+        error: 'Failed to create case',
+        details: err.message,
+        code: err.code,
+        hint: err.code === '42703'
+            ? 'Missing column in database. Run migration: ALTER TABLE cases ADD COLUMN delivery_date DATE; ALTER TABLE cases ADD COLUMN delivery_time TIME;'
+            : err.code === '23502'
+                ? 'Missing required field value'
+                : undefined
+    });
+}
 };
 
 // --- ASSIGN VEHICLE TO CASE ---
@@ -611,8 +651,8 @@ exports.assignVehicle = async (req, res) => {
           AND c.funeral_date = $3
       `, [vehicle_id, caseId, currentFuneralDate]);
 
-        if (conflictingAssignments.rows.length > 0) {
-            const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
+            if (conflictingAssignments.rows.length > 0) {
+                const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
                 const BUFFER_HOURS = 2;
 
                 if (currentFuneralTime) {
@@ -849,12 +889,12 @@ exports.updateCaseStatus = async (req, res) => {
                                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
                                     [item.id, id, 'sale', -1, previous, nextQty, 'Auto-logged on intake exit', (req.user?.email) || 'system']
                                 );
-                            } catch (_) {}
+                            } catch (_) { }
                         }
                     }
                 }
             }
-        } catch (_) {}
+        } catch (_) { }
 
         try {
             await query(
@@ -905,19 +945,19 @@ exports.updateFuneralTime = async (req, res) => {
     }
 
     try {
-    const caseCheck = await query('SELECT id, status FROM cases WHERE id = $1', [id]);
-    if (caseCheck.rows.length === 0) {
-        return res.status(404).json({ success: false, error: 'Case not found' });
-    }
+        const caseCheck = await query('SELECT id, status FROM cases WHERE id = $1', [id]);
+        if (caseCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Case not found' });
+        }
 
-    const currentStatus = caseCheck.rows[0].status;
-    const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
-    if (currentStatus !== 'intake' && !isAdmin) {
-        return res.status(400).json({
-            success: false,
-            error: `Cannot update funeral time. Case status is "${currentStatus}". Funeral time can only be changed when status is "intake".`
-        });
-    }
+        const currentStatus = caseCheck.rows[0].status;
+        const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
+        if (currentStatus !== 'intake' && !isAdmin) {
+            return res.status(400).json({
+                success: false,
+                error: `Cannot update funeral time. Case status is "${currentStatus}". Funeral time can only be changed when status is "intake".`
+            });
+        }
 
         const updateFields = [];
         const updateValues = [];
@@ -934,13 +974,13 @@ exports.updateFuneralTime = async (req, res) => {
         updateFields.push(`updated_at = NOW()`);
         updateValues.push(id);
 
-    const result = await query(
-        `UPDATE cases 
+        const result = await query(
+            `UPDATE cases 
        SET ${updateFields.join(', ')}
        WHERE id = $${paramIndex}
        RETURNING *`,
-        updateValues
-    );
+            updateValues
+        );
 
         console.log(`✅ Case ${id} funeral time updated: ${funeral_time}`);
 
@@ -1008,7 +1048,7 @@ exports.updateCaseVenue = async (req, res) => {
                     req.headers['user-agent']
                 ]
             );
-        } catch (e) {}
+        } catch (e) { }
 
         res.json({ success: true, case: result.rows[0] });
     } catch (err) {
@@ -1111,7 +1151,7 @@ exports.mergeCases = async (req, res) => {
                     req.headers['user-agent']
                 ]
             );
-        } catch (_) {}
+        } catch (_) { }
 
         await client.query('COMMIT');
         res.json({ success: true, message: 'Cases merged', survivor_id, archived_ids: dedupIds });
@@ -1224,7 +1264,7 @@ exports.autoMergeDuplicates = async (req, res) => {
                             req.headers['user-agent']
                         ]
                     );
-                } catch (_) {}
+                } catch (_) { }
                 await client.query('COMMIT');
 
                 groups.push({ type: g.type, key: g.key, survivor_id, archived_ids: duplicate_ids });
@@ -1232,7 +1272,7 @@ exports.autoMergeDuplicates = async (req, res) => {
 
             res.json({ success: true, merged: groups });
         } catch (err) {
-            try { await client.query('ROLLBACK'); } catch (_) {}
+            try { await client.query('ROLLBACK'); } catch (_) { }
             res.status(500).json({ success: false, error: 'Failed auto-merge', details: err.message });
         } finally {
             client.release();

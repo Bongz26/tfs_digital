@@ -1,0 +1,290 @@
+[
+  {
+    "id": 5,
+    "name": "1/4 View",
+    "model": "Ilu View",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 37,
+    "name": "4 Tiers Black",
+    "model": "4 Tiers",
+    "color": "Black",
+    "stock_quantity": 0,
+    "location": "HQ Storeroom & showroom"
+  },
+  {
+    "id": 31,
+    "name": "Dutch Cleveland Brown",
+    "model": "Dutch Cleveland",
+    "color": "Brown",
+    "stock_quantity": 0,
+    "location": "HQ Storeroom & showroom"
+  },
+  {
+    "id": 28,
+    "name": "Dutch Cleveland Kiaat",
+    "model": "Dutch Cleveland",
+    "color": "Kiaat",
+    "stock_quantity": 0,
+    "location": "HQ Storeroom & showroom"
+  },
+  {
+    "id": 29,
+    "name": "Dutch Cleveland Redwood",
+    "model": "Dutch Cleveland",
+    "color": "Redwood",
+    "stock_quantity": 0,
+    "location": "HQ Storeroom & showroom"
+  },
+  {
+    "id": 27,
+    "name": "Econo Cherry",
+    "model": "Econo",
+    "color": "Cherry",
+    "stock_quantity": 0,
+    "location": "HQ Storeroom & showroom"
+  },
+  {
+    "id": 13,
+    "name": "Econo Cherry",
+    "model": "Econo",
+    "color": "Cherry",
+    "stock_quantity": -5,
+    "location": "Manekeng"
+  },
+  {
+    "id": 24,
+    "name": "Feet",
+    "model": "Feet",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 33,
+    "name": "Flat Lid Cherry",
+    "model": "Flat Lid",
+    "color": "Cherry",
+    "stock_quantity": 0,
+    "location": "HQ Storeroom & showroom"
+  },
+  {
+    "id": 32,
+    "name": "Flat Lid Fume",
+    "model": "Flat Lid",
+    "color": "Fume",
+    "stock_quantity": 0,
+    "location": "HQ Storeroom & showroom"
+  },
+  {
+    "id": 26,
+    "name": "Flat Lid Redwood",
+    "model": "Flat Lid",
+    "color": "Redwood",
+    "stock_quantity": 0,
+    "location": "HQ Storeroom & showroom"
+  },
+  {
+    "id": 8,
+    "name": "Flat Top Plywood",
+    "model": "Flat Top",
+    "color": "Plywood",
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 12,
+    "name": "Fluo Cherry",
+    "model": "Fluo",
+    "color": "Cherry",
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 14,
+    "name": "Fluo Midbrain",
+    "model": "Fluo",
+    "color": "Midbrain",
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 15,
+    "name": "Fluo Princeton",
+    "model": "Fluo",
+    "color": "Princeton",
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 11,
+    "name": "Fluo Spain",
+    "model": "Fluo",
+    "color": "Spain",
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 23,
+    "name": "Kreat",
+    "model": "Kreat",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 19,
+    "name": "Kreat Casket",
+    "model": "Kreat Casket",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 18,
+    "name": "Kreat Coffin",
+    "model": "Kreat Coffin",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 17,
+    "name": "Kreat Coffin",
+    "model": "Kreat Coffin",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 21,
+    "name": "Kreat Dutch",
+    "model": "Kreat Dutch",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 2,
+    "name": "Octagon",
+    "model": "Octagonal",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 30,
+    "name": "Octagon Redwood",
+    "model": "Octagon",
+    "color": "Redwood",
+    "stock_quantity": 0,
+    "location": "HQ Storeroom & showroom"
+  },
+  {
+    "id": 3,
+    "name": "Ponge Cherry",
+    "model": "Ponge",
+    "color": "Cherry",
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 4,
+    "name": "Pongee",
+    "model": "Ponge",
+    "color": "Plywood",
+    "stock_quantity": -1,
+    "location": "Manekeng"
+  },
+  {
+    "id": 38,
+    "name": "Pongee",
+    "model": null,
+    "color": "Redwood",
+    "stock_quantity": -2,
+    "location": "Manekeng Showroom"
+  },
+  {
+    "id": 1,
+    "name": "Prince Dome",
+    "model": "Pierce Dome",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 35,
+    "name": "Raised Halfview Glass",
+    "model": "Raised Halfview",
+    "color": "Glass",
+    "stock_quantity": 0,
+    "location": "HQ Storeroom & showroom"
+  },
+  {
+    "id": 36,
+    "name": "Raised Halfview Platinum",
+    "model": "Raised Halfview",
+    "color": "Platinum",
+    "stock_quantity": -1,
+    "location": "HQ Storeroom & showroom"
+  },
+  {
+    "id": 6,
+    "name": "Raised Haunew",
+    "model": "Raised Haunew",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 34,
+    "name": "Spider",
+    "model": "Spider",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "HQ Storeroom & showroom"
+  },
+  {
+    "id": 7,
+    "name": "Tier Casket",
+    "model": "Tier Casket",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 9,
+    "name": "Tier Plywood",
+    "model": "Tier Plywood",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 22,
+    "name": "Ucornee Wood Walnut",
+    "model": "Ucornee Wood",
+    "color": "Walnut",
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 20,
+    "name": "White Casket",
+    "model": "White Casket",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  },
+  {
+    "id": 10,
+    "name": "Yreat Flio",
+    "model": "Yreat Flio",
+    "color": null,
+    "stock_quantity": 0,
+    "location": "Manekeng"
+  }
+]
