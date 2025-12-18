@@ -354,7 +354,7 @@ exports.createCase = async (req, res) => {
         casket_type, casket_colour, delivery_date, delivery_time, intake_day,
         programs, top_up_amount, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
-        legacy_plan_name, benefit_mode, status, burial_place)
+        legacy_plan_name, benefit_mode, status, burial_place, branch)
        VALUES (
         $1,$2,$3,
         $4,$5,$6,$7,$8,
@@ -367,7 +367,7 @@ exports.createCase = async (req, res) => {
         $33,$34,$35,$36,$37,
         $38,$39,$40,$41,$42,
         $43,$44,$45,
-        $46,$47,$48,$49)
+        $46,$47,$48,$49,$50)
        RETURNING *`,
             [
                 finalCaseNumber, claim_date || null, policy_number || null,
@@ -381,7 +381,7 @@ exports.createCase = async (req, res) => {
                 casket_type || null, casket_colour || null, delivery_date || null, delivery_time || null, intake_day,
                 programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, !!airtime, airtime_network || null, airtime_number || null,
                 cover_amount != null ? cover_amount : 0, cashback_amount != null ? cashback_amount : 0, amount_to_bank != null ? amount_to_bank : 0,
-                legacy_plan_name || null, benefit_mode || null, status || 'confirmed', burial_place || null
+                legacy_plan_name || null, benefit_mode || null, status || 'confirmed', burial_place || null, branch || 'Head Office'
             ]
         );
 
@@ -630,6 +630,18 @@ exports.assignVehicle = async (req, res) => {
         if (dupVehicle.rows.length > 0) {
             await client.query('ROLLBACK');
             return res.status(400).json({ success: false, error: 'This vehicle is already assigned to this case' });
+        }
+
+        // Prevent duplicate driver assignment to the same case
+        if (driver_name) {
+            const dupDriver = await client.query(
+                `SELECT 1 FROM roster WHERE case_id = $1 AND driver_name = $2 AND status != 'completed'`,
+                [caseId, driver_name]
+            );
+            if (dupDriver.rows.length > 0) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ success: false, error: 'This driver is already assigned to this case' });
+            }
         }
 
         if (currentFuneralDate) {
@@ -999,7 +1011,7 @@ exports.updateFuneralTime = async (req, res) => {
 
 exports.updateCaseVenue = async (req, res) => {
     const { id } = req.params;
-    const { venue_name, venue_address, venue_lat, venue_lng, burial_place } = req.body || {};
+    const { venue_name, venue_address, venue_lat, venue_lng, burial_place, branch } = req.body || {};
 
     try {
         const caseCheck = await query('SELECT id, venue_name, venue_address, venue_lat, venue_lng, burial_place FROM cases WHERE id = $1', [id]);
@@ -1017,6 +1029,7 @@ exports.updateCaseVenue = async (req, res) => {
         if (venue_lat != null) { fields.push(`venue_lat = $${idx++}`); values.push(String(venue_lat)); }
         if (venue_lng != null) { fields.push(`venue_lng = $${idx++}`); values.push(String(venue_lng)); }
         if (burial_place != null) { fields.push(`burial_place = $${idx++}`); values.push(String(burial_place)); }
+        if (branch != null) { fields.push(`branch = $${idx++}`); values.push(String(branch)); }
         fields.push('updated_at = NOW()');
         values.push(id);
 
@@ -1369,7 +1382,7 @@ exports.updateCaseDetails = async (req, res) => {
         delivery_date, delivery_time, intake_day,
         programs, top_up_amount, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
-        legacy_plan_name, status, burial_place
+        legacy_plan_name, status, burial_place, branch
     } = req.body;
 
     // Basic validation
@@ -1400,8 +1413,9 @@ exports.updateCaseDetails = async (req, res) => {
                 programs = $37, top_up_amount = $38, airtime = $39, airtime_network = $40, airtime_number = $41,
                 cover_amount = $42, cashback_amount = $43, amount_to_bank = $44,
                 legacy_plan_name = $45, benefit_mode = $46, status = $47, burial_place = $48,
-                updated_at = NOW()
-            WHERE id = $49
+                updated_at = NOW(),
+                branch = $49
+            WHERE id = $50
             RETURNING *
         `;
 
@@ -1418,6 +1432,8 @@ exports.updateCaseDetails = async (req, res) => {
             programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, !!airtime, airtime_network || null, airtime_number || null,
             cover_amount != null ? cover_amount : 0, cashback_amount != null ? cashback_amount : 0, amount_to_bank != null ? amount_to_bank : 0,
             legacy_plan_name || null, benefit_mode || null, status || oldValues.status, burial_place || null,
+            legacy_plan_name || null, benefit_mode || null, status || oldValues.status, burial_place || null,
+            req.body.branch || oldValues.branch || 'Head Office',
             id
         ];
 

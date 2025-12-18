@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
 
     let qb = supabase
       .from('cases')
-      .select('id,case_number,deceased_name,status,funeral_date,funeral_time,venue_name,venue_address,burial_place,policy_number,requires_grocery', { count: 'exact' })
+      .select('id,case_number,deceased_name,status,funeral_date,funeral_time,venue_name,venue_address,burial_place,policy_number,requires_grocery,branch', { count: 'exact' })
       .gte('funeral_date', minDate)
       .lte('funeral_date', maxDate)
       .order('funeral_date', { ascending: true });
