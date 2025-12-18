@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { createCase, lookupCase, updateCase } from './api/cases';
 import { createAirtimeRequest } from './api/sms';
+import { fetchInventory } from './api/inventory';
 import { saveDraft as saveDraftServer, getDraftByPolicy as getDraftServer, getLastDraft as getLastDraftServer, deleteDraftByPolicy as deleteDraftServer, listDrafts as listDraftsServer } from './api/claimDrafts';
 
 const PLAN_DATA = {
@@ -387,6 +388,7 @@ export default function ConsultationForm() {
   const [draftQuery, setDraftQuery] = useState('');
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [serverDrafts, setServerDrafts] = useState([]);
+  const [casketOptions, setCasketOptions] = useState([]);
   const location = useLocation();
 
   useEffect(() => {
@@ -441,7 +443,42 @@ export default function ConsultationForm() {
             plan_age_bracket: found.plan_age_bracket || prev.plan_age_bracket,
             venue_name: found.venue_name || prev.venue_name,
             venue_address: found.venue_address || prev.venue_address,
-            burial_place: found.burial_place || prev.burial_place
+            burial_place: found.burial_place || prev.burial_place,
+            branch: found.branch || prev.branch,
+            // Additional fields to ensure top-up and other details are loaded
+            top_up_amount: found.top_up_amount != null ? found.top_up_amount : prev.top_up_amount,
+            casket_type: found.casket_type || prev.casket_type,
+            casket_colour: found.casket_colour || prev.casket_colour,
+            programs: found.programs != null ? found.programs : prev.programs,
+            airtime: found.airtime != null ? found.airtime : prev.airtime,
+            airtime_network: found.airtime_network || prev.airtime_network,
+            airtime_number: found.airtime_number || prev.airtime_number,
+            cover_amount: found.cover_amount != null ? found.cover_amount : prev.cover_amount,
+            cashback_amount: found.cashback_amount != null ? found.cashback_amount : prev.cashback_amount,
+            amount_to_bank: found.amount_to_bank != null ? found.amount_to_bank : prev.amount_to_bank,
+            service_type: found.service_type || prev.service_type,
+            total_price: found.total_price != null ? found.total_price : prev.total_price,
+            benefit_mode: found.benefit_mode || prev.benefit_mode,
+
+            // Booleans
+            requires_cow: found.requires_cow != null ? found.requires_cow : prev.requires_cow,
+            requires_sheep: found.requires_sheep != null ? found.requires_sheep : prev.requires_sheep,
+            requires_tombstone: found.requires_tombstone != null ? found.requires_tombstone : prev.requires_tombstone,
+            requires_flower: found.requires_flower != null ? found.requires_flower : prev.requires_flower,
+            requires_catering: found.requires_catering != null ? found.requires_catering : prev.requires_catering,
+            requires_grocery: found.requires_grocery != null ? found.requires_grocery : prev.requires_grocery,
+            requires_bus: found.requires_bus != null ? found.requires_bus : prev.requires_bus,
+
+            // Schedule
+            service_date: found.service_date || prev.service_date,
+            service_time: found.service_time || prev.service_time,
+            church_date: found.church_date || prev.church_date,
+            church_time: found.church_time || prev.church_time,
+            cleansing_date: found.cleansing_date || prev.cleansing_date,
+            cleansing_time: found.cleansing_time || prev.cleansing_time,
+            delivery_date: found.delivery_date || prev.delivery_date,
+            delivery_time: found.delivery_time || prev.delivery_time,
+            intake_day: found.intake_day || prev.intake_day
           }));
           setMessage('Existing case data auto-filled');
         }
@@ -484,7 +521,43 @@ export default function ConsultationForm() {
     };
     load();
     return () => { mounted = false; };
+    load();
+    return () => { mounted = false; };
   }, [draftsOpen]);
+
+  useEffect(() => {
+    const loadCaskets = async () => {
+      try {
+        const inventory = await fetchInventory('coffin');
+        const inventoryNames = inventory ? inventory.map(i => i.name) : [];
+
+        // Collect hardcoded names from plans
+        const planNames = new Set();
+        Object.values(PLAN_BENEFITS).forEach(p => {
+          if (p.casket) planNames.add(p.casket);
+        });
+        Object.values(SPECIAL_PLAN_BENEFITS).forEach(p => {
+          if (p.casket) planNames.add(p.casket);
+        });
+
+        // Merge and sort
+        const combined = Array.from(new Set([...inventoryNames, ...planNames])).sort();
+        setCasketOptions(combined);
+      } catch (err) {
+        console.error('Failed to load casket options', err);
+        // Fallback to just plan names if inventory fails
+        const planNames = new Set();
+        Object.values(PLAN_BENEFITS).forEach(p => {
+          if (p.casket) planNames.add(p.casket);
+        });
+        Object.values(SPECIAL_PLAN_BENEFITS).forEach(p => {
+          if (p.casket) planNames.add(p.casket);
+        });
+        setCasketOptions(Array.from(planNames).sort());
+      }
+    };
+    loadCaskets();
+  }, []);
 
   const getAutoPrice = () => {
     if (form.plan_category === 'colour_grade') return 0;
@@ -504,16 +577,17 @@ export default function ConsultationForm() {
     if (form.service_type === 'private') {
       return form.casket_type || '';
     }
+    // If Special Plan, allow edit only if top-up > 0, otherwise read-only default
     if (isSpecialPlan) {
+      if (form.top_up_amount > 0) {
+        // If top-up exists, allow manual edit (no snap-back to default if cleared)
+        return form.casket_type;
+      }
       return SPECIAL_PLAN_BENEFITS[form.plan_name]?.casket || '';
     }
-    // For book/standard, prioritize form value but fallback to plan if empty?
-    // No, fallback to plan ONLY if form value is untouched to avoid snap-back.
-    // Actually, useEffect keeps form.casket_type in sync. 
-    // So we can just return form.casket_type.
-    // However, to be safe during transitions, we keep the fallback ONLY if form.casket_type is undefined.
-    // But since useState initializes it to '', we should just return form.casket_type.
-    return form.casket_type || PLAN_BENEFITS[form.plan_name]?.casket || '';
+    // For standard plans, allow full manual override without snap-back
+    // The useEffect above handles setting the initial default when plan changes
+    return form.casket_type;
   };
 
   const getExtrasSummary = () => {
@@ -1487,12 +1561,25 @@ export default function ConsultationForm() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label>Casket Type</label>
-                {isSpecialPlan && form.service_type !== 'private' ? (
+                {isSpecialPlan && form.service_type !== 'private' && (!form.top_up_amount || form.top_up_amount <= 0) ? (
                   <div className="w-full px-4 py-3 bg-green-50 border border-green-300 rounded-lg font-bold text-green-800">
                     {getAutoCasketType()} (Included)
                   </div>
                 ) : (
-                  <input value={getAutoCasketType()} onChange={e => handleInputChange('casket_type', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder={form.service_type === 'private' ? 'Enter casket details manually' : 'Auto-filled from plan'} />
+                  <select
+                    value={getAutoCasketType()}
+                    onChange={e => handleInputChange('casket_type', e.target.value)}
+                    className="w-full px-4 py-3 border rounded-lg bg-white"
+                  >
+                    <option value="">-- Select Casket --</option>
+                    {casketOptions.map((opt, idx) => (
+                      <option key={idx} value={opt}>{opt}</option>
+                    ))}
+                    {/* Ensure current value is shown even if not in options (e.g. legacy data) */}
+                    {getAutoCasketType() && !casketOptions.includes(getAutoCasketType()) && (
+                      <option value={getAutoCasketType()}>{getAutoCasketType()}</option>
+                    )}
+                  </select>
                 )}
               </div>
               <div>

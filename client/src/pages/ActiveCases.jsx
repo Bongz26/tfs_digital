@@ -34,6 +34,8 @@ export default function ActiveCases() {
   const [editDriver, setEditDriver] = useState({});
   const [editVenueName, setEditVenueName] = useState({});
   const [editBurialPlace, setEditBurialPlace] = useState({});
+  const [editBranch, setEditBranch] = useState({});
+  const [assigningVehicle, setAssigningVehicle] = useState({});
 
   // Fetch active cases and vehicles in one call
   useEffect(() => {
@@ -132,6 +134,8 @@ export default function ActiveCases() {
   }, [cases]);
 
   const handleAssignVehicle = async (caseId) => {
+    if (assigningVehicle[caseId]) return;
+
     if (!selectedVehicle[caseId]) {
       alert('Please select a vehicle first');
       return;
@@ -146,6 +150,7 @@ export default function ActiveCases() {
     }
 
     try {
+      setAssigningVehicle(prev => ({ ...prev, [caseId]: true }));
       await assignVehicle(caseId, {
         vehicle_id: vehicle.id,
         driver_name: driver.name,
@@ -178,6 +183,12 @@ export default function ActiveCases() {
     } catch (err) {
       console.error('Assign error:', err);
       alert(`Failed to assign vehicle: ${err.message || err.response?.data?.error}`);
+    } finally {
+      setAssigningVehicle(prev => {
+        const newState = { ...prev };
+        delete newState[caseId];
+        return newState;
+      });
     }
   };
 
@@ -451,6 +462,7 @@ export default function ActiveCases() {
                     <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Case Number</th>
                     <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Deceased Name</th>
                     <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Funeral Date</th>
+                    <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Branch</th>
                     <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Status</th>
                     <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Vehicle Assigned</th>
                     <th className="p-3 sm:p-4 text-left font-semibold text-gray-700 text-sm">Actions</th>
@@ -472,7 +484,7 @@ export default function ActiveCases() {
                         <div className="text-gray-800 text-sm">
                           {new Date(c.funeral_date).toLocaleDateString()}
                         </div>
-                        {(isAdmin() || c.status === 'intake') ? (
+                        {(isAdmin() || c.status === 'intake') && !c.warning_past_funeral_date ? (
                           <div className="mt-1">
                             {editingFuneralTime[c.id] ? (
                               <div className="flex items-center gap-2">
@@ -532,6 +544,9 @@ export default function ActiveCases() {
                         )}
                       </td>
                       <td className="p-3 sm:p-4">
+                        <div className="text-gray-800 text-sm font-medium">{c.branch || 'Head Office'}</div>
+                      </td>
+                      <td className="p-3 sm:p-4">
                         <div className="flex flex-col gap-2">
                           {(() => {
                             const statusConfig = getStatusConfig(c.status);
@@ -564,7 +579,7 @@ export default function ActiveCases() {
                                         e.target.value = '';
                                       }
                                     }}
-                                    disabled={changingStatus[c.id]}
+                                    disabled={changingStatus[c.id] || c.warning_past_funeral_date}
                                   >
                                     <option value="">Change Status...</option>
                                     {getNextStatuses(c.status).map(nextStatus => (
@@ -588,6 +603,7 @@ export default function ActiveCases() {
                               placeholder="Service venue"
                               value={editVenueName[c.id] ?? ''}
                               onChange={e => setEditVenueName(prev => ({ ...prev, [c.id]: e.target.value }))}
+                              disabled={c.warning_past_funeral_date}
                             />
                             <input
                               type="text"
@@ -595,22 +611,38 @@ export default function ActiveCases() {
                               placeholder="Burial place"
                               value={editBurialPlace[c.id] ?? ''}
                               onChange={e => setEditBurialPlace(prev => ({ ...prev, [c.id]: e.target.value }))}
+                              disabled={c.warning_past_funeral_date}
                             />
+                            <select
+                              className="text-xs border border-gray-300 rounded px-2 py-1 w-full"
+                              value={editBranch[c.id] ?? ''}
+                              onChange={e => setEditBranch(prev => ({ ...prev, [c.id]: e.target.value }))}
+                              disabled={c.warning_past_funeral_date}
+                            >
+                              <option value="">Change Branch...</option>
+                              <option value="Head Office">Head Office</option>
+                              <option value="Bethlehem">Bethlehem</option>
+                              <option value="QwaQwa">QwaQwa</option>
+                              <option value="Harrismith">Harrismith</option>
+                              <option value="Reitz">Reitz</option>
+                            </select>
                             <button
-                              className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
-                              disabled={!editVenueName[c.id] && !editBurialPlace[c.id]}
+                              className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                              disabled={(!editVenueName[c.id] && !editBurialPlace[c.id] && !editBranch[c.id]) || c.warning_past_funeral_date}
                               onClick={async () => {
                                 try {
                                   const payload = {};
                                   if (editVenueName[c.id]) payload.venue_name = editVenueName[c.id];
                                   if (editBurialPlace[c.id]) payload.burial_place = editBurialPlace[c.id];
+                                  if (editBranch[c.id]) payload.branch = editBranch[c.id];
                                   await updateCaseVenue(c.id, payload);
                                   const { cases: casesData, vehicles: vehiclesData } = await fetchActiveCases({ page, limit, search, status: statusFilter });
                                   setCases(casesData);
                                   setVehicles(vehiclesData);
                                   setEditVenueName(prev => { const n = { ...prev }; delete n[c.id]; return n; });
                                   setEditBurialPlace(prev => { const n = { ...prev }; delete n[c.id]; return n; });
-                                  alert('Case venue updated');
+                                  setEditBranch(prev => { const n = { ...prev }; delete n[c.id]; return n; });
+                                  alert('Case details updated');
                                 } catch (err) {
                                   alert(err.response?.data?.error || err.message || 'Failed to update case venue');
                                 }
@@ -659,6 +691,7 @@ export default function ActiveCases() {
                                   onChange={() => {
                                     setVehicleCategory(prev => ({ ...prev, [c.id]: 'hearse' }));
                                   }}
+                                  disabled={c.warning_past_funeral_date}
                                 />
                                 Hearse
                               </label>
@@ -670,6 +703,7 @@ export default function ActiveCases() {
                                   onChange={() => {
                                     setVehicleCategory(prev => ({ ...prev, [c.id]: 'family' }));
                                   }}
+                                  disabled={c.warning_past_funeral_date}
                                 />
                                 Family Car
                               </label>
@@ -693,6 +727,7 @@ export default function ActiveCases() {
                                   });
                                 }
                               }}
+                              disabled={c.warning_past_funeral_date}
                             >
                               <option value="">Select Vehicle</option>
                               {(() => {
@@ -729,6 +764,7 @@ export default function ActiveCases() {
                                   });
                                 }
                               }}
+                              disabled={c.warning_past_funeral_date}
                             >
                               <option value="">Select Driver</option>
                               {drivers.length === 0 ? (
@@ -750,9 +786,9 @@ export default function ActiveCases() {
                             <button
                               className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
                               onClick={() => handleAssignVehicle(c.id)}
-                              disabled={!selectedVehicle[c.id] || !selectedDriver[c.id]}
+                              disabled={(!selectedVehicle[c.id] || !selectedDriver[c.id]) || c.warning_past_funeral_date || assigningVehicle[c.id]}
                             >
-                              Assign Vehicle & Driver
+                              {assigningVehicle[c.id] ? 'Assigning...' : 'Assign Vehicle & Driver'}
                             </button>
                             <div className="text-xs text-gray-600">Assigned: {c.roster?.length || 0} / {c.required_min_vehicles || 1}</div>
                           </div>
@@ -785,7 +821,7 @@ export default function ActiveCases() {
                                   <button
                                     className="bg-blue-600 text-white px-2 py-1 rounded"
                                     onClick={() => handleUpdateRoster(r.id, c.id)}
-                                    disabled={!editDriver[r.id] && !selectedVehicle[r.id]}
+                                    disabled={(!editDriver[r.id] && !selectedVehicle[r.id]) || c.warning_past_funeral_date}
                                   >
                                     Update
                                   </button>
@@ -800,6 +836,7 @@ export default function ActiveCases() {
                                       const v = vehicles.find(veh => veh.id === parseInt(vehicleId));
                                       setSelectedVehicle(prev => ({ ...prev, [r.id]: v || null }));
                                     }}
+                                    disabled={c.warning_past_funeral_date}
                                   >
                                     <option value="">Select new vehicle...</option>
                                     {(() => {
@@ -819,9 +856,9 @@ export default function ActiveCases() {
                                 <button
                                   className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
                                   onClick={() => handleAssignVehicle(c.id)}
-                                  disabled={!selectedVehicle[c.id] || !selectedDriver[c.id]}
+                                  disabled={(!selectedVehicle[c.id] || !selectedDriver[c.id]) || c.warning_past_funeral_date || assigningVehicle[c.id]}
                                 >
-                                  Add Another Vehicle
+                                  {assigningVehicle[c.id] ? 'Assigning...' : 'Add Another Vehicle'}
                                 </button>
                               </div>
                             )}
@@ -859,7 +896,7 @@ export default function ActiveCases() {
                   <div className="text-xs text-gray-600 mb-3 space-y-1">
                     <div>
                       Funeral: {new Date(c.funeral_date).toLocaleDateString()}
-                      {(isAdmin || c.status === 'intake') ? (
+                      {((isAdmin || c.status === 'intake') && !c.warning_past_funeral_date) ? (
                         <div className="mt-1">
                           {editingFuneralTime[c.id] ? (
                             <div className="flex items-center gap-2">
@@ -976,7 +1013,7 @@ export default function ActiveCases() {
                             e.target.value = '';
                           }
                         }}
-                        disabled={changingStatus[c.id]}
+                        disabled={changingStatus[c.id] || c.warning_past_funeral_date}
                       >
                         <option value="">Change Status...</option>
                         {getNextStatuses(c.status).map(nextStatus => (
@@ -1000,6 +1037,7 @@ export default function ActiveCases() {
                             onChange={() => {
                               setVehicleCategory(prev => ({ ...prev, [c.id]: 'hearse' }));
                             }}
+                            disabled={c.warning_past_funeral_date}
                           />
                           Hearse
                         </label>
@@ -1011,6 +1049,7 @@ export default function ActiveCases() {
                             onChange={() => {
                               setVehicleCategory(prev => ({ ...prev, [c.id]: 'family' }));
                             }}
+                            disabled={c.warning_past_funeral_date}
                           />
                           Family
                         </label>
@@ -1034,6 +1073,7 @@ export default function ActiveCases() {
                             });
                           }
                         }}
+                        disabled={c.warning_past_funeral_date}
                       >
                         <option value="">Select Vehicle</option>
                         {(() => {
@@ -1065,6 +1105,7 @@ export default function ActiveCases() {
                             });
                           }
                         }}
+                        disabled={c.warning_past_funeral_date}
                       >
                         <option value="">Select Driver</option>
                         {drivers.length === 0 ? (
@@ -1086,9 +1127,9 @@ export default function ActiveCases() {
                       <button
                         className="w-full bg-red-600 text-white px-4 py-2.5 rounded-lg hover:bg-red-700 transition font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
                         onClick={() => handleAssignVehicle(c.id)}
-                        disabled={!selectedVehicle[c.id] || !selectedDriver[c.id]}
+                        disabled={(!selectedVehicle[c.id] || !selectedDriver[c.id]) || c.warning_past_funeral_date || assigningVehicle[c.id]}
                       >
-                        {c.roster?.length ? 'Add Another Vehicle' : 'Assign Vehicle & Driver'}
+                        {assigningVehicle[c.id] ? 'Assigning...' : (c.roster?.length ? 'Add Another Vehicle' : 'Assign Vehicle & Driver')}
                       </button>
                       <div className="text-xs text-gray-600 text-center">Assigned: {c.roster?.length || 0} / {c.required_min_vehicles || 1}</div>
                     </div>
@@ -1117,7 +1158,7 @@ export default function ActiveCases() {
                           <button
                             className="bg-blue-600 text-white px-2 py-1 rounded"
                             onClick={() => handleUpdateRoster(r.id, c.id)}
-                            disabled={!editDriver[r.id]}
+                            disabled={!editDriver[r.id] || c.warning_past_funeral_date}
                           >
                             Update
                           </button>

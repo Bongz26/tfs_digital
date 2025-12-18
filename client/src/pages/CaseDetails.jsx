@@ -108,6 +108,7 @@ export default function CaseDetails() {
           <p><span className="font-semibold">Requires Cow:</span> {caseData.requires_cow ? 'Yes' : 'No'}</p>
           <p><span className="font-semibold">Requires Tombstone:</span> {caseData.requires_tombstone ? 'Yes' : 'No'}</p>
           <p><span className="font-semibold">Intake Day:</span> {caseData.intake_day || '-'}</p>
+          <p><span className="font-semibold">Branch:</span> {caseData.branch || 'Head Office'}</p>
           <p><span className="font-semibold">Status:</span> {caseData.status}</p>
         </div>
       </div>
