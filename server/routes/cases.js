@@ -40,6 +40,9 @@ router.get('/list/cancelled', casesController.getCancelledCases);
 router.get('/:id/audit-log', casesController.getCaseAuditLog);
 router.get('/audit/:id', casesController.getCaseAuditLog);
 
+// PUT full update of case details
+router.put('/:id', casesController.updateCaseDetails);
+
 // GET single case by ID (must come last to avoid conflicts with /assign/:caseId)
 router.get('/:id', casesController.getCaseById);
 

@@ -1355,3 +1355,154 @@ exports.getCancelledCases = async (req, res) => {
         res.status(500).json({ success: false, error: 'Failed to fetch cancelled cases' });
     }
 };
+exports.updateCaseDetails = async (req, res) => {
+    const { id } = req.params;
+    const {
+        case_number, claim_date, policy_number, benefit_mode,
+        deceased_name, deceased_id, nok_name, nok_contact, nok_relation,
+        plan_category, plan_name, plan_members, plan_age_bracket,
+        service_date, service_time, funeral_date, funeral_time,
+        church_date, church_time, cleansing_date, cleansing_time,
+        venue_name, venue_address, venue_lat, venue_lng,
+        requires_cow, requires_sheep, requires_tombstone, requires_catering, requires_grocery, requires_bus,
+        service_type, total_price, casket_type, casket_colour,
+        delivery_date, delivery_time, intake_day,
+        programs, top_up_amount, airtime, airtime_network, airtime_number,
+        cover_amount, cashback_amount, amount_to_bank,
+        legacy_plan_name, status, burial_place
+    } = req.body;
+
+    // Basic validation
+    if (!id) return res.status(400).json({ success: false, error: 'Case ID is required' });
+
+    try {
+        const caseCheck = await query('SELECT * FROM cases WHERE id = $1', [id]);
+        if (caseCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Case not found' });
+        }
+        const oldValues = caseCheck.rows[0];
+
+        const finalFuneralDate = service_date || funeral_date;
+        const finalFuneralTime = service_time || funeral_time;
+
+        const updateQuery = `
+            UPDATE cases SET
+                claim_date = $1, policy_number = $2, deceased_name = $3, deceased_id = $4,
+                nok_name = $5, nok_contact = $6, nok_relation = $7,
+                plan_category = $8, plan_name = $9, plan_members = $10, plan_age_bracket = $11,
+                funeral_date = $12, funeral_time = $13, service_date = $14, service_time = $15,
+                church_date = $16, church_time = $17, cleansing_date = $18, cleansing_time = $19,
+                venue_name = $20, venue_address = $21, venue_lat = $22, venue_lng = $23,
+                requires_cow = $24, requires_sheep = $25, requires_tombstone = $26,
+                requires_catering = $27, requires_grocery = $28, requires_bus = $29,
+                service_type = $30, total_price = $31,
+                casket_type = $32, casket_colour = $33, delivery_date = $34, delivery_time = $35, intake_day = $36,
+                programs = $37, top_up_amount = $38, airtime = $39, airtime_network = $40, airtime_number = $41,
+                cover_amount = $42, cashback_amount = $43, amount_to_bank = $44,
+                legacy_plan_name = $45, benefit_mode = $46, status = $47, burial_place = $48,
+                updated_at = NOW()
+            WHERE id = $49
+            RETURNING *
+        `;
+
+        const values = [
+            claim_date || null, policy_number || null, deceased_name, deceased_id || null,
+            nok_name, nok_contact, nok_relation || null,
+            plan_category || null, plan_name || null, plan_members || null, plan_age_bracket || null,
+            finalFuneralDate || null, finalFuneralTime || null, service_date || null, service_time || null,
+            church_date || null, church_time || null, cleansing_date || null, cleansing_time || null,
+            venue_name || null, venue_address || null, venue_lat || null, venue_lng || null,
+            !!requires_cow, !!requires_sheep, !!requires_tombstone, !!requires_catering, !!requires_grocery, !!requires_bus,
+            service_type || null, total_price != null ? total_price : 0,
+            casket_type || null, casket_colour || null, delivery_date || null, delivery_time || null, intake_day || null,
+            programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, !!airtime, airtime_network || null, airtime_number || null,
+            cover_amount != null ? cover_amount : 0, cashback_amount != null ? cashback_amount : 0, amount_to_bank != null ? amount_to_bank : 0,
+            legacy_plan_name || null, benefit_mode || null, status || oldValues.status, burial_place || null,
+            id
+        ];
+
+        const result = await query(updateQuery, values);
+        const updatedCase = result.rows[0];
+
+        // Stock Deduction Logic (if moving from intake -> confirmed/etc)
+        try {
+            if (oldValues.status === 'intake' && updatedCase.status !== 'intake') {
+                const already = await query(
+                    "SELECT 1 FROM stock_movements WHERE case_id = $1 AND movement_type = 'sale' LIMIT 1",
+                    [id]
+                );
+                if (already.rows.length === 0) {
+                    const nameStr = String(updatedCase.casket_type || '').trim();
+                    const colorStr = String(updatedCase.casket_colour || '').trim();
+                    if (nameStr) {
+                        let inv;
+                        if (colorStr) {
+                            inv = await query(
+                                "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) ORDER BY stock_quantity DESC LIMIT 1",
+                                [nameStr, colorStr]
+                            );
+                        } else {
+                            inv = await query(
+                                "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) ORDER BY stock_quantity DESC LIMIT 1",
+                                [nameStr]
+                            );
+                        }
+                        if (inv.rows.length === 0) {
+                            let fallback;
+                            if (colorStr) {
+                                fallback = await query(
+                                    "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) ORDER BY stock_quantity DESC LIMIT 1",
+                                    [nameStr, colorStr]
+                                );
+                            } else {
+                                fallback = await query(
+                                    "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) ORDER BY stock_quantity DESC LIMIT 1",
+                                    [nameStr]
+                                );
+                            }
+                            inv = fallback;
+                        }
+                        if (inv.rows.length) {
+                            const item = inv.rows[0];
+                            const previous = item.stock_quantity || 0;
+                            const nextQty = previous > 0 ? previous - 1 : 0;
+                            await query('UPDATE inventory SET stock_quantity=$1, updated_at=NOW() WHERE id=$2', [nextQty, item.id]);
+                            try {
+                                await query(
+                                    `INSERT INTO stock_movements (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
+                                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+                                    [item.id, id, 'sale', -1, previous, nextQty, 'Auto-logged on intake exit', (req.user?.email) || 'system']
+                                );
+                            } catch (_) { }
+                        }
+                    }
+                }
+            }
+        } catch (_) { }
+
+        // Audit Log
+        try {
+            await query(
+                `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                [
+                    req.user?.id || null,
+                    req.user?.email || null,
+                    'case_full_update',
+                    'case',
+                    id,
+                    JSON.stringify(oldValues),
+                    JSON.stringify(req.body),
+                    req.ip,
+                    req.headers['user-agent']
+                ]
+            );
+        } catch (e) { console.warn('Audit log failed:', e.message); }
+
+        res.json({ success: true, case: updatedCase });
+
+    } catch (err) {
+        console.error('Error updating case details:', err);
+        res.status(500).json({ success: false, error: 'Failed to update case', details: err.message });
+    }
+};

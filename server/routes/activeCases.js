@@ -23,7 +23,7 @@ router.get('/', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const minDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const maxDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const activeStatuses = ['intake','preparation','confirmed','in_progress'];
+    const activeStatuses = ['intake', 'preparation', 'confirmed', 'in_progress'];
 
     const page = parseInt(req.query.page || '1', 10);
     const limit = parseInt(req.query.limit || '20', 10);
@@ -104,13 +104,13 @@ router.get('/', async (req, res) => {
     // Get roster assignments for these cases
     const caseIds = cases.map(c => c.id);
     let rosterAssignments = [];
-    
+
     if (caseIds.length > 0) {
       const { data: rosterData, error: rosterError } = await supabase
         .from('roster')
-        .select('case_id, vehicle_id, driver_name, status, assignment_role')
+        .select('id, case_id, vehicle_id, driver_name, status, assignment_role')
         .in('case_id', caseIds);
-      
+
       if (!rosterError && rosterData) {
         // Group by case_id
         const rosterByCase = {};
@@ -168,8 +168,8 @@ router.get('/', async (req, res) => {
       return resultCase;
     });
 
-    const payload = { 
-      success: true, 
+    const payload = {
+      success: true,
       cases: casesWithRoster || [],
       vehicles: vehicles || [],
       page,
@@ -181,8 +181,8 @@ router.get('/', async (req, res) => {
 
   } catch (err) {
     console.error('ActiveCases route error:', err.message);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       error: err.message,
       cases: [],
       vehicles: []
@@ -194,7 +194,7 @@ router.post('/alerts', async (req, res) => {
   try {
     const supabase = req.app.locals.supabase;
     const { data: cases } = await supabase.from('cases').select('*').order('funeral_date', { ascending: true });
-    const activeCases = (cases || []).filter(c => !['completed','archived','cancelled'].includes(c.status));
+    const activeCases = (cases || []).filter(c => !['completed', 'archived', 'cancelled'].includes(c.status));
     const today = new Date();
     const dayStart = new Date(today.toISOString().split('T')[0]);
     const flagged = activeCases.map(c => {
@@ -203,8 +203,8 @@ router.post('/alerts', async (req, res) => {
       if (c.funeral_date) {
         const fd = new Date(c.funeral_date);
         if (fd < dayStart) past = true;
-        const diffDays = Math.floor((fd.getTime() - dayStart.getTime()) / (24*60*60*1000));
-        const ok = ['preparation','in_progress','completed','archived','cancelled'];
+        const diffDays = Math.floor((fd.getTime() - dayStart.getTime()) / (24 * 60 * 60 * 1000));
+        const ok = ['preparation', 'in_progress', 'completed', 'archived', 'cancelled'];
         if (diffDays <= 1 && diffDays >= 0 && !ok.includes(c.status)) prep = true;
       }
       return { id: c.id, case_number: c.case_number, status: c.status, funeral_date: c.funeral_date, warning_past_funeral_date: past, warning_prep_required: prep };

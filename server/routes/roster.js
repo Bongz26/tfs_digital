@@ -43,7 +43,7 @@ router.get('/', async (req, res) => {
     const flattenedRoster = (data || []).map(item => {
       const caseData = Array.isArray(item.cases) ? item.cases[0] : item.cases;
       const vehicleData = Array.isArray(item.vehicles) ? item.vehicles[0] : item.vehicles;
-      
+
       return {
         id: item.id,
         case_id: item.case_id,
@@ -74,10 +74,10 @@ router.get('/', async (req, res) => {
     res.json({ success: true, roster: flattenedRoster });
   } catch (err) {
     console.error('Roster route error:', err.message);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       error: err.message,
-      roster: [] 
+      roster: []
     });
   }
 });
@@ -94,6 +94,7 @@ router.patch('/:id', async (req, res) => {
     if (status != null) updates.status = String(status);
     if (pickup_time != null) updates.pickup_time = String(pickup_time);
     if (assignment_role != null) updates.assignment_role = String(assignment_role);
+    if (vehicle_id != null) updates.vehicle_id = parseInt(vehicle_id, 10);
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ success: false, error: 'No valid fields to update' });
@@ -125,7 +126,7 @@ router.patch('/:id', async (req, res) => {
         if (c.funeral_date) {
           const { data: sameDayAssignments, error: confErr } = await supabase
             .from('roster')
-            .select(`id, case_id, status, cases:case_id (funeral_date, funeral_time, case_number, deceased_name)`) 
+            .select(`id, case_id, status, cases:case_id (funeral_date, funeral_time, case_number, deceased_name)`)
             .neq('status', 'completed')
             .eq('vehicle_id', vehicle_id)
             .neq('case_id', current.case_id);

@@ -321,7 +321,9 @@ function getPlanAirtimeAmount(name) {
     Platinum: 200,
     Black: 200,
     Pearl: 200,
-    Ivory: 200
+    Ivory: 200,
+    'Spring A': 100,
+    'Spring B': 100
   };
   const k = String(name || '').trim();
   return m[k] || 0;
@@ -341,6 +343,8 @@ const PLAN_AMOUNT_CASE_SQL = `
     WHEN TRIM(plan_name) = 'Black' THEN 200
     WHEN TRIM(plan_name) = 'Pearl' THEN 200
     WHEN TRIM(plan_name) = 'Ivory' THEN 200
+    WHEN TRIM(plan_name) = 'Spring A' THEN 100
+    WHEN TRIM(plan_name) = 'Spring B' THEN 100
     ELSE 0 
   END
 `;
@@ -359,6 +363,8 @@ const PLAN_AMOUNT_JSON_SQL = `
     WHEN TRIM(data->>'plan_name') = 'Black' THEN 200
     WHEN TRIM(data->>'plan_name') = 'Pearl' THEN 200
     WHEN TRIM(data->>'plan_name') = 'Ivory' THEN 200
+    WHEN TRIM(data->>'plan_name') = 'Spring A' THEN 100
+    WHEN TRIM(data->>'plan_name') = 'Spring B' THEN 100
     ELSE 0 
   END
 `;
