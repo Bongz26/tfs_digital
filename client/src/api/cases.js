@@ -43,6 +43,19 @@ export const createCase = async (caseData) => {
     }
 };
 
+export const updateCase = async (id, caseData) => {
+    try {
+        const token = getAccessToken();
+        const res = await axios.put(`${BASE_URL}/${id}`, caseData, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        return res.data.case;
+    } catch (err) {
+        console.error(`Error updating case ${id}:`, err.response || err);
+        throw err;
+    }
+};
+
 export const updateCaseStatus = async (id, status, notes) => {
     try {
         const token = getAccessToken();

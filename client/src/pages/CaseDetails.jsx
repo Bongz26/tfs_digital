@@ -64,6 +64,7 @@ export default function CaseDetails() {
         <div>
           <h2 className="font-semibold text-lg mb-2">Deceased Info</h2>
           <p><span className="font-semibold">Name:</span> {caseData.deceased_name}</p>
+          <p><span className="font-semibold">Policy Number:</span> {caseData.policy_number || '-'}</p>
           <p><span className="font-semibold">ID:</span> {caseData.deceased_id || '-'}</p>
         </div>
         <div>
@@ -216,6 +217,6 @@ export default function CaseDetails() {
           )}
         </div>
       </div>
-    </div>
+    </div >
   );
 }

@@ -1,7 +1,7 @@
 // src/components/ConsultationForm.jsx
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { createCase, lookupCase } from './api/cases';
+import { createCase, lookupCase, updateCase } from './api/cases';
 import { createAirtimeRequest } from './api/sms';
 import { saveDraft as saveDraftServer, getDraftByPolicy as getDraftServer, getLastDraft as getLastDraftServer, deleteDraftByPolicy as deleteDraftServer, listDrafts as listDraftsServer } from './api/claimDrafts';
 
@@ -272,6 +272,7 @@ const SPECIAL_PLAN_BENEFITS = {
       "80 Chairs",
       "Grocery (Rice, Maize, Sugar, Oil, Tea, Cremora)",
       "80 Programmes",
+      "R100 Airtime",
       "Crucifix",
       "Storage & Collection within 80km radius"
     ]
@@ -425,6 +426,9 @@ export default function ConsultationForm() {
         if (found) {
           setForm(prev => ({
             ...prev,
+            id: found.id, // Store the ID for updates
+            case_number: found.case_number || prev.case_number,
+            status: found.status === 'intake' ? prev.status : found.status, // Preserve status unless it's just intake, but usually we overwrite or keep current logic
             policy_number: prev.policy_number || found.policy_number || '',
             deceased_name: prev.deceased_name || found.deceased_name || '',
             deceased_id: prev.deceased_id || found.deceased_id || '',
@@ -436,7 +440,8 @@ export default function ConsultationForm() {
             plan_members: found.plan_members != null ? found.plan_members : prev.plan_members,
             plan_age_bracket: found.plan_age_bracket || prev.plan_age_bracket,
             venue_name: found.venue_name || prev.venue_name,
-            venue_address: found.venue_address || prev.venue_address
+            venue_address: found.venue_address || prev.venue_address,
+            burial_place: found.burial_place || prev.burial_place
           }));
           setMessage('Existing case data auto-filled');
         }
@@ -810,8 +815,14 @@ export default function ConsultationForm() {
         setSubmitting(false);
         return;
       }
-      await createCase(data);
-      setMessage('Case confirmed successfully! Printing full checklist...');
+      if (form.id) {
+        await updateCase(form.id, data);
+        setMessage('Case updated successfully! Printing full checklist...');
+      } else {
+        await createCase(data);
+        setMessage('Case confirmed successfully! Printing full checklist...');
+      }
+
       setPrintedData(data);
       setPrintMode('full');
       setTimeout(() => window.print(), 500);
@@ -827,6 +838,7 @@ export default function ConsultationForm() {
       // Reset form after confirmation
       setForm(prev => ({
         ...prev,
+        id: '', case_number: '', // Reset ID and Case Number
         deceased_name: '', deceased_id: '', nok_name: '', nok_contact: '', nok_relation: '',
         claim_date: '', policy_number: '',
         cleansing_date: '', cleansing_time: '', delivery_date: '', delivery_time: '',
