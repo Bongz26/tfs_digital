@@ -1472,7 +1472,6 @@ exports.updateCaseDetails = async (req, res) => {
             programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, !!airtime, airtime_network || null, airtime_number || null,
             cover_amount != null ? cover_amount : 0, cashback_amount != null ? cashback_amount : 0, amount_to_bank != null ? amount_to_bank : 0,
             legacy_plan_name || null, benefit_mode || null, status || oldValues.status, burial_place || null,
-            legacy_plan_name || null, benefit_mode || null, status || oldValues.status, burial_place || null,
             req.body.branch || oldValues.branch || 'Head Office',
             id
         ];
