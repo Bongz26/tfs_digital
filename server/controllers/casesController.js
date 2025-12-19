@@ -908,79 +908,77 @@ exports.updateCaseStatus = async (req, res) => {
                         }
                     }
                 }
-            }
-        }
             } else if (status === 'cancelled' && oldStatus !== 'cancelled') {
-        // Determine if we need to refund stock (e.g. if it was deducted previously)
-        // We check if there was a 'sale' movement for this case
-        const sales = await query(
-            "SELECT inventory_id, ABS(quantity_change) as qty FROM stock_movements WHERE case_id = $1 AND movement_type = 'sale'",
-            [id]
-        );
+                // Determine if we need to refund stock (e.g. if it was deducted previously)
+                // We check if there was a 'sale' movement for this case
+                const sales = await query(
+                    "SELECT inventory_id, ABS(quantity_change) as qty FROM stock_movements WHERE case_id = $1 AND movement_type = 'sale'",
+                    [id]
+                );
 
-        if (sales.rows.length > 0) {
-            console.log(`Processing refunds for cancelled case ${id} - ${sales.rows.length} items`);
-            for (const sale of sales.rows) {
-                const invId = sale.inventory_id;
-                const qtyToReturn = sale.qty;
+                if (sales.rows.length > 0) {
+                    console.log(`Processing refunds for cancelled case ${id} - ${sales.rows.length} items`);
+                    for (const sale of sales.rows) {
+                        const invId = sale.inventory_id;
+                        const qtyToReturn = sale.qty;
 
-                // 1. Get current stock
-                const invItem = await query("SELECT stock_quantity FROM inventory WHERE id = $1", [invId]);
-                if (invItem.rows.length > 0) {
-                    const currentQty = invItem.rows[0].stock_quantity || 0;
-                    const newQty = currentQty + qtyToReturn;
+                        // 1. Get current stock
+                        const invItem = await query("SELECT stock_quantity FROM inventory WHERE id = $1", [invId]);
+                        if (invItem.rows.length > 0) {
+                            const currentQty = invItem.rows[0].stock_quantity || 0;
+                            const newQty = currentQty + qtyToReturn;
 
-                    // 2. Update inventory
-                    await query("UPDATE inventory SET stock_quantity = $1, updated_at = NOW() WHERE id = $2", [newQty, invId]);
+                            // 2. Update inventory
+                            await query("UPDATE inventory SET stock_quantity = $1, updated_at = NOW() WHERE id = $2", [newQty, invId]);
 
-                    // 3. Log 'return' movement
-                    try {
-                        await query(
-                            `INSERT INTO stock_movements (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
+                            // 3. Log 'return' movement
+                            try {
+                                await query(
+                                    `INSERT INTO stock_movements (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
                                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-                            [invId, id, 'return', qtyToReturn, currentQty, newQty, `Case Cancelled: ${notes || ''}`, (req.user?.email) || 'system']
-                        );
-                    } catch (_) { }
+                                    [invId, id, 'return', qtyToReturn, currentQty, newQty, `Case Cancelled: ${notes || ''}`, (req.user?.email) || 'system']
+                                );
+                            } catch (_) { }
+                        }
+                    }
                 }
             }
-        }
-    }
-} catch (_) { }
+        } catch (_) { }
 
-try {
-    await query(
-        `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
+        try {
+            await query(
+                `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [
-            req.user?.id || null,
-            req.user?.email || null,
-            'case_status_change',
-            'case',
-            id,
-            JSON.stringify({ status: oldStatus }),
-            JSON.stringify({ status, notes: notes || null }),
-            req.ip,
-            req.headers['user-agent']
-        ]
-    );
-} catch (e) {
-    console.warn('Audit log failed (case status):', e.message);
-}
+                [
+                    req.user?.id || null,
+                    req.user?.email || null,
+                    'case_status_change',
+                    'case',
+                    id,
+                    JSON.stringify({ status: oldStatus }),
+                    JSON.stringify({ status, notes: notes || null }),
+                    req.ip,
+                    req.headers['user-agent']
+                ]
+            );
+        } catch (e) {
+            console.warn('Audit log failed (case status):', e.message);
+        }
 
-res.json({
-    success: true,
-    message: `Status updated from ${oldStatus} to ${status}`,
-    case: result.rows[0]
-});
+        res.json({
+            success: true,
+            message: `Status updated from ${oldStatus} to ${status}`,
+            case: result.rows[0]
+        });
 
     } catch (err) {
-    console.error('❌ Error updating case status:', err);
-    res.status(500).json({
-        success: false,
-        error: 'Failed to update case status',
-        details: err.message
-    });
-}
+        console.error('❌ Error updating case status:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to update case status',
+            details: err.message
+        });
+    }
 };
 
 // --- UPDATE FUNERAL TIME ---
