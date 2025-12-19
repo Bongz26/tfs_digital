@@ -1193,6 +1193,7 @@ export default function ConsultationForm() {
                       <div key={`srv_${d.policy_number}`} className="flex items-center justify-between p-3 border-b">
                         <div className="text-sm">
                           <span className="font-bold">{d.policy_number}</span>
+                          <span className="ml-2 font-medium text-blue-800">{d.data?.deceased_name || ''}</span>
                           <span className="ml-2 text-gray-500">{d.updated_at ? new Date(d.updated_at).toLocaleString() : ''}</span>
                           {d.department && <span className="ml-2 text-gray-400">{d.department}</span>}
                         </div>
