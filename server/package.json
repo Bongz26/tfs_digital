@@ -18,7 +18,8 @@
     "pg": "^8.13.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10"
+    "nodemon": "^3.1.10",
+    "pg-dump": "^0.10.0"
   },
   "engines": {
     "node": ">=18.18.0 <19.0.0"
