@@ -225,11 +225,13 @@ exports.adjustStock = async (req, res) => {
 
         try {
             const mType = (String(movement_type || '').toLowerCase() === 'sale') ? 'sale' : 'adjustment';
+            const logDate = req.body.created_at || new Date(); // Allow backdating
+
             await query(
                 `INSERT INTO stock_movements 
-         (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-                [id, case_id || null, mType, quantity_change, previous_quantity, new_quantity, reason || 'Manual adjustment', recorded_by || 'system']
+         (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+                [id, case_id || null, mType, quantity_change, previous_quantity, new_quantity, reason || 'Manual adjustment', recorded_by || 'system', logDate]
             );
         } catch (movementErr) {
             console.warn('⚠️  Could not log stock movement:', movementErr.message);

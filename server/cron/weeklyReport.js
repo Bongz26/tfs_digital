@@ -93,27 +93,70 @@ const sendWeeklyReportLogic = async (options = {}) => {
 
     // However, if the user explicitly asks for older data (unlikely given the prompt), we might block it.
     // Let's add the constraint to valid data.
+    // Ensure the actualStartDate is not before '2025-12-08 00:00:00'
+    // Ensure the startDate is not before '2025-12-08 00:00:00'
+    const minAllowedDate = new Date('2025-12-08T00:00:00');
+    // Use startDate / endDate from the destructuring above
+    // We need to ensure queryParams uses these correctly
 
-    console.log(`📊 Generating Inventory Report. Filter: ${dateFilter}, Params: ${queryParams}`);
+    // Recalculate query params here to be safe
+    let startD = startDate;
+    let endD = endDate;
+
+    if (startDate && startDate.length === 10) startD = `${startDate} 00:00:00`;
+    if (endDate && endDate.length === 10) endD = `${endDate} 23:59:59`;
+
+    const currentStartDate = new Date(startD);
+    if (currentStartDate < minAllowedDate) {
+        startD = '2025-12-08 00:00:00';
+    }
+
+    // If not provided (auto mode), calculate them
+    if (!startD || !endD) {
+        const d = days || 7;
+        const now = new Date();
+        const past = new Date();
+        past.setDate(now.getDate() - d);
+        endD = now.toISOString();
+        startD = past.toISOString();
+    }
+
+    queryParams = [startD, endD];
+
+    console.log(`📊 Generating Inventory Report. Filter: ${dateRangeDisplay}, Params: ${queryParams}`);
 
     try {
         const sql = `
             SELECT 
-                sm.created_at,
+                COALESCE(sm.created_at, c.funeral_date) as created_at,
                 c.funeral_date,
                 c.case_number,
                 c.deceased_name,
+                COALESCE(i.name, c.casket_type) as item_name,
+                COALESCE(i.color, c.casket_colour) as item_color,
+                COALESCE(i.category, 'coffin') as category,
+                COALESCE(sm.quantity_change, -1) as quantity_change
+            FROM cases c
+            LEFT JOIN stock_movements sm ON c.id = sm.case_id AND sm.quantity_change < 0
+            LEFT JOIN inventory i ON sm.inventory_id = i.id
+            WHERE c.funeral_date >= $1 AND c.funeral_date <= $2
+               -- Also include manual movements meant for these dates that might not be linked to a case in the range (manual usage)
+            UNION ALL
+            SELECT 
+                sm.created_at,
+                NULL as funeral_date,
+                'MANUAL' as case_number,
+                sm.reason as deceased_name,
                 i.name as item_name,
                 i.color as item_color,
                 i.category,
                 sm.quantity_change
             FROM stock_movements sm
-            LEFT JOIN cases c ON sm.case_id = c.id
             JOIN inventory i ON sm.inventory_id = i.id
-            WHERE ${dateFilter}
-                AND sm.quantity_change < 0
-                AND sm.created_at >= '2025-12-08 00:00:00'
-            ORDER BY sm.created_at DESC
+            WHERE sm.case_id IS NULL 
+              AND sm.quantity_change < 0
+              AND sm.created_at >= $1 AND sm.created_at <= $2
+            ORDER BY funeral_date DESC, created_at DESC
         `;
 
         const result = await query(sql, queryParams);
