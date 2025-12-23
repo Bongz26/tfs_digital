@@ -376,7 +376,11 @@ export default function ConsultationForm() {
     office_personnel2: '',
     client_name2: '',
     date2: '',
-    burial_place: ''
+    office_personnel2: '',
+    client_name2: '',
+    date2: '',
+    burial_place: '',
+    tombstone_type: ''
   });
 
   const [message, setMessage] = useState('');
@@ -443,7 +447,10 @@ export default function ConsultationForm() {
             plan_age_bracket: found.plan_age_bracket || prev.plan_age_bracket,
             venue_name: found.venue_name || prev.venue_name,
             venue_address: found.venue_address || prev.venue_address,
+            venue_name: found.venue_name || prev.venue_name,
+            venue_address: found.venue_address || prev.venue_address,
             burial_place: found.burial_place || prev.burial_place,
+            tombstone_type: found.tombstone_type || prev.tombstone_type,
             branch: found.branch || prev.branch,
             // Additional fields to ensure top-up and other details are loaded
             top_up_amount: found.top_up_amount != null ? found.top_up_amount : prev.top_up_amount,
@@ -922,7 +929,7 @@ export default function ConsultationForm() {
         requires_catering: false, requires_grocery: false, requires_bus: false,
         programs: 0, top_up_amount: 0, airtime: false, airtime_network: '', airtime_number: '',
         cover_amount: 0, cashback_amount: 0, amount_to_bank: 0,
-        total_price: '', casket_type: '', casket_colour: '',
+        total_price: '', casket_type: '', casket_colour: '', tombstone_type: '',
         office_personnel1: '', client_name1: '', date1: '',
         office_personnel2: '', client_name2: '', date2: ''
       }));
@@ -1626,6 +1633,17 @@ export default function ConsultationForm() {
                 <label className="flex items-center"><input type="checkbox" checked={form.requires_cow} onChange={e => handleInputChange('requires_cow', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Cow</span></label>
                 <label className="flex items-center"><input type="checkbox" checked={form.requires_sheep} onChange={e => handleInputChange('requires_sheep', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Sheep</span></label>
                 <label className="flex items-center"><input type="checkbox" checked={form.requires_tombstone} onChange={e => handleInputChange('requires_tombstone', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Tombstone</span></label>
+                {form.requires_tombstone && (
+                  <div className="ml-8 mt-2">
+                    <label className="block text-sm font-semibold text-gray-700">Tombstone Type</label>
+                    <input
+                      value={form.tombstone_type}
+                      onChange={e => handleInputChange('tombstone_type', e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg"
+                      placeholder="CH111"
+                    />
+                  </div>
+                )}
                 <label className="flex items-center"><input type="checkbox" checked={form.requires_flower} onChange={e => handleInputChange('requires_flower', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Flower</span></label>
                 <label className="flex items-center"><input type="checkbox" checked={form.requires_catering} onChange={e => handleInputChange('requires_catering', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Catering</span></label>
                 <label className="flex items-center"><input type="checkbox" checked={form.requires_grocery} onChange={e => handleInputChange('requires_grocery', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Grocery</span></label>
@@ -1791,7 +1809,7 @@ export default function ConsultationForm() {
 
                       <div className="checklist-item"><span className="checklist-label">Cow</span> <span className="checklist-val">{printedData.requires_cow ? 'YES' : 'NO'}</span></div>
                       <div className="checklist-item"><span className="checklist-label">Sheep</span> <span className="checklist-val">{printedData.requires_sheep ? 'YES' : 'NO'}</span></div>
-                      <div className="checklist-item"><span className="checklist-label">Tombstone</span> <span className="checklist-val">{printedData.requires_tombstone ? 'YES' : 'NO'}</span></div>
+                      <div className="checklist-item"><span className="checklist-label">Tombstone</span> <span className="checklist-val">{printedData.requires_tombstone ? (printedData.tombstone_type ? `YES (${printedData.tombstone_type})` : 'YES') : 'NO'}</span></div>
 
                       <div className="checklist-item"><span className="checklist-label">Flower</span> <span className="checklist-val">{printedData.requires_flower ? 'YES' : 'NO'}</span></div>
                       <div className="checklist-item"><span className="checklist-label">Bus</span> <span className="checklist-val">{printedData.requires_bus ? 'YES' : 'NO'}</span></div>

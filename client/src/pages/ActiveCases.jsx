@@ -36,6 +36,49 @@ export default function ActiveCases() {
   const [editBurialPlace, setEditBurialPlace] = useState({});
   const [editBranch, setEditBranch] = useState({});
   const [assigningVehicle, setAssigningVehicle] = useState({});
+  const [editingRosterId, setEditingRosterId] = useState(null);
+  const [editRosterForm, setEditRosterForm] = useState({ vehicle: null, driver: null });
+
+  const handleStartEditRoster = (r) => {
+    // Find vehicle in list or use what we have (r.vehicle_id)
+    // r does not have vehicle object structure, likely just ID.
+    // vehicles list has full objects.
+    const v = vehicles.find(veh => veh.id === r.vehicle_id) || null;
+    // Driver name is in r.driver_name
+    const d = drivers.find(drv => drv.name === r.driver_name) || null;
+
+    setEditingRosterId(r.id);
+    setEditRosterForm({ vehicle: v, driver: d });
+  };
+
+  const handleCancelEditRoster = () => {
+    setEditingRosterId(null);
+    setEditRosterForm({ vehicle: null, driver: null });
+  };
+
+  const handleSaveRoster = async (rosterId) => {
+    const { vehicle, driver } = editRosterForm;
+    if (!vehicle || !driver) {
+      alert('Please select both a vehicle and a driver');
+      return;
+    }
+
+    try {
+      await updateRoster(rosterId, {
+        vehicle_id: vehicle.id,
+        driver_name: driver.name
+      });
+
+      const { cases: casesData, vehicles: vehiclesData } = await fetchActiveCases();
+      setCases(casesData);
+      setVehicles(vehiclesData);
+
+      setEditingRosterId(null);
+      alert('Assignment updated successfully');
+    } catch (err) {
+      alert(err.response?.data?.error || err.message || 'Failed to update assignment');
+    }
+  };
 
   // Fetch active cases and vehicles in one call
   useEffect(() => {
@@ -154,7 +197,11 @@ export default function ActiveCases() {
       await assignVehicle(caseId, {
         vehicle_id: vehicle.id,
         driver_name: driver.name,
-        assignment_role: vehicleCategory[caseId] || 'family'
+        assignment_role: vehicleCategory[caseId] || (() => {
+          const c = cases.find(x => x.id === caseId);
+          const hasHearse = c?.roster?.some(r => r.assignment_role === 'hearse');
+          return hasHearse ? 'family' : 'hearse';
+        })()
         // pickup_time will be calculated on backend (1.5 hours before funeral time)
       });
 
@@ -484,7 +531,7 @@ export default function ActiveCases() {
                         <div className="text-gray-800 text-sm">
                           {new Date(c.funeral_date).toLocaleDateString()}
                         </div>
-                        {(isAdmin() || c.status === 'intake') && !c.warning_past_funeral_date ? (
+                        {(isAdmin() || (c.status === 'intake' && !c.warning_past_funeral_date)) ? (
                           <div className="mt-1">
                             {editingFuneralTime[c.id] ? (
                               <div className="flex items-center gap-2">
@@ -579,7 +626,7 @@ export default function ActiveCases() {
                                         e.target.value = '';
                                       }
                                     }}
-                                    disabled={changingStatus[c.id] || c.warning_past_funeral_date}
+                                    disabled={changingStatus[c.id] || (c.warning_past_funeral_date && !isAdmin())}
                                   >
                                     <option value="">Change Status...</option>
                                     {getNextStatuses(c.status).map(nextStatus => (
@@ -603,7 +650,6 @@ export default function ActiveCases() {
                               placeholder="Service venue"
                               value={editVenueName[c.id] ?? ''}
                               onChange={e => setEditVenueName(prev => ({ ...prev, [c.id]: e.target.value }))}
-                              disabled={c.warning_past_funeral_date}
                             />
                             <input
                               type="text"
@@ -611,13 +657,11 @@ export default function ActiveCases() {
                               placeholder="Burial place"
                               value={editBurialPlace[c.id] ?? ''}
                               onChange={e => setEditBurialPlace(prev => ({ ...prev, [c.id]: e.target.value }))}
-                              disabled={c.warning_past_funeral_date}
                             />
                             <select
                               className="text-xs border border-gray-300 rounded px-2 py-1 w-full"
                               value={editBranch[c.id] ?? ''}
                               onChange={e => setEditBranch(prev => ({ ...prev, [c.id]: e.target.value }))}
-                              disabled={c.warning_past_funeral_date}
                             >
                               <option value="">Change Branch...</option>
                               <option value="Head Office">Head Office</option>
@@ -628,7 +672,7 @@ export default function ActiveCases() {
                             </select>
                             <button
                               className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                              disabled={(!editVenueName[c.id] && !editBurialPlace[c.id] && !editBranch[c.id]) || c.warning_past_funeral_date}
+                              disabled={(!editVenueName[c.id] && !editBurialPlace[c.id] && !editBranch[c.id])}
                               onClick={async () => {
                                 try {
                                   const payload = {};
@@ -681,184 +725,239 @@ export default function ActiveCases() {
                       </td>
                       <td className="p-3 sm:p-4">
                         {(!c.roster || c.roster.length < (c.required_min_vehicles || 1)) ? (
-                          <div className="flex flex-col space-y-2">
-                            <div className="flex items-center gap-4 text-sm">
-                              <label className="flex items-center gap-2">
-                                <input
-                                  type="radio"
-                                  name={`vehcat-${c.id}`}
-                                  checked={(vehicleCategory[c.id] || 'family') === 'hearse'}
-                                  onChange={() => {
-                                    setVehicleCategory(prev => ({ ...prev, [c.id]: 'hearse' }));
-                                  }}
-                                  disabled={c.warning_past_funeral_date}
-                                />
-                                Hearse
-                              </label>
-                              <label className="flex items-center gap-2">
-                                <input
-                                  type="radio"
-                                  name={`vehcat-${c.id}`}
-                                  checked={(vehicleCategory[c.id] || 'family') === 'family'}
-                                  onChange={() => {
-                                    setVehicleCategory(prev => ({ ...prev, [c.id]: 'family' }));
-                                  }}
-                                  disabled={c.warning_past_funeral_date}
-                                />
-                                Family Car
-                              </label>
-                            </div>
-                            <select
-                              className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                              value={selectedVehicle[c.id]?.id || ''}
-                              onChange={e => {
-                                const vehicleId = e.target.value;
-                                if (vehicleId) {
-                                  const vehicle = vehicles.find(v => v.id === parseInt(vehicleId));
-                                  setSelectedVehicle(prev => ({
-                                    ...prev,
-                                    [c.id]: vehicle
-                                  }));
-                                } else {
-                                  setSelectedVehicle(prev => {
-                                    const newState = { ...prev };
-                                    delete newState[c.id];
-                                    return newState;
-                                  });
-                                }
-                              }}
-                              disabled={c.warning_past_funeral_date}
-                            >
-                              <option value="">Select Vehicle</option>
-                              {(() => {
-                                const availableVehicles = c.available_vehicles || vehicles;
-                                return availableVehicles.map(v => (
-                                  <option key={v.id} value={v.id}>
-                                    {formatVehicleType(v.type)} - {v.reg_number}
-                                  </option>
-                                ));
-                              })()}
-                            </select>
-                            {c.available_vehicles && c.available_vehicles.length < vehicles.length && (
-                              <div className="text-xs text-orange-600 mt-1">
-                                ⚠️ Some vehicles unavailable due to time conflicts
-                              </div>
-                            )}
+                          <div className="flex flex-col space-y-3">
+                            {(() => {
+                              const hearseCount = c.roster ? c.roster.filter(r => r.assignment_role === 'hearse').length : 0;
+                              const isHearseNeeded = hearseCount === 0;
+                              const activeCategory = vehicleCategory[c.id] || (isHearseNeeded ? 'hearse' : 'family');
 
-                            <select
-                              className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                              value={selectedDriver[c.id]?.id || ''}
-                              onChange={e => {
-                                const driverId = e.target.value;
-                                if (driverId) {
-                                  const driver = drivers.find(d => d.id === parseInt(driverId));
-                                  setSelectedDriver(prev => ({
-                                    ...prev,
-                                    [c.id]: driver
-                                  }));
-                                } else {
-                                  setSelectedDriver(prev => {
-                                    const newState = { ...prev };
-                                    delete newState[c.id];
-                                    return newState;
-                                  });
-                                }
-                              }}
-                              disabled={c.warning_past_funeral_date}
-                            >
-                              <option value="">Select Driver</option>
-                              {drivers.length === 0 ? (
-                                <option value="" disabled>No drivers available</option>
-                              ) : (
-                                drivers.map(d => (
-                                  <option key={d.id} value={d.id}>
-                                    {d.name} {d.contact ? `(${d.contact})` : ''}
-                                  </option>
-                                ))
+                              return (
+                                <div className="flex flex-col gap-1">
+                                  <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Allocation Role</div>
+                                  <div className="flex items-center gap-2">
+                                    <label
+                                      className={`flex items-center gap-1.5 px-2 py-1 round text-xs cursor-pointer border transition-colors ${activeCategory === 'hearse'
+                                        ? 'bg-red-50 border-red-200 text-red-700 font-medium'
+                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                      <input
+                                        type="radio"
+                                        className="text-red-600 focus:ring-red-500"
+                                        name={`vehcat-${c.id}`}
+                                        checked={activeCategory === 'hearse'}
+                                        onChange={() => setVehicleCategory(prev => ({ ...prev, [c.id]: 'hearse' }))}
+                                        disabled={c.warning_past_funeral_date && !isAdmin()}
+                                      />
+                                      Hearse
+                                      {isHearseNeeded && <span className="ml-1 text-[10px] bg-red-100 text-red-800 px-1 rounded-full">Req</span>}
+                                    </label>
+
+                                    <label
+                                      className={`flex items-center gap-1.5 px-2 py-1 round text-xs cursor-pointer border transition-colors ${activeCategory === 'family'
+                                        ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium'
+                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                      <input
+                                        type="radio"
+                                        className="text-blue-600 focus:ring-blue-500"
+                                        name={`vehcat-${c.id}`}
+                                        checked={activeCategory === 'family'}
+                                        onChange={() => setVehicleCategory(prev => ({ ...prev, [c.id]: 'family' }))}
+                                        disabled={c.warning_past_funeral_date && !isAdmin()}
+                                      />
+                                      Family Car
+                                    </label>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            <div className="space-y-2">
+                              <select
+                                className="border border-gray-300 rounded px-2 py-1.5 text-xs w-full focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                                value={selectedVehicle[c.id]?.id || ''}
+                                onChange={e => {
+                                  const vehicleId = e.target.value;
+                                  if (vehicleId) {
+                                    const vehicle = vehicles.find(v => v.id === parseInt(vehicleId));
+                                    setSelectedVehicle(prev => ({ ...prev, [c.id]: vehicle }));
+                                  } else {
+                                    setSelectedVehicle(prev => { const n = { ...prev }; delete n[c.id]; return n; });
+                                  }
+                                }}
+                                disabled={c.warning_past_funeral_date && !isAdmin()}
+                              >
+                                <option value="">Select Vehicle...</option>
+                                {(() => {
+                                  const availableVehicles = c.available_vehicles || vehicles;
+                                  return availableVehicles.map(v => (
+                                    <option key={v.id} value={v.id}>
+                                      {formatVehicleType(v.type)} - {v.reg_number}
+                                    </option>
+                                  ));
+                                })()}
+                              </select>
+
+                              {c.available_vehicles && c.available_vehicles.length < vehicles.length && (
+                                <div className="text-[10px] text-orange-600 leading-tight">
+                                  ⚠️ Low availability
+                                </div>
                               )}
-                            </select>
-                            {drivers.length === 0 && (
-                              <div className="text-xs text-red-600 mt-1">
-                                ⚠️ No drivers found. Run: node database/setup-drivers.js
-                              </div>
-                            )}
+
+                              <select
+                                className="border border-gray-300 rounded px-2 py-1.5 text-xs w-full focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                                value={selectedDriver[c.id]?.id || ''}
+                                onChange={e => {
+                                  const driverId = e.target.value;
+                                  if (driverId) {
+                                    const driver = drivers.find(d => d.id === parseInt(driverId));
+                                    setSelectedDriver(prev => ({ ...prev, [c.id]: driver }));
+                                  } else {
+                                    setSelectedDriver(prev => { const n = { ...prev }; delete n[c.id]; return n; });
+                                  }
+                                }}
+                                disabled={c.warning_past_funeral_date && !isAdmin()}
+                              >
+                                <option value="">Select Driver...</option>
+                                {drivers.length === 0 ? (
+                                  <option value="" disabled>No drivers available</option>
+                                ) : (
+                                  drivers.map(d => (
+                                    <option key={d.id} value={d.id}>
+                                      {d.name} {d.contact ? `(${d.contact})` : ''}
+                                    </option>
+                                  ))
+                                )}
+                              </select>
+                            </div>
 
                             <button
-                              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
+                              className="bg-red-600 text-white w-full py-1.5 rounded hover:bg-red-700 transition font-medium disabled:bg-gray-300 disabled:cursor-not-allowed text-xs shadow-sm"
                               onClick={() => handleAssignVehicle(c.id)}
-                              disabled={(!selectedVehicle[c.id] || !selectedDriver[c.id]) || c.warning_past_funeral_date || assigningVehicle[c.id]}
+                              disabled={(!selectedVehicle[c.id] || !selectedDriver[c.id]) || (c.warning_past_funeral_date && !isAdmin()) || assigningVehicle[c.id]}
                             >
-                              {assigningVehicle[c.id] ? 'Assigning...' : 'Assign Vehicle & Driver'}
+                              {assigningVehicle[c.id] ? 'Assigning...' : 'Confirm Assignment'}
                             </button>
-                            <div className="text-xs text-gray-600">Assigned: {c.roster?.length || 0} / {c.required_min_vehicles || 1}</div>
+                            <div className="text-[10px] text-gray-400 text-center">
+                              {c.roster?.length || 0} assigned / {c.required_min_vehicles || 1} required
+                            </div>
                           </div>
                         ) : (
-                          <div className="text-center">
-                            <div className="text-green-600 font-medium mb-2 text-sm">
+                          <div className="text-left space-y-3">
+                            <div className="text-green-600 font-medium mb-2 text-sm text-center">
                               ✓ Vehicle(s) Assigned ({c.roster.length})
                             </div>
-                            {c.roster.map((r, idx) => (
-                              <React.Fragment key={idx}>
-                                <div className="flex items-center gap-2 text-xs text-gray-600">
-                                  <span>
-                                    {(r.assignment_role ? (r.assignment_role === 'hearse' ? 'Hearse' : 'Family') + ' • ' : '')}
-                                    Driver: {r.driver_name || 'TBD'}
-                                  </span>
-                                  <select
-                                    className="border border-gray-300 rounded px-2 py-1 text-xs"
-                                    value={editDriver[r.id]?.id || ''}
-                                    onChange={e => {
-                                      const driverId = e.target.value;
-                                      const d = drivers.find(d => d.id === parseInt(driverId));
-                                      setEditDriver(prev => ({ ...prev, [r.id]: d || null }));
-                                    }}
-                                  >
-                                    <option value="">Change driver...</option>
-                                    {drivers.map(d => (
-                                      <option key={d.id} value={d.id}>{d.name}</option>
-                                    ))}
-                                  </select>
+                            {/* Roster List */}
+                            {c.roster.map((r) => {
+                              const isEditing = editingRosterId === r.id;
+                              const v = vehicles.find(vh => vh.id === r.vehicle_id);
+
+                              if (isEditing) {
+                                return (
+                                  <div key={r.id} className="bg-gray-50 border rounded p-2 text-xs space-y-2">
+                                    <div className="font-semibold text-gray-700">Edit Assignment</div>
+                                    <div>
+                                      <label className="block text-gray-500 mb-1">Vehicle</label>
+                                      <select
+                                        className="w-full border rounded px-2 py-1"
+                                        value={editRosterForm.vehicle?.id || ''}
+                                        onChange={e => {
+                                          const vid = parseInt(e.target.value);
+                                          const veh = vehicles.find(x => x.id === vid);
+                                          setEditRosterForm(prev => ({ ...prev, vehicle: veh }));
+                                        }}
+                                      >
+                                        <option value="">Select Vehicle...</option>
+                                        {/* Show current vehicle + available ones */}
+                                        {(c.available_vehicles || vehicles).concat(editRosterForm.vehicle ? [editRosterForm.vehicle] : [])
+                                          .filter((obj, pos, arr) => arr.findIndex(t => t.id === obj.id) === pos) // Unique
+                                          .map(veh => (
+                                            <option key={veh.id} value={veh.id}>{formatVehicleType(veh.type)} - {veh.reg_number}</option>
+                                          ))}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-gray-500 mb-1">Driver</label>
+                                      <select
+                                        className="w-full border rounded px-2 py-1"
+                                        value={editRosterForm.driver?.id || ''}
+                                        onChange={e => {
+                                          const did = parseInt(e.target.value);
+                                          const drv = drivers.find(x => x.id === did);
+                                          setEditRosterForm(prev => ({ ...prev, driver: drv }));
+                                        }}
+                                      >
+                                        <option value="">Select Driver...</option>
+                                        {drivers.map(drv => (
+                                          <option key={drv.id} value={drv.id}>{drv.name}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button
+                                        className="flex-1 bg-green-600 text-white rounded py-1 hover:bg-green-700"
+                                        onClick={() => handleSaveRoster(r.id)}
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        className="flex-1 bg-gray-400 text-white rounded py-1 hover:bg-gray-500"
+                                        onClick={handleCancelEditRoster}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div key={r.id} className="bg-gray-50 border rounded p-2 text-xs flex justify-between items-start">
+                                  <div>
+                                    <div className="font-medium text-gray-800">
+                                      {r.assignment_role === 'hearse' ? 'Hearse' : 'Family'} • {v ? `${formatVehicleType(v.type)} (${v.reg_number})` : 'Unknown Vehicle'}
+                                    </div>
+                                    <div className="text-gray-600 mt-1">
+                                      Driver: {r.driver_name || <span className="text-red-500 italic">TBD</span>}
+                                    </div>
+                                  </div>
                                   <button
-                                    className="bg-blue-600 text-white px-2 py-1 rounded"
-                                    onClick={() => handleUpdateRoster(r.id, c.id)}
-                                    disabled={(!editDriver[r.id] && !selectedVehicle[r.id]) || c.warning_past_funeral_date}
+                                    className="text-blue-600 hover:text-blue-800 px-2"
+                                    onClick={() => handleStartEditRoster(r)}
+                                    disabled={c.warning_past_funeral_date && !isAdmin()}
+                                    title="Edit Assignment"
                                   >
-                                    Update
+                                    ✏️
                                   </button>
                                 </div>
-                                <div className="flex items-center gap-2 text-xs text-gray-600 mt-1 mb-2">
-                                  <span>Change Vehicle:</span>
-                                  <select
-                                    className="border border-gray-300 rounded px-2 py-1 text-xs"
-                                    value={selectedVehicle[r.id]?.id || ''}
-                                    onChange={e => {
-                                      const vehicleId = e.target.value;
-                                      const v = vehicles.find(veh => veh.id === parseInt(vehicleId));
-                                      setSelectedVehicle(prev => ({ ...prev, [r.id]: v || null }));
-                                    }}
-                                    disabled={c.warning_past_funeral_date}
-                                  >
-                                    <option value="">Select new vehicle...</option>
-                                    {(() => {
-                                      const available = c.available_vehicles || vehicles;
-                                      return available.map(v => (
-                                        <option key={v.id} value={v.id}>
-                                          {formatVehicleType(v.type)} - {v.reg_number}
-                                        </option>
-                                      ));
-                                    })()}
-                                  </select>
-                                </div>
-                              </React.Fragment>
-                            ))}
+                              );
+                            })}
+
                             {c.roster.length < (c.required_min_vehicles || 1) && (
-                              <div className="mt-2">
+                              <div className="mt-2 text-center p-2 bg-yellow-50 border border-yellow-200 rounded">
+                                <p className="text-xs text-yellow-700 mb-2">Additional vehicle needed</p>
+                                {/* We can re-use the top-level assign form logic here or just a button to switch back to 'assign' mode if we were completely hiding it.
+                                     But in the current structure, this 'else' block ONLY renders if the quota is met?
+                                     Wait, the condition at Line 765 (in original file, previous view) was: `if (!c.roster || ... < min)`.
+                                     So this `else` block (Line 835) ONLY runs if quota IS met.
+                                     So `c.roster.length < min` should be false here.
+                                     EXCEPT if we changed that logic?
+                                     I will assume this block is "View Mode".
+                                     If I want to support "Add Another" when quota IS met (extra cars), I should add a button here.
+                                 */}
                                 <button
-                                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
-                                  onClick={() => handleAssignVehicle(c.id)}
-                                  disabled={(!selectedVehicle[c.id] || !selectedDriver[c.id]) || c.warning_past_funeral_date || assigningVehicle[c.id]}
+                                  className="text-xs bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+                                  onClick={() => {
+                                    // This is tricky because the parent conditional hides the "Add Form" when quota is met.
+                                    // To show the add form, we might need a state toggle "forceAddMode"?
+                                    // For now, let's just stick to the request: "Edit Driver details".
+                                    // The user didn't explicitly ask for "Add Extra Vehicle" here.
+                                    alert('To add an extra vehicle beyond the quota, please contact IT (feature coming soon).');
+                                  }}
                                 >
-                                  {assigningVehicle[c.id] ? 'Assigning...' : 'Add Another Vehicle'}
+                                  + Add Extra Vehicle
                                 </button>
                               </div>
                             )}
@@ -896,7 +995,7 @@ export default function ActiveCases() {
                   <div className="text-xs text-gray-600 mb-3 space-y-1">
                     <div>
                       Funeral: {new Date(c.funeral_date).toLocaleDateString()}
-                      {((isAdmin || c.status === 'intake') && !c.warning_past_funeral_date) ? (
+                      {(isAdmin() || (c.status === 'intake' && !c.warning_past_funeral_date)) ? (
                         <div className="mt-1">
                           {editingFuneralTime[c.id] ? (
                             <div className="flex items-center gap-2">
@@ -1013,7 +1112,7 @@ export default function ActiveCases() {
                             e.target.value = '';
                           }
                         }}
-                        disabled={changingStatus[c.id] || c.warning_past_funeral_date}
+                        disabled={changingStatus[c.id] || (c.warning_past_funeral_date && !isAdmin())}
                       >
                         <option value="">Change Status...</option>
                         {getNextStatuses(c.status).map(nextStatus => (
@@ -1027,144 +1126,208 @@ export default function ActiveCases() {
 
                   {/* Vehicle & Driver Assignment */}
                   {(!c.roster || c.roster.length < (c.required_min_vehicles || 1)) ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-4 text-xs">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name={`vehcatm-${c.id}`}
-                            checked={(vehicleCategory[c.id] || 'family') === 'hearse'}
-                            onChange={() => {
-                              setVehicleCategory(prev => ({ ...prev, [c.id]: 'hearse' }));
-                            }}
-                            disabled={c.warning_past_funeral_date}
-                          />
-                          Hearse
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name={`vehcatm-${c.id}`}
-                            checked={(vehicleCategory[c.id] || 'family') === 'family'}
-                            onChange={() => {
-                              setVehicleCategory(prev => ({ ...prev, [c.id]: 'family' }));
-                            }}
-                            disabled={c.warning_past_funeral_date}
-                          />
-                          Family
-                        </label>
-                      </div>
-                      <select
-                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                        value={selectedVehicle[c.id]?.id || ''}
-                        onChange={e => {
-                          const vehicleId = e.target.value;
-                          if (vehicleId) {
-                            const vehicle = vehicles.find(v => v.id === parseInt(vehicleId));
-                            setSelectedVehicle(prev => ({
-                              ...prev,
-                              [c.id]: vehicle
-                            }));
-                          } else {
-                            setSelectedVehicle(prev => {
-                              const newState = { ...prev };
-                              delete newState[c.id];
-                              return newState;
-                            });
-                          }
-                        }}
-                        disabled={c.warning_past_funeral_date}
-                      >
-                        <option value="">Select Vehicle</option>
-                        {(() => {
-                          const availableVehicles = c.available_vehicles || vehicles;
-                          return availableVehicles.map(v => (
-                            <option key={v.id} value={v.id}>
-                              {formatVehicleType(v.type)} - {v.reg_number}
-                            </option>
-                          ));
-                        })()}
-                      </select>
+                    <div className="space-y-3 pt-2">
+                      {(() => {
+                        const hearseCount = c.roster ? c.roster.filter(r => r.assignment_role === 'hearse').length : 0;
+                        const isHearseNeeded = hearseCount === 0;
+                        const activeCategory = vehicleCategory[c.id] || (isHearseNeeded ? 'hearse' : 'family');
 
-                      <select
-                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                        value={selectedDriver[c.id]?.id || ''}
-                        onChange={e => {
-                          const driverId = e.target.value;
-                          if (driverId) {
-                            const driver = drivers.find(d => d.id === parseInt(driverId));
-                            setSelectedDriver(prev => ({
-                              ...prev,
-                              [c.id]: driver
-                            }));
-                          } else {
-                            setSelectedDriver(prev => {
-                              const newState = { ...prev };
-                              delete newState[c.id];
-                              return newState;
-                            });
-                          }
-                        }}
-                        disabled={c.warning_past_funeral_date}
-                      >
-                        <option value="">Select Driver</option>
-                        {drivers.length === 0 ? (
-                          <option value="" disabled>No drivers available</option>
-                        ) : (
-                          drivers.map(d => (
-                            <option key={d.id} value={d.id}>
-                              {d.name} {d.contact ? `(${d.contact})` : ''}
-                            </option>
-                          ))
-                        )}
-                      </select>
-                      {drivers.length === 0 && (
-                        <div className="text-xs text-red-600">
-                          ⚠️ No drivers found
-                        </div>
-                      )}
+                        return (
+                          <div className="flex flex-col gap-1">
+                            <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wider">Role</div>
+                            <div className="flex items-center gap-2">
+                              <label
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded text-xs cursor-pointer border transition-colors flex-1 justify-center ${activeCategory === 'hearse'
+                                    ? 'bg-red-50 border-red-200 text-red-700 font-medium'
+                                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                  }`}
+                              >
+                                <input
+                                  type="radio"
+                                  className="text-red-600 focus:ring-red-500"
+                                  name={`vehcatm-${c.id}`}
+                                  checked={activeCategory === 'hearse'}
+                                  onChange={() => setVehicleCategory(prev => ({ ...prev, [c.id]: 'hearse' }))}
+                                  disabled={c.warning_past_funeral_date && !isAdmin()}
+                                />
+                                Hearse
+                                {isHearseNeeded && <span className="ml-1 text-[10px] bg-red-100 text-red-800 px-1 rounded-full">Req</span>}
+                              </label>
+
+                              <label
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded text-xs cursor-pointer border transition-colors flex-1 justify-center ${activeCategory === 'family'
+                                    ? 'bg-blue-50 border-blue-200 text-blue-700 font-medium'
+                                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                  }`}
+                              >
+                                <input
+                                  type="radio"
+                                  className="text-blue-600 focus:ring-blue-500"
+                                  name={`vehcatm-${c.id}`}
+                                  checked={activeCategory === 'family'}
+                                  onChange={() => setVehicleCategory(prev => ({ ...prev, [c.id]: 'family' }))}
+                                  disabled={c.warning_past_funeral_date && !isAdmin()}
+                                />
+                                Family Car
+                              </label>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      <div className="space-y-2">
+                        <select
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                          value={selectedVehicle[c.id]?.id || ''}
+                          onChange={e => {
+                            const vehicleId = e.target.value;
+                            if (vehicleId) {
+                              const vehicle = vehicles.find(v => v.id === parseInt(vehicleId));
+                              setSelectedVehicle(prev => ({ ...prev, [c.id]: vehicle }));
+                            } else {
+                              setSelectedVehicle(prev => { const n = { ...prev }; delete n[c.id]; return n; });
+                            }
+                          }}
+                          disabled={c.warning_past_funeral_date && !isAdmin()}
+                        >
+                          <option value="">Select Vehicle...</option>
+                          {(() => {
+                            const availableVehicles = c.available_vehicles || vehicles;
+                            return availableVehicles.map(v => (
+                              <option key={v.id} value={v.id}>
+                                {formatVehicleType(v.type)} - {v.reg_number}
+                              </option>
+                            ));
+                          })()}
+                        </select>
+
+                        <select
+                          className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                          value={selectedDriver[c.id]?.id || ''}
+                          onChange={e => {
+                            const driverId = e.target.value;
+                            if (driverId) {
+                              const driver = drivers.find(d => d.id === parseInt(driverId));
+                              setSelectedDriver(prev => ({ ...prev, [c.id]: driver }));
+                            } else {
+                              setSelectedDriver(prev => { const n = { ...prev }; delete n[c.id]; return n; });
+                            }
+                          }}
+                          disabled={c.warning_past_funeral_date && !isAdmin()}
+                        >
+                          <option value="">Select Driver...</option>
+                          {drivers.length === 0 ? (
+                            <option value="" disabled>No drivers available</option>
+                          ) : (
+                            drivers.map(d => (
+                              <option key={d.id} value={d.id}>
+                                {d.name} {d.contact ? `(${d.contact})` : ''}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </div>
 
                       <button
-                        className="w-full bg-red-600 text-white px-4 py-2.5 rounded-lg hover:bg-red-700 transition font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
+                        className="w-full bg-red-600 text-white px-4 py-2.5 rounded-lg hover:bg-red-700 transition font-medium disabled:bg-gray-400 disabled:cursor-not-allowed text-sm font-semibold shadow-sm"
                         onClick={() => handleAssignVehicle(c.id)}
-                        disabled={(!selectedVehicle[c.id] || !selectedDriver[c.id]) || c.warning_past_funeral_date || assigningVehicle[c.id]}
+                        disabled={(!selectedVehicle[c.id] || !selectedDriver[c.id]) || (c.warning_past_funeral_date && !isAdmin()) || assigningVehicle[c.id]}
                       >
-                        {assigningVehicle[c.id] ? 'Assigning...' : (c.roster?.length ? 'Add Another Vehicle' : 'Assign Vehicle & Driver')}
+                        {assigningVehicle[c.id] ? 'Assigning...' : (c.roster?.length ? 'Add Another Vehicle' : 'Confirm Assignment')}
                       </button>
-                      <div className="text-xs text-gray-600 text-center">Assigned: {c.roster?.length || 0} / {c.required_min_vehicles || 1}</div>
+                      <div className="text-xs text-gray-500 text-center">{c.roster?.length || 0} assigned / {c.required_min_vehicles || 1} required</div>
                     </div>
                   ) : (
-                    <div className="text-center pt-2 space-y-2">
-                      {c.roster.map((r, idx) => (
-                        <div key={idx} className="flex items-center justify-center gap-2 text-xs text-gray-600">
-                          <span>
-                            {(r.assignment_role ? (r.assignment_role === 'hearse' ? 'Hearse' : 'Family') + ' • ' : '')}
-                            Driver: {r.driver_name || 'TBD'}
-                          </span>
-                          <select
-                            className="border border-gray-300 rounded px-2 py-1 text-xs"
-                            value={editDriver[r.id]?.id || ''}
-                            onChange={e => {
-                              const driverId = e.target.value;
-                              const d = drivers.find(d => d.id === parseInt(driverId));
-                              setEditDriver(prev => ({ ...prev, [r.id]: d || null }));
-                            }}
-                          >
-                            <option value="">Change driver...</option>
-                            {drivers.map(d => (
-                              <option key={d.id} value={d.id}>{d.name}</option>
-                            ))}
-                          </select>
-                          <button
-                            className="bg-blue-600 text-white px-2 py-1 rounded"
-                            onClick={() => handleUpdateRoster(r.id, c.id)}
-                            disabled={!editDriver[r.id] || c.warning_past_funeral_date}
-                          >
-                            Update
-                          </button>
-                        </div>
-                      ))}
-                      <div className="text-xs text-gray-600">Assigned: {c.roster.length} / {c.required_min_vehicles || 1}</div>
+                    <div className="pt-2 space-y-3">
+                      {c.roster.map((r) => {
+                        const isEditing = editingRosterId === r.id;
+                        const v = vehicles.find(vh => vh.id === r.vehicle_id);
+
+                        if (isEditing) {
+                          return (
+                            <div key={r.id} className="bg-gray-50 border rounded p-3 text-sm space-y-3">
+                              <div className="font-semibold text-gray-800 border-b pb-1">Edit Assignment</div>
+                              <div>
+                                <label className="block text-gray-500 mb-1 text-xs uppercase tracking-wide">Vehicle</label>
+                                <select
+                                  className="w-full border rounded px-3 py-2 bg-white"
+                                  value={editRosterForm.vehicle?.id || ''}
+                                  onChange={e => {
+                                    const vid = parseInt(e.target.value);
+                                    const veh = vehicles.find(x => x.id === vid);
+                                    setEditRosterForm(prev => ({ ...prev, vehicle: veh }));
+                                  }}
+                                >
+                                  <option value="">Select Vehicle...</option>
+                                  {(c.available_vehicles || vehicles).concat(editRosterForm.vehicle ? [editRosterForm.vehicle] : [])
+                                    .filter((obj, pos, arr) => arr.findIndex(t => t.id === obj.id) === pos)
+                                    .map(veh => (
+                                      <option key={veh.id} value={veh.id}>{formatVehicleType(veh.type)} - {veh.reg_number}</option>
+                                    ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-gray-500 mb-1 text-xs uppercase tracking-wide">Driver</label>
+                                <select
+                                  className="w-full border rounded px-3 py-2 bg-white"
+                                  value={editRosterForm.driver?.id || ''}
+                                  onChange={e => {
+                                    const did = parseInt(e.target.value);
+                                    const drv = drivers.find(x => x.id === did);
+                                    setEditRosterForm(prev => ({ ...prev, driver: drv }));
+                                  }}
+                                >
+                                  <option value="">Select Driver...</option>
+                                  {drivers.map(drv => (
+                                    <option key={drv.id} value={drv.id}>{drv.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="flex gap-3 pt-1">
+                                <button
+                                  className="flex-1 bg-green-600 text-white rounded py-2 font-medium hover:bg-green-700 shadow-sm"
+                                  onClick={() => handleSaveRoster(r.id)}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  className="flex-1 bg-gray-400 text-white rounded py-2 font-medium hover:bg-gray-500 shadow-sm"
+                                  onClick={handleCancelEditRoster}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={r.id} className="bg-white border rounded p-3 flex justify-between items-center shadow-sm">
+                            <div>
+                              <div className="font-semibold text-gray-800 text-sm">
+                                {(r.assignment_role === 'hearse' ? 'Hearse' : (r.assignment_role === 'family' ? 'Family' : (r.assignment_role || 'Vehicle')))} • {v ? `${formatVehicleType(v.type)}` : 'Unknown'}
+                              </div>
+                              <div className="text-xs text-gray-500 mb-1">
+                                {v ? v.reg_number : ''}
+                              </div>
+                              <div className="text-gray-700 text-sm">
+                                Driver: {r.driver_name || <span className="text-red-500 italic">TBD</span>}
+                              </div>
+                            </div>
+                            <button
+                              className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-2 rounded-full transition"
+                              onClick={() => handleStartEditRoster(r)}
+                              disabled={c.warning_past_funeral_date && !isAdmin()}
+                              title="Edit Assignment"
+                            >
+                              ✏️
+                            </button>
+                          </div>
+                        );
+                      })}
+                      <div className="text-xs text-gray-500 text-center mt-2">
+                        Assigned: {c.roster.length} / {c.required_min_vehicles || 1}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1181,7 +1344,8 @@ export default function ActiveCases() {
               </div>
             </div>
           </>
-        )}
+        )
+        }
       </div>
     </div>
   );

@@ -147,14 +147,21 @@ export default function StockManagement() {
     }
   }, [API_URL, usageFrom, usageTo]);
 
-  const logCoffinUsage = async (item) => {
+  const [usageModal, setUsageModal] = useState({ open: false, item: null, caseNumber: '', date: '', quantity: 1 });
+
+  const openUsageLogModal = (item) => {
+    // Default to today
+    const today = new Date().toISOString().slice(0, 10);
+    setUsageModal({ open: true, item: item, caseNumber: '', date: today, quantity: 1 });
+  };
+
+  const submitUsageLog = async () => {
+    const { item, caseNumber, date, quantity } = usageModal;
+    if (!item) return;
+
     try {
       const token = getAccessToken();
       let caseId = null;
-      const caseNumber = prompt(`Link to case number (optional) for "${item.name}" usage:\n(Click Cancel to abort)`);
-
-      // If user clicks Cancel (null), do nothing.
-      if (caseNumber === null) return;
 
       if (caseNumber && caseNumber.trim()) {
         try {
@@ -164,30 +171,36 @@ export default function StockManagement() {
           if (resp.ok) {
             const d = await resp.json();
             if (d.success && d.case?.id) caseId = d.case.id;
-            else alert(`Case "${caseNumber}" not found. Logging as unallocated.`);
-          } else {
-            alert(`Case "${caseNumber}" lookup failed. Logging as unallocated.`);
+            else {
+              if (!window.confirm(`Case "${caseNumber}" not found. Log as unallocated?`)) return;
+            }
           }
         } catch (_) { }
       }
+
       const body = {
-        quantity_change: -1,
+        quantity_change: -1 * (parseInt(quantity) || 1),
         reason: caseId ? 'Case consumption' : 'Manual usage',
         case_id: caseId,
-        movement_type: 'sale'
+        movement_type: 'sale',
+        created_at: date ? new Date(date).toISOString() : new Date().toISOString()
       };
+
       const response = await fetch(`${API_URL}/api/inventory/${item.id}/adjust`, {
         method: 'POST',
         headers: token ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } : { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
+
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
+
       if (data.success) {
+        setUsageModal({ ...usageModal, open: false });
         await fetchInventory(activeTab === 'low' ? 'all' : activeTab);
         await fetchStats();
         await fetchMovements();
-        alert('Usage logged');
+        alert('Usage logged successfully');
       } else {
         alert(data.error || 'Failed to log usage');
       }
@@ -322,6 +335,32 @@ export default function StockManagement() {
         return { success: true };
       } else return { success: false, error: data.error };
     } catch (err) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // Delete inventory item
+  const deleteInventoryItem = async (itemId) => {
+    if (!window.confirm('Are you sure you want to delete this item? This cannot be undone.')) return;
+    try {
+      const token = getAccessToken();
+      const response = await fetch(`${API_URL}/api/inventory/${itemId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || `HTTP ${response.status}`);
+      }
+
+      // Success
+      setShowEditForm(false);
+      setEditItem(null);
+      await fetchInventory(activeTab === 'low' ? 'all' : activeTab);
+      await fetchStats();
+      return { success: true };
+    } catch (err) {
+      alert(`Failed to delete item: ${err.message}`);
       return { success: false, error: err.message };
     }
   };
@@ -680,19 +719,27 @@ export default function StockManagement() {
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3 mt-6">
+            <div className="flex justify-between mt-6">
               <button
-                onClick={() => { setShowEditForm(false); setEditItem(null); }}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-semibold"
+                onClick={() => deleteInventoryItem(editItem.id)}
+                className="px-4 py-2 text-red-600 hover:text-red-800 font-semibold border border-red-200 rounded-lg hover:bg-red-50"
               >
-                Cancel
+                Delete Item
               </button>
-              <button
-                onClick={() => updateInventoryItem(editItem)}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 font-semibold"
-              >
-                Save Changes
-              </button>
+              <div className="space-x-3">
+                <button
+                  onClick={() => { setShowEditForm(false); setEditItem(null); }}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => updateInventoryItem(editItem)}
+                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 font-semibold"
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -916,7 +963,7 @@ export default function StockManagement() {
                           </button>
                           {item.category === 'coffin' && (
                             <button
-                              onClick={() => logCoffinUsage(item)}
+                              onClick={() => openUsageLogModal(item)}
                               className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 text-sm"
                             >
                               Log Usage
@@ -988,6 +1035,62 @@ export default function StockManagement() {
           fetchStats();
         }}
       />
+
+      {/* Usage Log Modal */}
+      {usageModal.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm">
+            <h3 className="text-xl font-bold text-red-800 mb-4">Log Usage: {usageModal.item?.name}</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Date Used (For History)</label>
+                <input
+                  type="date"
+                  value={usageModal.date}
+                  onChange={(e) => setUsageModal({ ...usageModal, date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Quantity Used</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={usageModal.quantity}
+                  onChange={(e) => setUsageModal({ ...usageModal, quantity: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Case Number (Optional)</label>
+                <input
+                  type="text"
+                  value={usageModal.caseNumber}
+                  onChange={(e) => setUsageModal({ ...usageModal, caseNumber: e.target.value })}
+                  placeholder="e.g. EC2025/001"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">Links usage to a specific funeral case.</p>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => setUsageModal({ ...usageModal, open: false })}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitUsageLog}
+                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 font-semibold"
+                >
+                  Confirm Usage
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
