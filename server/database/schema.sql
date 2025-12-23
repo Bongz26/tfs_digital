@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS cases (
     venue_lng numeric,
     requires_cow boolean DEFAULT false,
     requires_tombstone boolean DEFAULT false,
+    tombstone_type character varying(100),
     status character varying(20) DEFAULT 'intake'::character varying,
     intake_day date,
     created_at timestamp without time zone DEFAULT now(),

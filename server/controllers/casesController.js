@@ -225,7 +225,8 @@ exports.createCase = async (req, res) => {
         legacy_plan_name,
         status,
         burial_place,
-        branch
+        branch,
+        tombstone_type
     } = req.body;
 
     try {
@@ -354,7 +355,7 @@ exports.createCase = async (req, res) => {
         casket_type, casket_colour, delivery_date, delivery_time, intake_day,
         programs, top_up_amount, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
-        legacy_plan_name, benefit_mode, status, burial_place, branch)
+        legacy_plan_name, benefit_mode, status, burial_place, branch, tombstone_type)
        VALUES (
         $1,$2,$3,
         $4,$5,$6,$7,$8,
@@ -367,7 +368,7 @@ exports.createCase = async (req, res) => {
         $33,$34,$35,$36,$37,
         $38,$39,$40,$41,$42,
         $43,$44,$45,
-        $46,$47,$48,$49,$50)
+        $46,$47,$48,$49,$50, $51)
        RETURNING *`,
             [
                 finalCaseNumber, claim_date || null, policy_number || null,
@@ -381,7 +382,7 @@ exports.createCase = async (req, res) => {
                 casket_type || null, casket_colour || null, delivery_date || null, delivery_time || null, intake_day,
                 programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, !!airtime, airtime_network || null, airtime_number || null,
                 cover_amount != null ? cover_amount : 0, cashback_amount != null ? cashback_amount : 0, amount_to_bank != null ? amount_to_bank : 0,
-                legacy_plan_name || null, benefit_mode || null, status || 'confirmed', burial_place || null, branch || 'Head Office'
+                legacy_plan_name || null, benefit_mode || null, status || 'confirmed', burial_place || null, branch || 'Head Office', tombstone_type || null
             ]
         );
 
@@ -588,6 +589,9 @@ exports.assignVehicle = async (req, res) => {
         const deliveryDate = currentCase.delivery_date;
         const deliveryTime = currentCase.delivery_time;
 
+        // Check if user is admin
+        const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
+
         let calculatedPickupTime = pickup_time;
 
         if (deliveryDate && deliveryTime) {
@@ -623,19 +627,48 @@ exports.assignVehicle = async (req, res) => {
         }
 
         // Prevent duplicate vehicle assignment to the same case
+        // If vehicle is ALREADY assigned, we check if we are just updating the driver.
         const dupVehicle = await client.query(
-            `SELECT 1 FROM roster WHERE case_id = $1 AND vehicle_id = $2 AND status != 'completed'`,
+            `SELECT id, driver_name FROM roster WHERE case_id = $1 AND vehicle_id = $2 AND status != 'completed'`,
             [caseId, vehicle_id]
         );
+
         if (dupVehicle.rows.length > 0) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ success: false, error: 'This vehicle is already assigned to this case' });
+            // Found existing assignment for this vehicle on this case
+            if (driver_name && driver_name !== 'TBD') {
+                // The user is likely trying to "Assign Driver" to an existing vehicle slot using the main button
+                // We will UPDATE the existing slot instead of creating a new one (which would fail)
+                const existingRosterId = dupVehicle.rows[0].id;
+
+                // Get driver ID
+                let driverId = null;
+                const drv = await client.query('SELECT id FROM drivers WHERE LOWER(name) = LOWER($1)', [driver_name.trim()]);
+                if (drv.rows.length > 0) driverId = drv.rows[0].id;
+
+                const updatedRow = await client.query(
+                    `UPDATE roster 
+                      SET driver_name = $1, driver_id = $2, assignment_role = COALESCE($3, assignment_role), updated_at = NOW()
+                      WHERE id = $4
+                      RETURNING *`,
+                    [driver_name.trim(), driverId, assignment_role || null, existingRosterId]
+                );
+
+                await client.query('COMMIT');
+                return res.json({
+                    success: true,
+                    message: 'Updated existing vehicle assignment with new driver',
+                    roster: updatedRow.rows[0]
+                });
+            } else {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ success: false, error: 'This vehicle is already assigned to this case' });
+            }
         }
 
         // Prevent duplicate driver assignment to the same case
-        if (driver_name) {
+        if (driver_name && driver_name !== 'TBD') {
             const dupDriver = await client.query(
-                `SELECT 1 FROM roster WHERE case_id = $1 AND driver_name = $2 AND status != 'completed'`,
+                `SELECT 1 FROM roster WHERE case_id = $1 AND LOWER(driver_name) = LOWER($2) AND status != 'completed'`,
                 [caseId, driver_name]
             );
             if (dupDriver.rows.length > 0) {
@@ -661,7 +694,8 @@ exports.assignVehicle = async (req, res) => {
       `, [vehicle_id, caseId, currentFuneralDate]);
 
             if (conflictingAssignments.rows.length > 0) {
-                const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
+                // If it's a past funeral, admins might be doing cleanup, so we might want to be more lenient.
+                // Current logic allows admins to bypass conflicts.
                 const BUFFER_HOURS = 2;
 
                 if (currentFuneralTime) {
@@ -669,6 +703,9 @@ exports.assignVehicle = async (req, res) => {
                     const currentEndTime = new Date(currentTime.getTime() + (BUFFER_HOURS * 60 * 60 * 1000));
 
                     for (const assignment of conflictingAssignments.rows) {
+                        // Check if time conflict actually exists
+                        let isConflict = false;
+
                         if (assignment.funeral_time) {
                             const assignmentTime = new Date(`${assignment.funeral_date}T${assignment.funeral_time}`);
                             const assignmentEndTime = new Date(assignmentTime.getTime() + (BUFFER_HOURS * 60 * 60 * 1000));
@@ -678,40 +715,34 @@ exports.assignVehicle = async (req, res) => {
                                 (currentEndTime > assignmentTime && currentEndTime <= assignmentEndTime) ||
                                 (currentTime <= assignmentTime && currentEndTime >= assignmentEndTime)
                             ) {
-                                if (!isAdmin) {
-                                    await client.query('ROLLBACK');
-                                    return res.status(400).json({
-                                        success: false,
-                                        error: `Time conflict: Vehicle is already assigned to ${assignment.case_number} (${assignment.deceased_name}) at ${assignment.funeral_time || 'TBA'} on the same day.`,
-                                        conflict: {
-                                            case_number: assignment.case_number,
-                                            deceased_name: assignment.deceased_name,
-                                            time: assignment.funeral_time
-                                        }
-                                    });
-                                }
+                                isConflict = true;
                             }
                         } else {
-                            if (!isAdmin) {
-                                await client.query('ROLLBACK');
-                                return res.status(400).json({
-                                    success: false,
-                                    error: `Vehicle is assigned to ${assignment.case_number} (${assignment.deceased_name}) on the same day without a specific time.`,
-                                    conflict: {
-                                        case_number: assignment.case_number,
-                                        deceased_name: assignment.deceased_name
-                                    }
-                                });
-                            }
+                            // If other assignment has no time, assume conflict for the whole day
+                            isConflict = true;
+                        }
+
+                        if (isConflict && !isAdmin) {
+                            await client.query('ROLLBACK');
+                            return res.status(400).json({
+                                success: false,
+                                error: `Time conflict: Vehicle is already assigned to ${assignment.case_number} (${assignment.deceased_name}) on the same day.`,
+                                conflict: {
+                                    case_number: assignment.case_number,
+                                    deceased_name: assignment.deceased_name,
+                                    time: assignment.funeral_time
+                                }
+                            });
                         }
                     }
                 } else {
+                    // Current case has no time set
                     const hasTimedAssignment = conflictingAssignments.rows.some(a => a.funeral_time);
                     if (hasTimedAssignment && !isAdmin) {
                         await client.query('ROLLBACK');
                         return res.status(400).json({
                             success: false,
-                            error: `Vehicle is assigned to other case(s) on the same day with specific times. Please set a funeral time for this case first.`,
+                            error: `Vehicle is assigned to other case(s) on the same day with specific times. Please set a funeral time for this case first to check for availability.`,
                             conflicts: conflictingAssignments.rows.map(a => ({
                                 case_number: a.case_number,
                                 deceased_name: a.deceased_name,
@@ -720,25 +751,6 @@ exports.assignVehicle = async (req, res) => {
                         });
                     }
                 }
-            }
-        }
-
-        if (driver_name && driver_name !== 'TBD' && driver_name.trim() !== '') {
-            const driverResult = await client.query(
-                'SELECT id, name FROM drivers WHERE name = $1 AND active = true',
-                [driver_name.trim()]
-            );
-            if (driverResult.rows.length === 0) {
-                console.log(`⚠️  Driver "${driver_name}" not found in drivers table, but allowing assignment`);
-            }
-            // Prevent duplicate driver assignment to the same case
-            const dupDriver = await client.query(
-                `SELECT 1 FROM roster WHERE case_id = $1 AND LOWER(driver_name) = LOWER($2) AND status != 'completed'`,
-                [caseId, driver_name.trim()]
-            );
-            if (dupDriver.rows.length > 0) {
-                await client.query('ROLLBACK');
-                return res.status(400).json({ success: false, error: 'This driver is already assigned to this case' });
             }
         }
 
@@ -1422,7 +1434,7 @@ exports.updateCaseDetails = async (req, res) => {
         delivery_date, delivery_time, intake_day,
         programs, top_up_amount, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
-        legacy_plan_name, status, burial_place, branch
+        legacy_plan_name, status, burial_place, branch, tombstone_type
     } = req.body;
 
     // Basic validation
@@ -1453,9 +1465,10 @@ exports.updateCaseDetails = async (req, res) => {
                 programs = $37, top_up_amount = $38, airtime = $39, airtime_network = $40, airtime_number = $41,
                 cover_amount = $42, cashback_amount = $43, amount_to_bank = $44,
                 legacy_plan_name = $45, benefit_mode = $46, status = $47, burial_place = $48,
-                updated_at = NOW(),
-                branch = $49
-            WHERE id = $50
+                benefit_mode = $46, status = $47, burial_place = $48,
+                branch = $49, tombstone_type = $50,
+                updated_at = NOW()
+            WHERE id = $51
             RETURNING *
         `;
 
@@ -1472,7 +1485,9 @@ exports.updateCaseDetails = async (req, res) => {
             programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, !!airtime, airtime_network || null, airtime_number || null,
             cover_amount != null ? cover_amount : 0, cashback_amount != null ? cashback_amount : 0, amount_to_bank != null ? amount_to_bank : 0,
             legacy_plan_name || null, benefit_mode || null, status || oldValues.status, burial_place || null,
+            legacy_plan_name || null, benefit_mode || null, status || oldValues.status, burial_place || null,
             req.body.branch || oldValues.branch || 'Head Office',
+            tombstone_type || oldValues.tombstone_type || null,
             id
         ];
 
