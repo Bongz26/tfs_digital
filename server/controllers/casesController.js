@@ -54,7 +54,7 @@ exports.lookupCase = async (req, res) => {
         }
 
         if (!found) {
-            return res.status(404).json({ success: false, error: 'No matching case found' });
+            return res.json({ success: true, case: null });
         }
 
         return res.json({ success: true, case: found });
@@ -1489,7 +1489,6 @@ exports.updateCaseDetails = async (req, res) => {
                 programs = $37, top_up_amount = $38, airtime = $39, airtime_network = $40, airtime_number = $41,
                 cover_amount = $42, cashback_amount = $43, amount_to_bank = $44,
                 legacy_plan_name = $45, benefit_mode = $46, status = $47, burial_place = $48,
-                benefit_mode = $46, status = $47, burial_place = $48,
                 branch = $49, tombstone_type = $50,
                 updated_at = NOW()
             WHERE id = $51
@@ -1508,7 +1507,6 @@ exports.updateCaseDetails = async (req, res) => {
             casket_type || null, casket_colour || null, delivery_date || null, delivery_time || null, intake_day || null,
             programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, !!airtime, airtime_network || null, airtime_number || null,
             cover_amount != null ? cover_amount : 0, cashback_amount != null ? cashback_amount : 0, amount_to_bank != null ? amount_to_bank : 0,
-            legacy_plan_name || null, benefit_mode || null, status || oldValues.status, burial_place || null,
             legacy_plan_name || null, benefit_mode || null, status || oldValues.status, burial_place || null,
             req.body.branch || oldValues.branch || 'Head Office',
             tombstone_type || oldValues.tombstone_type || null,
