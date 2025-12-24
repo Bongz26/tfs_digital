@@ -4,6 +4,17 @@ exports.saveDraft = async (req, res) => {
   try {
     const { policy_number, data, department } = req.body;
     if (!policy_number || !data) return res.status(400).json({ success: false, error: 'policy_number and data are required' });
+
+    // Ensure table exists
+    await query(`
+      CREATE TABLE IF NOT EXISTS claim_drafts (
+        policy_number VARCHAR(100) PRIMARY KEY,
+        data JSONB,
+        department VARCHAR(50),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     const result = await query(
       `INSERT INTO claim_drafts (policy_number, data, department)
        VALUES ($1, $2, $3)
