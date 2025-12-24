@@ -39,3 +39,13 @@ export const listDrafts = async (department) => {
   const res = await axios.get(BASE_URL, { params });
   return res.data.drafts || [];
 };
+
+export const getDraftHistory = async () => {
+  try {
+    const res = await axios.get(`${BASE_URL}/history`);
+    return res.data.history || [];
+  } catch (err) {
+    console.error('Failed to load draft history', err);
+    return [];
+  }
+};

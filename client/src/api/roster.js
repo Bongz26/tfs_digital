@@ -26,3 +26,16 @@ export const updateRoster = async (id, data) => {
         throw err;
     }
 };
+
+export const deleteRoster = async (id) => {
+    try {
+        const token = getAccessToken();
+        const res = await axios.delete(`${BASE_URL}/${id}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        return res.data;
+    } catch (err) {
+        console.error(`Error deleting roster ${id}:`, err.response || err);
+        throw err;
+    }
+};

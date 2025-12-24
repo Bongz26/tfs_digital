@@ -49,7 +49,7 @@ export default function Dashboard() {
       try {
         setLoading(true);
         const data = await apiFetchDashboardData({ recentLimit: 5 });
-        
+
         // Set stats from dashboard response
         setStats({
           upcoming: data.upcoming || 0,
@@ -58,12 +58,14 @@ export default function Dashboard() {
           conflicts: data.conflicts || false,
           lowStock: data.lowStock || [],
           groceriesTotal: data.groceriesTotal || 0,
-          groceriesSubmitted: data.groceriesSubmitted || 0
+          groceriesSubmitted: data.groceriesSubmitted || 0,
+          outstandingDrafts: data.outstandingDrafts || 0,
+          outstandingIntakes: data.outstandingIntakes || 0
         });
-        
+
         // Set recent cases from dashboard response
         setRecentCases(data.recentCases || []);
-        
+
       } catch (err) {
         console.error('Dashboard error:', err);
         setError('Failed to load dashboard data.');
@@ -149,6 +151,7 @@ export default function Dashboard() {
       )}
 
       {/* MAIN DASHBOARD CARDS */}
+      {/* MAIN DASHBOARD CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
         <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-600">
           <h3 className="text-lg font-semibold text-gray-700">Upcoming Funerals</h3>
@@ -160,11 +163,23 @@ export default function Dashboard() {
           <p className="text-5xl font-bold text-orange-600 mt-2">{stats.vehiclesNeeded}</p>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-yellow-500">
-          <h3 className="text-lg font-semibold text-gray-700">Low Stock Items</h3>
-          <p className="text-5xl font-bold text-yellow-600 mt-2">
-            {stats.lowStock?.length ?? 0}
-          </p>
+        <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-purple-600">
+          <h3 className="text-lg font-semibold text-gray-700">Outstanding Tasks</h3>
+          <div className="mt-2 flex gap-6">
+            <Link to="/?openDrafts=true" className="group block">
+              <p className="text-2xl font-bold text-purple-800 group-hover:text-purple-600 transition">
+                {stats.outstandingDrafts || 0}
+              </p>
+              <span className="text-sm font-normal text-gray-500 group-hover:text-purple-600 transition underline">Drafts</span>
+            </Link>
+            <div className="w-px bg-gray-200"></div>
+            <Link to="/active-cases?status=intake" className="group block">
+              <p className="text-2xl font-bold text-purple-600 group-hover:text-purple-800 transition">
+                {stats.outstandingIntakes || 0}
+              </p>
+              <span className="text-sm font-normal text-gray-500 group-hover:text-purple-800 transition underline">Intakes</span>
+            </Link>
+          </div>
         </div>
 
         <div className="bg-white p-6 rounded-xl shadow-lg border-t-4 border-green-600">
@@ -190,8 +205,8 @@ export default function Dashboard() {
             >
               Search
             </button>
-            <Link 
-              to="/active-cases" 
+            <Link
+              to="/active-cases"
               className="inline-flex items-center bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition font-semibold text-sm"
             >
               View All
@@ -249,8 +264,8 @@ export default function Dashboard() {
           <h2 className="text-2xl font-bold text-red-800">
             Recent Cases
           </h2>
-          <Link 
-            to="/active-cases" 
+          <Link
+            to="/active-cases"
             className="inline-flex items-center bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition font-semibold text-sm"
           >
             View All Active Cases
@@ -295,18 +310,17 @@ export default function Dashboard() {
                       )}
                     </td>
                     <td className="p-2">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                        caseItem.status === 'completed' ? 'bg-green-100 text-green-800' :
+                      <span className={`px-2 py-1 rounded text-xs font-semibold ${caseItem.status === 'completed' ? 'bg-green-100 text-green-800' :
                         caseItem.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
-                        caseItem.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
+                          caseItem.status === 'in_progress' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
+                        }`}>
                         {caseItem.status || 'intake'}
                       </span>
                     </td>
                     <td className="p-2">
-                      <Link 
-                        to={`/cases/${caseItem.id}`} 
+                      <Link
+                        to={`/cases/${caseItem.id}`}
                         className="text-blue-600 hover:text-blue-800 underline font-medium text-sm"
                       >
                         View Details
@@ -320,36 +334,36 @@ export default function Dashboard() {
         </div>
       </div>
 
-        {/* QUICK ACTIONS SECTION */}
-    <div className="bg-white p-8 rounded-xl shadow-lg border-t-4 border-red-600 mb-6">
-      <h2 className="text-2xl font-bold text-red-800 mb-6 text-center">
-        Quick Actions
-      </h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Link 
-          to="/active-cases" 
-          className="bg-red-600 text-white p-6 rounded-xl hover:bg-red-700 transition text-center font-semibold text-lg shadow-lg"
-        >
-          Manage Active Cases
-        </Link>
-        <Link 
-          to="/roster" 
-          className="bg-blue-600 text-white p-6 rounded-xl hover:bg-blue-700 transition text-center font-semibold text-lg shadow-lg"
-        >
-          View Vehicle Roster
-        </Link>
-        <Link 
-          to="/stock"  // ✅ CHANGED FROM "/inventory" to "/stock"
-          className="bg-green-600 text-white p-6 rounded-xl hover:bg-green-700 transition text-center font-semibold text-lg shadow-lg"
-        >
-          Check Inventory
-        </Link>
+      {/* QUICK ACTIONS SECTION */}
+      <div className="bg-white p-8 rounded-xl shadow-lg border-t-4 border-red-600 mb-6">
+        <h2 className="text-2xl font-bold text-red-800 mb-6 text-center">
+          Quick Actions
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Link
+            to="/active-cases"
+            className="bg-red-600 text-white p-6 rounded-xl hover:bg-red-700 transition text-center font-semibold text-lg shadow-lg"
+          >
+            Manage Active Cases
+          </Link>
+          <Link
+            to="/roster"
+            className="bg-blue-600 text-white p-6 rounded-xl hover:bg-blue-700 transition text-center font-semibold text-lg shadow-lg"
+          >
+            View Vehicle Roster
+          </Link>
+          <Link
+            to="/stock"  // ✅ CHANGED FROM "/inventory" to "/stock"
+            className="bg-green-600 text-white p-6 rounded-xl hover:bg-green-700 transition text-center font-semibold text-lg shadow-lg"
+          >
+            Check Inventory
+          </Link>
+        </div>
       </div>
-    </div>
       {/* VEHICLE CALENDAR SECTION */}
       <div className="bg-white p-8 rounded-xl shadow-lg border-t-4 border-red-600">
         <h2 className="text-2xl font-bold text-red-800 mb-6 text-center">
-        {formatRosterDate(getUpcomingSaturday())} 🕊️ — Live Roster 
+          {formatRosterDate(getUpcomingSaturday())} 🕊️ — Live Roster
         </h2>
         <VehicleCalendar />
       </div>

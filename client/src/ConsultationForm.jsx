@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 import { createCase, lookupCase, updateCase } from './api/cases';
 import { createAirtimeRequest } from './api/sms';
 import { fetchInventory } from './api/inventory';
-import { saveDraft as saveDraftServer, getDraftByPolicy as getDraftServer, getLastDraft as getLastDraftServer, deleteDraftByPolicy as deleteDraftServer, listDrafts as listDraftsServer } from './api/claimDrafts';
+import { saveDraft as saveDraftServer, getDraftByPolicy as getDraftServer, getLastDraft as getLastDraftServer, deleteDraftByPolicy as deleteDraftServer, listDrafts as listDraftsServer, getDraftHistory } from './api/claimDrafts';
 
 const PLAN_DATA = {
   motjha: {
@@ -392,12 +392,20 @@ export default function ConsultationForm() {
   const [draftQuery, setDraftQuery] = useState('');
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [serverDrafts, setServerDrafts] = useState([]);
+  const [historyMode, setHistoryMode] = useState(false);
+  const [historyList, setHistoryList] = useState([]);
   const [casketOptions, setCasketOptions] = useState([]);
   const location = useLocation();
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const policy = params.get('policy');
+    const openDrafts = params.get('openDrafts');
+
+    if (openDrafts) {
+      setDraftsOpen(true);
+    }
+
     if (policy) {
       const load = async () => {
         try {
@@ -528,9 +536,16 @@ export default function ConsultationForm() {
     };
     load();
     return () => { mounted = false; };
-    load();
-    return () => { mounted = false; };
   }, [draftsOpen]);
+
+  useEffect(() => {
+    if (!historyMode) return;
+    const load = async () => {
+      const hist = await getDraftHistory();
+      setHistoryList(hist);
+    };
+    load();
+  }, [historyMode]);
 
   useEffect(() => {
     const loadCaskets = async () => {
@@ -904,6 +919,14 @@ export default function ConsultationForm() {
         setMessage('Case confirmed successfully! Printing full checklist...');
       }
 
+      // Cleanup: Remove draft if exists (moves to history)
+      if (form.policy_number) {
+        try {
+          await deleteDraftServer(form.policy_number, 'submitted');
+          setServerDrafts(prev => prev.filter(d => d.policy_number !== form.policy_number));
+        } catch (_) { /* ignore if no draft existed */ }
+      }
+
       setPrintedData(data);
       setPrintMode('full');
       setTimeout(() => window.print(), 500);
@@ -1194,56 +1217,99 @@ export default function ConsultationForm() {
                 </div>
               </div>
               {draftsOpen && (
-                <div className="mt-4 max-h-56 overflow-auto bg-white border border-yellow-200 rounded-lg">
-                  {serverDrafts && serverDrafts.length > 0 && (
-                    serverDrafts.map((d) => (
-                      <div key={`srv_${d.policy_number}`} className="flex items-center justify-between p-3 border-b">
-                        <div className="text-sm">
-                          <span className="font-bold">{d.policy_number}</span>
-                          <span className="ml-2 font-medium text-blue-800">{d.data?.deceased_name || ''}</span>
-                          <span className="ml-2 text-gray-500">{d.updated_at ? new Date(d.updated_at).toLocaleString() : ''}</span>
-                          {d.department && <span className="ml-2 text-gray-400">{d.department}</span>}
-                        </div>
-                        <div className="flex gap-2">
-                          <button type="button" onClick={async () => {
-                            try {
-                              const serverDraft = await getDraftServer(d.policy_number);
-                              if (serverDraft && serverDraft.data) {
-                                setForm(prev => ({ ...prev, ...serverDraft.data }));
-                                setMessage('Draft loaded from server');
-                                setDraftsOpen(false);
-                                setDraftQuery('');
-                              }
-                            } catch (e) { }
-                          }} className="px-3 py-1 rounded bg-green-600 text-white text-sm">Load</button>
-                          <button type="button" onClick={async () => {
-                            const reason = window.prompt('Enter reason for deletion');
-                            if (reason == null) return;
-                            try { await deleteDraftServer(d.policy_number, reason); } catch (_) { }
-                            setServerDrafts(prev => prev.filter(x => x.policy_number !== d.policy_number));
-                          }} className="px-3 py-1 rounded bg-red-600 text-white text-sm">Delete</button>
-                        </div>
+                <div className="mt-4 bg-white border border-yellow-200 rounded-lg overflow-hidden">
+                  <div className="flex border-b">
+                    <button type="button" onClick={() => setHistoryMode(false)} className={`flex-1 py-2 text-sm font-semibold ${!historyMode ? 'bg-yellow-50 text-yellow-800 border-b-2 border-yellow-500' : 'text-gray-500'}`}>Active Drafts</button>
+                    <button type="button" onClick={() => setHistoryMode(true)} className={`flex-1 py-2 text-sm font-semibold ${historyMode ? 'bg-yellow-50 text-yellow-800 border-b-2 border-yellow-500' : 'text-gray-500'}`}>Submission History</button>
+                  </div>
+                  <div className="max-h-64 overflow-auto">
+                    {historyMode ? (
+                      <div>
+                        {historyList.length === 0 && <div className="p-4 text-center text-gray-500">No history found</div>}
+                        {historyList.map((h, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-3 border-b hover:bg-gray-50">
+                            <div className="text-sm">
+                              <div className="font-bold">{h.policy_number}</div>
+                              <div className="text-gray-600">{h.data?.deceased_name}</div>
+                              <div className="text-xs text-gray-400">{new Date(h.deleted_at).toLocaleString()}</div>
+                            </div>
+                            <div className="text-right">
+                              <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${h.reason === 'submitted' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                {h.reason || 'Deleted'}
+                              </span>
+                              {h.reason === 'submitted' && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (window.confirm('Load data from this submitted record? This will pre-fill the form.')) {
+                                      setForm(prev => ({ ...prev, ...h.data, id: '' })); // Clear ID to treat as new entry or update
+                                      setMessage('Loaded from history');
+                                      setDraftsOpen(false);
+                                    }
+                                  }}
+                                  className="block mt-2 text-xs text-blue-600 underline"
+                                >
+                                  View/Copy
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))
-                  )}
-                  {getDrafts().length > 0 && (
-                    getDrafts().map(({ key, data }) => (
-                      <div key={key} className="flex items-center justify-between p-3 border-b last:border-b-0">
-                        <div className="text-sm">
-                          <span className="font-bold">{data.policy_number}</span>
-                          <span className="ml-2">{data.deceased_name || ''}</span>
-                          <span className="ml-2 text-gray-500">{data.saved_at ? new Date(data.saved_at).toLocaleString() : ''}</span>
-                        </div>
-                        <div className="flex gap-2">
-                          <button type="button" onClick={() => loadDraftKey(key)} className="px-3 py-1 rounded bg-green-600 text-white text-sm">Load</button>
-                          <button type="button" onClick={() => deleteDraftKey(key)} className="px-3 py-1 rounded bg-red-600 text-white text-sm">Delete</button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                  {(!serverDrafts || serverDrafts.length === 0) && getDrafts().length === 0 && (
-                    <div className="p-4 text-sm text-gray-600">No drafts found</div>
-                  )}
+                    ) : (
+                      <>
+                        {serverDrafts && serverDrafts.length > 0 && (
+                          serverDrafts.map((d) => (
+                            <div key={`srv_${d.policy_number}`} className="flex items-center justify-between p-3 border-b">
+                              <div className="text-sm">
+                                <span className="font-bold">{d.policy_number}</span>
+                                <span className="ml-2 font-medium text-blue-800">{d.data?.deceased_name || ''}</span>
+                                <span className="ml-2 text-gray-500">{d.updated_at ? new Date(d.updated_at).toLocaleString() : ''}</span>
+                                {d.department && <span className="ml-2 text-gray-400">{d.department}</span>}
+                              </div>
+                              <div className="flex gap-2">
+                                <button type="button" onClick={async () => {
+                                  try {
+                                    const serverDraft = await getDraftServer(d.policy_number);
+                                    if (serverDraft && serverDraft.data) {
+                                      setForm(prev => ({ ...prev, ...serverDraft.data }));
+                                      setMessage('Draft loaded from server');
+                                      setDraftsOpen(false);
+                                      setDraftQuery('');
+                                    }
+                                  } catch (e) { }
+                                }} className="px-3 py-1 rounded bg-green-600 text-white text-sm">Load</button>
+                                <button type="button" onClick={async () => {
+                                  const reason = window.prompt('Enter reason for deletion');
+                                  if (reason == null) return;
+                                  try { await deleteDraftServer(d.policy_number, reason); } catch (_) { }
+                                  setServerDrafts(prev => prev.filter(x => x.policy_number !== d.policy_number));
+                                }} className="px-3 py-1 rounded bg-red-600 text-white text-sm">Delete</button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                        {getDrafts().length > 0 && (
+                          getDrafts().map(({ key, data }) => (
+                            <div key={key} className="flex items-center justify-between p-3 border-b last:border-b-0">
+                              <div className="text-sm">
+                                <span className="font-bold">{data.policy_number}</span>
+                                <span className="ml-2">{data.deceased_name || ''}</span>
+                                <span className="ml-2 text-gray-500">{data.saved_at ? new Date(data.saved_at).toLocaleString() : ''}</span>
+                              </div>
+                              <div className="flex gap-2">
+                                <button type="button" onClick={() => loadDraftKey(key)} className="px-3 py-1 rounded bg-green-600 text-white text-sm">Load</button>
+                                <button type="button" onClick={() => deleteDraftKey(key)} className="px-3 py-1 rounded bg-red-600 text-white text-sm">Delete</button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                        {(!serverDrafts || serverDrafts.length === 0) && getDrafts().length === 0 && (
+                          <div className="p-4 text-sm text-gray-600">No drafts found</div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
