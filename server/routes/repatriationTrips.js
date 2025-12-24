@@ -166,9 +166,6 @@ router.post('/', async (req, res) => {
         }
         const generatedCaseNumber = `THS-${year}-${String(nextNumber).padStart(3, '0')}`;
 
-        const funeralDate = new Date(); // placeholder; intake will update
-        const isoDate = funeralDate.toISOString().slice(0, 10); // YYYY-MM-DD
-
         const insertCaseRes = await query(
           `INSERT INTO cases (case_number, deceased_name, deceased_id, nok_name, nok_contact, policy_number, funeral_date, status)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -180,7 +177,7 @@ router.post('/', async (req, res) => {
             family_contact_name,
             family_contact_number,
             policyCandidate || null,
-            isoDate,
+            null, // funeral_date is initially null
             'intake'
           ]
         );

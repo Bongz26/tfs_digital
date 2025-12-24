@@ -530,6 +530,26 @@ exports.createCase = async (req, res) => {
                 await query('DELETE FROM claim_drafts WHERE policy_number = $1', [policy_number]);
             }
         } catch (_) { }
+
+        // Audit Log for Creation
+        try {
+            await query(
+                `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                [
+                    req.user?.id || null,
+                    req.user?.email || null,
+                    'case_create',
+                    'case',
+                    created.id,
+                    null,
+                    JSON.stringify(req.body),
+                    req.ip,
+                    req.headers['user-agent']
+                ]
+            );
+        } catch (e) { console.warn('Audit log create failed:', e.message); }
+
         res.json({ success: true, case: created });
     } catch (err) {
         console.error('❌ [POST /api/cases] Error creating case:', err);
@@ -647,7 +667,7 @@ exports.assignVehicle = async (req, res) => {
 
                 const updatedRow = await client.query(
                     `UPDATE roster 
-                      SET driver_name = $1, driver_id = $2, assignment_role = COALESCE($3, assignment_role), updated_at = NOW()
+                      SET driver_name = $1, driver_id = $2, assignment_role = COALESCE($3, assignment_role)
                       WHERE id = $4
                       RETURNING *`,
                     [driver_name.trim(), driverId, assignment_role || null, existingRosterId]
@@ -661,7 +681,11 @@ exports.assignVehicle = async (req, res) => {
                 });
             } else {
                 await client.query('ROLLBACK');
-                return res.status(400).json({ success: false, error: 'This vehicle is already assigned to this case' });
+                return res.json({
+                    success: true,
+                    message: 'Vehicle already assigned',
+                    roster: dupVehicle.rows[0]
+                });
             }
         }
 
@@ -696,7 +720,7 @@ exports.assignVehicle = async (req, res) => {
             if (conflictingAssignments.rows.length > 0) {
                 // If it's a past funeral, admins might be doing cleanup, so we might want to be more lenient.
                 // Current logic allows admins to bypass conflicts.
-                const BUFFER_HOURS = 2;
+                const BUFFER_HOURS = 1.5;
 
                 if (currentFuneralTime) {
                     const currentTime = new Date(`${currentFuneralDate}T${currentFuneralTime}`);

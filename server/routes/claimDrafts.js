@@ -5,8 +5,9 @@ const { requireRole } = require('../middleware/auth');
 
 router.post('/', ctrl.saveDraft);
 router.get('/last', ctrl.getLastDraft);
+router.get('/history', ctrl.getDraftHistory);
 router.get('/', ctrl.listDrafts);
 router.get('/:policy', ctrl.getDraft);
-router.delete('/:policy', requireRole(['admin','manager']), ctrl.deleteDraft);
+router.delete('/:policy', requireRole(['admin', 'manager']), ctrl.deleteDraft);
 
 module.exports = router;

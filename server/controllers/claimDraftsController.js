@@ -134,7 +134,7 @@ exports.getLastDraft = async (req, res) => {
 exports.listDrafts = async (req, res) => {
   try {
     const { department } = req.query;
-    let sql = 'SELECT policy_number, updated_at, department FROM claim_drafts';
+    let sql = 'SELECT policy_number, updated_at, department, data FROM claim_drafts';
     const params = [];
     if (department) {
       params.push(department);
@@ -143,6 +143,34 @@ exports.listDrafts = async (req, res) => {
     sql += ' ORDER BY updated_at DESC';
     const result = await query(sql, params);
     res.json({ success: true, drafts: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+exports.getDraftHistory = async (req, res) => {
+  try {
+    await query(`
+      CREATE TABLE IF NOT EXISTS claim_draft_deletions (
+        id SERIAL PRIMARY KEY,
+        policy_number VARCHAR(100) NOT NULL,
+        department VARCHAR(50),
+        data JSONB,
+        deleted_by UUID,
+        deleted_by_email VARCHAR(200),
+        deleted_by_role VARCHAR(50),
+        reason TEXT,
+        deleted_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    const result = await query(
+      `SELECT policy_number, department, deleted_at, reason, data 
+       FROM claim_draft_deletions 
+       ORDER BY deleted_at DESC 
+       LIMIT 50`
+    );
+    res.json({ success: true, history: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

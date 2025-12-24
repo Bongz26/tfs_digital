@@ -57,7 +57,7 @@ router.get('/', async (req, res) => {
     // 4️⃣ Grocery: total that should be given (by policy) and submitted (roster assigns)
     let groceriesTotal = 0;
     let groceriesSubmitted = 0;
-    const activeStatuses = ['intake','preparation','confirmed','in_progress'];
+    const activeStatuses = ['intake', 'preparation', 'confirmed', 'in_progress'];
     const minDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const maxDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     try {
@@ -102,6 +102,33 @@ router.get('/', async (req, res) => {
 
     if (recentError) throw recentError;
 
+    // 6️⃣ Oustanding Tasks (Drafts & Intakes) - FORCE LOCAL DB CHECK
+    let outstandingDrafts = 0;
+    try {
+      const { query } = require('../config/db');
+      const draftsRes = await query('SELECT COUNT(*)::int as count FROM claim_drafts');
+      outstandingDrafts = draftsRes.rows[0]?.count || 0;
+    } catch (e) {
+      // Fallback to Supabase if local fails
+      try {
+        const { count } = await supabase.from('claim_drafts').select('*', { count: 'exact', head: true });
+        outstandingDrafts = count || 0;
+      } catch (_) {}
+    }
+
+    let outstandingIntakes = 0;
+    try {
+      const { query } = require('../config/db');
+      const intakeRes = await query("SELECT COUNT(*)::int as count FROM cases WHERE status = 'intake'");
+      outstandingIntakes = intakeRes.rows[0]?.count || 0;
+    } catch (e) {
+      // Fallback to Supabase
+      try {
+        const { count } = await supabase.from('cases').select('*', { count: 'exact', head: true }).eq('status', 'intake');
+        outstandingIntakes = count || 0;
+      } catch (_) {}
+    }
+
     const payload = {
       upcoming: funeralsCount || 0,
       vehiclesNeeded: funeralsCount || 0,
@@ -110,7 +137,9 @@ router.get('/', async (req, res) => {
       lowStock: Array.isArray(lowStock) ? lowStock : [],
       groceriesTotal,
       groceriesSubmitted,
-      recentCases: recentCases || []
+      recentCases: recentCases || [],
+      outstandingDrafts,
+      outstandingIntakes
     };
     dashboardCache = { data: payload, time: Date.now() };
     res.json(payload);
@@ -142,6 +171,22 @@ router.get('/', async (req, res) => {
            AND COALESCE(NULLIF(r.driver_name, ''), NULL) IS NOT NULL`,
         [minDate, maxDate]
       );
+
+      // Calculate outstanding tasks for local DB
+      let outstandingDrafts = 0;
+      try {
+        const draftsRes = await query('SELECT COUNT(*)::int as count FROM claim_drafts');
+        outstandingDrafts = draftsRes.rows[0]?.count || 0;
+      } catch (e) {
+        // Table might not exist in local DB
+      }
+
+      let outstandingIntakes = 0;
+      try {
+        const intakeRes = await query("SELECT COUNT(*)::int as count FROM cases WHERE status = 'intake'");
+        outstandingIntakes = intakeRes.rows[0]?.count || 0;
+      } catch (e) { }
+
       const payload = {
         upcoming: 0,
         vehiclesNeeded: 0,
@@ -150,7 +195,9 @@ router.get('/', async (req, res) => {
         lowStock: [],
         groceriesTotal: gtRes.rows[0]?.total || 0,
         groceriesSubmitted: gsRes.rows[0]?.submitted || 0,
-        recentCases: []
+        recentCases: [],
+        outstandingDrafts,
+        outstandingIntakes
       };
       dashboardCache = { data: payload, time: Date.now() };
       return res.json(payload);

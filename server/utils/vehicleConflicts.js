@@ -21,7 +21,7 @@ function timesOverlap(start1, end1, start2, end2) {
  * @param {number} excludeCaseId - Case ID to exclude from conflict check
  * @returns {Object|null} - Conflict details or null if no conflict
  */
-function checkVehicleConflict(vehicleAssignments, funeralDate, funeralTime, bufferHours = 2, excludeCaseId = null) {
+function checkVehicleConflict(vehicleAssignments, funeralDate, funeralTime, bufferHours = 1.5, excludeCaseId = null) {
   if (!funeralDate) {
     return null; // Can't check conflicts without a date
   }
@@ -108,7 +108,7 @@ function getAvailableVehicles(allVehicles, vehicleAssignments, funeralDate, fune
   // Filter vehicles that don't have conflicts
   return allVehicles.filter(vehicle => {
     const assignments = assignmentsByVehicle[vehicle.id] || [];
-    const conflict = checkVehicleConflict(assignments, funeralDate, funeralTime, 2, caseId);
+    const conflict = checkVehicleConflict(assignments, funeralDate, funeralTime, 1.5, caseId);
     return !conflict || !conflict.hasConflict;
   });
 }

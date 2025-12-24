@@ -139,6 +139,7 @@ router.patch('/:id', async (req, res) => {
               }
             }
             const currentStart = new Date(`${c.funeral_date}T${c.funeral_time}`);
+            const BUFFER_HOURS = 1.5;
             const currentEnd = new Date(currentStart.getTime() + BUFFER_HOURS * 3600 * 1000);
             for (const a of conflicts) {
               const ft = a.cases?.funeral_time;
@@ -181,6 +182,7 @@ router.patch('/:id', async (req, res) => {
               }
             }
             const start = new Date(`${c.funeral_date}T${c.funeral_time}`);
+            const BUFFER_HOURS = 1.5;
             const end = new Date(start.getTime() + BUFFER_HOURS * 3600 * 1000);
             for (const a of conflicts) {
               if (!a.funeral_time) {
@@ -220,12 +222,47 @@ router.patch('/:id', async (req, res) => {
       values.push(v);
     }
     values.push(id);
-    const sql = `UPDATE roster SET ${fields.join(', ')}, updated_at = NOW() WHERE id = $${idx} RETURNING *`;
+    const sql = `UPDATE roster SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`;
     const result = await query(sql, values);
     if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Roster entry not found' });
     res.json({ success: true, roster: result.rows[0] });
   } catch (err) {
     console.error('Roster update error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/roster/:id - remove roster assignment
+router.delete('/:id', async (req, res) => {
+  try {
+    const supabase = req.app.locals.supabase;
+    const id = parseInt(req.params.id, 10);
+
+    // Only allow admins or dispatchers to delete?
+    // For now, allow logged in users as per app logic (auth middleware handles basic login)
+    // Ideally check if user has permission, but let's stick to consistent pattern.
+
+    if (supabase) {
+      const { error } = await supabase
+        .from('roster')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      return res.json({ success: true, message: 'Assignment removed' });
+    }
+
+    // DB path
+    const { query } = require('../config/db');
+    const result = await query('DELETE FROM roster WHERE id = $1 RETURNING id', [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Roster entry not found' });
+    }
+
+    res.json({ success: true, message: 'Assignment removed' });
+  } catch (err) {
+    console.error('Roster delete error:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });

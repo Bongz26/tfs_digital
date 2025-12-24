@@ -2,7 +2,7 @@
 const express = require('express');
 const nodemailer = require('nodemailer');
 const router = express.Router();
-const { getAvailableVehicles } = require('../utils/vehicleConflicts');
+const { getAvailableVehicles, checkVehicleConflict } = require('../utils/vehicleConflicts');
 
 // Simple in-memory cache
 let activeCasesCache = { data: null, time: 0 };
@@ -129,15 +129,12 @@ router.get('/', async (req, res) => {
     console.log(`Active cases: ${activeCases.length}`);
 
     const casesWithRoster = activeCases.map(caseItem => {
-      const availableForCase = getAvailableVehicles(
-        vehicles,
-        allVehicleAssignments,
-        caseItem.funeral_date,
-        caseItem.funeral_time,
-        caseItem.id
-      );
 
-      // Warning flags
+      // Calculate availability and conflicts
+      const availableVehicles = [];
+      const unavailableVehicles = [];
+
+      // Warning flags (Restored)
       const today = new Date();
       const dayStart = new Date(today.toISOString().split('T')[0]);
       let warningPastFuneral = false;
@@ -155,16 +152,42 @@ router.get('/', async (req, res) => {
         }
       }
 
+      vehicles.forEach(vehicle => {
+        const assignments = (allVehicleAssignments || []).filter(a => a.vehicle_id === vehicle.id);
+        // Use 1.5 buffer as requested
+        const conflict = checkVehicleConflict(assignments, caseItem.funeral_date, caseItem.funeral_time, 1.5, caseItem.id);
+
+        if (!conflict || !conflict.hasConflict) {
+          availableVehicles.push(vehicle);
+        } else {
+          // Find the specific assignment causing the conflict to show details
+          const conflictInfo = {
+            id: vehicle.id,
+            type: vehicle.type,
+            reg_number: vehicle.reg_number,
+            reason: conflict.reason,
+            conflict_case: conflict.conflict ? {
+              case_number: conflict.conflict.case_number,
+              deceased_name: conflict.conflict.deceased_name,
+              time: conflict.conflict.funeral_time
+            } : null
+          };
+          unavailableVehicles.push(conflictInfo);
+        }
+      });
+
       const minVehicles = (caseItem.plan_name && /premium/i.test(caseItem.plan_name)) ? 3 : 2;
       const resultCase = {
         ...caseItem,
         roster: rosterAssignments[caseItem.id] || [],
-        available_vehicles: availableForCase, // Vehicles available for this specific case
+        available_vehicles: availableVehicles,
+        unavailable_vehicles: unavailableVehicles, // New field with conflict details
         required_min_vehicles: minVehicles,
         warning_past_funeral_date: warningPastFuneral,
         warning_prep_required: warningPrepRequired
       };
-      console.log(`Case ${caseItem.id} flags: past=${resultCase.warning_past_funeral_date} prep=${resultCase.warning_prep_required}`);
+
+      // console.log(`Case ${caseItem.id} flags: past=${resultCase.warning_past_funeral_date} prep=${resultCase.warning_prep_required}`);
       return resultCase;
     });
 
