@@ -11,6 +11,7 @@ export default function AssignVehicleModal({
 }) {
     const [selectedVehicle, setSelectedVehicle] = useState(null);
     const [selectedDriver, setSelectedDriver] = useState(null);
+    const [assignmentRole, setAssignmentRole] = useState("");
     const [isAssigning, setIsAssigning] = useState(false);
 
     // Reset state when modal opens/closes or case changes
@@ -18,6 +19,7 @@ export default function AssignVehicleModal({
         if (isOpen) {
             setSelectedVehicle(null);
             setSelectedDriver(null);
+            setAssignmentRole("");
             setIsAssigning(false);
         }
     }, [isOpen, caseId]);
@@ -37,7 +39,8 @@ export default function AssignVehicleModal({
             await onAssign(caseId, {
                 vehicle_id: selectedVehicle.id,
                 driver_id: selectedDriver.id,
-                driver_name: selectedDriver.name
+                driver_name: selectedDriver.name,
+                assignment_role: assignmentRole
             });
             // The parent is responsible for closing, but we can reset internal state or wait
         } catch (error) {
@@ -49,7 +52,7 @@ export default function AssignVehicleModal({
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-lg p-6 w-80 animate-in fade-in zoom-in duration-200">
+            <div className="bg-white rounded-lg shadow-lg p-6 w-96 animate-in fade-in zoom-in duration-200">
                 <h3 className="font-bold text-lg mb-1">Assign Transport</h3>
                 {caseNumber && <p className="text-sm text-gray-500 mb-4">Case: {caseNumber}</p>}
 
@@ -62,6 +65,11 @@ export default function AssignVehicleModal({
                             onChange={e => {
                                 const v = vehicles.find(x => x.id === +e.target.value);
                                 setSelectedVehicle(v);
+                                // Auto-select role based on vehicle type if possible
+                                if (v) {
+                                    if (v.type === 'hearse') setAssignmentRole('Hearse');
+                                    else if (v.type === 'bus') setAssignmentRole('Bus');
+                                }
                             }}
                         >
                             <option value="">Select Vehicle</option>
@@ -70,6 +78,23 @@ export default function AssignVehicleModal({
                                     {formatVehicleType(v.type)} - {v.reg_number}
                                 </option>
                             ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1">ROLE</label>
+                        <select
+                            className="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 outline-none"
+                            value={assignmentRole}
+                            onChange={e => setAssignmentRole(e.target.value)}
+                        >
+                            <option value="">Select Role (Optional)</option>
+                            <option value="Hearse">Hearse</option>
+                            <option value="Family Car">Family Car</option>
+                            <option value="Lead Car">Lead Car</option>
+                            <option value="Bus">Bus</option>
+                            <option value="Flower Car">Flower Car</option>
+                            <option value="Removal">Removal / First Call</option>
                         </select>
                     </div>
 

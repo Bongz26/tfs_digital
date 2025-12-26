@@ -219,16 +219,14 @@ export default function ActiveCases() {
             </div>
 
             {/* ASSIGNMENT BUTTON */}
-            {(!c.roster || c.roster.length === 0) && (
-              <div className="pt-3">
-                <button
-                  className="w-full bg-red-600 hover:bg-red-700 text-yellow-300 py-2 rounded font-semibold text-sm shadow-sm transition"
-                  onClick={() => setModalCase(c)}
-                >
-                  Assign Vehicle & Driver
-                </button>
-              </div>
-            )}
+            <div className="pt-3">
+              <button
+                className="w-full bg-red-600 hover:bg-red-700 text-yellow-300 py-2 rounded font-semibold text-sm shadow-sm transition"
+                onClick={() => setModalCase(c)}
+              >
+                Assign Vehicle & Driver
+              </button>
+            </div>
 
 
             {/* DISPLAY ASSIGNED */}

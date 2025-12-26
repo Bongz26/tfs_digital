@@ -14,12 +14,17 @@ export default function AssignedTransportList({ roster = [] }) {
                 Assigned Transport
             </div>
             {roster.map((r, i) => (
-                <div key={i} className="text-sm text-gray-900 border-b border-gray-200 last:border-0 pb-1 last:pb-0">
+                <div key={i} className="text-sm text-gray-900 border-b border-gray-200 last:border-0 pb-2 last:pb-0 mb-2 last:mb-0">
+                    {r.assignment_role && (
+                        <div className="text-xs font-bold text-red-600 uppercase mb-1">
+                            {r.assignment_role}
+                        </div>
+                    )}
                     <div>
-                        <strong className="text-red-600">Vehicle:</strong> {r.vehicle?.reg_number} ({formatVehicleType(r.vehicle?.type)})
+                        <span className="font-semibold text-gray-600">Vehicle:</span> {r.vehicle?.reg_number} <span className="text-gray-500">({formatVehicleType(r.vehicle?.type)})</span>
                     </div>
                     <div>
-                        <strong className="text-red-600">Driver:</strong> {r.driver?.name}
+                        <span className="font-semibold text-gray-600">Driver:</span> {r.driver?.name || "TBD"}
                     </div>
                 </div>
             ))}
