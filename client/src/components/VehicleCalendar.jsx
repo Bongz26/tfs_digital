@@ -62,12 +62,38 @@ export default function VehicleCalendar() {
   }, [isAdmin]);
 
   /* ================= FILTER + SORT ================= */
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
+
   const filteredRoster = roster.filter(item => {
     if (!item.funeral_date) return viewMode !== "past";
-    const d = new Date(item.funeral_date);
+    const itemDate = new Date(item.funeral_date);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    return viewMode === "past" ? d < today : d >= today;
+
+    const isPast = itemDate < today;
+
+    if (viewMode === "upcoming") {
+      return itemDate >= today;
+    }
+
+    // Past View Logic
+    if (!isPast) return false;
+
+    // Apply Date Range Filters if set
+    if (filterFrom) {
+      const from = new Date(filterFrom);
+      from.setHours(0, 0, 0, 0);
+      if (itemDate < from) return false;
+    }
+
+    if (filterTo) {
+      const to = new Date(filterTo);
+      to.setHours(23, 59, 59, 999);
+      if (itemDate > to) return false;
+    }
+
+    return true;
   });
 
   const sortedRoster = [...filteredRoster].sort((a, b) => {
@@ -120,22 +146,52 @@ export default function VehicleCalendar() {
         </div>
       )}
 
-      {/* VIEW MODE */}
-      <div className="mb-6 flex justify-center">
-        <div className="inline-flex rounded-lg border p-1">
+      <div className="mb-6 flex flex-col items-center gap-4">
+        {/* VIEW MODE TOGGLE */}
+        <div className="inline-flex rounded-lg border p-1 bg-white shadow-sm">
           {["upcoming", "past"].map(m => (
             <button
               key={m}
               onClick={() => setViewMode(m)}
-              className={`px-6 py-2 rounded-md font-semibold ${viewMode === m
-                  ? "bg-red-600 text-white"
-                  : "text-gray-600 hover:bg-gray-100"
+              className={`px-6 py-2 rounded-md font-semibold transition ${viewMode === m
+                ? "bg-red-600 text-white shadow"
+                : "text-gray-600 hover:bg-gray-100"
                 }`}
             >
-              {m === "upcoming" ? "📅 Upcoming" : "📜 Past"}
+              {m === "upcoming" ? "📅 Upcoming" : "📜 Past Services"}
             </button>
           ))}
         </div>
+
+        {/* DATE FILTERS (Only for Past) */}
+        {viewMode === "past" && (
+          <div className="flex flex-wrap items-center gap-2 bg-white p-3 rounded-lg border shadow-sm animate-fade-in-down">
+            <span className="text-gray-600 text-sm font-medium">Filter by Date:</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={filterFrom}
+                onChange={(e) => setFilterFrom(e.target.value)}
+                className="border rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-red-500 outline-none"
+              />
+              <span className="text-gray-400">to</span>
+              <input
+                type="date"
+                value={filterTo}
+                onChange={(e) => setFilterTo(e.target.value)}
+                className="border rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-red-500 outline-none"
+              />
+            </div>
+            {(filterFrom || filterTo) && (
+              <button
+                onClick={() => { setFilterFrom(""); setFilterTo(""); }}
+                className="ml-2 text-xs text-red-600 hover:text-red-800 underline"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* EMPTY STATE */}

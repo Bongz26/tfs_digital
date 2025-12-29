@@ -18,6 +18,9 @@ export default function ActiveCases() {
   const initialStatus = queryParams.get("status") || "all";
 
   const [statusFilter, setStatusFilter] = useState(initialStatus);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+
   const [cases, setCases] = useState([]);
   const [cancelled, setCancelled] = useState([]);
   const [vehicles, setVehicles] = useState([]);
@@ -26,7 +29,7 @@ export default function ActiveCases() {
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const limit = 10;
+  const limit = 50;
 
   const [modalCase, setModalCase] = useState(null); // Case currently being assigned
   const [changingStatus, setChangingStatus] = useState({});
@@ -46,7 +49,13 @@ export default function ActiveCases() {
       const statusParam = statusFilter !== 'all' ? statusFilter : undefined;
 
       const [activeData, cancelledData, driversData, vehiclesData] = await Promise.all([
-        fetchActiveCases({ page, limit, status: statusParam }),
+        fetchActiveCases({
+          page,
+          limit,
+          status: statusParam,
+          from_date: fromDate || undefined,
+          to_date: toDate || undefined
+        }),
         fetchCancelledCases(),
         fetchDrivers(),
         fetchVehicles()
@@ -67,7 +76,7 @@ export default function ActiveCases() {
 
   useEffect(() => {
     loadData();
-  }, [page, statusFilter]);
+  }, [page, statusFilter, fromDate, toDate]);
 
   const handleAssignVehicle = async (caseId, assignmentData) => {
     try {
@@ -121,13 +130,13 @@ export default function ActiveCases() {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-8 min-h-screen bg-gray-50">
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <h1 className="text-3xl font-bold text-gray-800">Active Cases</h1>
           <select
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value);
-              setPage(1); // Reset to first page
+              setPage(1);
             }}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
           >
@@ -136,6 +145,12 @@ export default function ActiveCases() {
               <option key={key} value={key}>{config.label}</option>
             ))}
           </select>
+          <div className="flex items-center gap-2 text-sm text-gray-600 bg-white p-2 border rounded-lg">
+            <span>From:</span>
+            <input type="date" className="border rounded px-2 py-1" value={fromDate} onChange={e => { setFromDate(e.target.value); setPage(1); }} />
+            <span>To:</span>
+            <input type="date" className="border rounded px-2 py-1" value={toDate} onChange={e => { setToDate(e.target.value); setPage(1); }} />
+          </div>
         </div>
         <Link
           to="/dashboard"

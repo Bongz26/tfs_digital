@@ -9,7 +9,7 @@ import ConsultationForm from './ConsultationForm';
 import RepatriationTripSheet from './pages/RepatriationTripSheet';
 import Dashboard from './pages/Dashboard';
 import CaseDetails from './pages/CaseDetails';
-import ActiveCases from './pages/ActiveCases'; 
+import ActiveCases from './pages/ActiveCases';
 import StockManagement from './pages/StockManagement';
 import PurchaseOrdersPage from './pages/purchaseOrders';
 import TestNavigation from './pages/TestNavigation';
@@ -18,6 +18,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import UserManagement from './pages/UserManagement';
 import AirtimeRequests from './pages/AirtimeRequests';
+import Roster from './pages/Roster';
 import './index.css';
 
 function Navigation() {
@@ -132,69 +133,61 @@ function Navigation() {
 
         {/* Desktop Navigation */}
         <div className="hidden md:flex space-x-4 lg:space-x-8 pb-4 md:pb-6">
-          <Link 
-            to="/" 
-            className={`px-3 py-2 rounded transition ${
-              isActive('/') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-            }`}
+          <Link
+            to="/"
+            className={`px-3 py-2 rounded transition ${isActive('/') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+              }`}
           >
             Intake
           </Link>
-          <Link 
-            to="/dashboard" 
-            className={`px-3 py-2 rounded transition ${
-              isActive('/dashboard') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-            }`}
+          <Link
+            to="/dashboard"
+            className={`px-3 py-2 rounded transition ${isActive('/dashboard') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+              }`}
           >
             Dashboard
           </Link>
-          <Link 
-            to="/active-cases" 
-            className={`px-3 py-2 rounded transition ${
-              isActive('/active-cases') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-            }`}
+          <Link
+            to="/active-cases"
+            className={`px-3 py-2 rounded transition ${isActive('/active-cases') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+              }`}
           >
             Active Cases
           </Link>
-          <Link 
-            to="/stock" 
-            className={`px-3 py-2 rounded transition flex items-center ${
-              isActive('/stock') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-            }`}
+          <Link
+            to="/stock"
+            className={`px-3 py-2 rounded transition flex items-center ${isActive('/stock') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+              }`}
           >
             <span className="mr-2">📦</span> Stock Management
           </Link>
-          <Link 
-            to="/purchase" 
-            className={`px-3 py-2 rounded transition ${
-              isActive('/purchase') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-            }`}
+          <Link
+            to="/purchase"
+            className={`px-3 py-2 rounded transition ${isActive('/purchase') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+              }`}
           >
             Purchase Orders
           </Link>
-          <Link 
-            to="/repatriation-trip" 
-            className={`px-3 py-2 rounded transition ${
-              isActive('/repatriation-trip') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-            }`}
+          <Link
+            to="/repatriation-trip"
+            className={`px-3 py-2 rounded transition ${isActive('/repatriation-trip') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+              }`}
           >
             Repatriation Trip
           </Link>
-          <Link 
-            to="/airtime-requests" 
-            className={`px-3 py-2 rounded transition ${
-              isActive('/airtime-requests') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-            }`}
+          <Link
+            to="/airtime-requests"
+            className={`px-3 py-2 rounded transition ${isActive('/airtime-requests') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+              }`}
           >
             Airtime Requests
           </Link>
           {/* Admin-only: Users link */}
           {isAuthenticated && user?.role === 'admin' && (
-            <Link 
-              to="/users" 
-              className={`px-3 py-2 rounded transition flex items-center ${
-                isActive('/users') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-              }`}
+            <Link
+              to="/users"
+              className={`px-3 py-2 rounded transition flex items-center ${isActive('/users') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+                }`}
             >
               <span className="mr-2">👥</span> Users
             </Link>
@@ -221,77 +214,69 @@ function Navigation() {
               </div>
             )}
 
-            <Link 
-              to="/" 
+            <Link
+              to="/"
               onClick={() => setMobileMenuOpen(false)}
-              className={`block px-4 py-3 rounded transition ${
-                isActive('/') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-              }`}
+              className={`block px-4 py-3 rounded transition ${isActive('/') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+                }`}
             >
               Intake
             </Link>
-            <Link 
-              to="/dashboard" 
+            <Link
+              to="/dashboard"
               onClick={() => setMobileMenuOpen(false)}
-              className={`block px-4 py-3 rounded transition ${
-                isActive('/dashboard') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-              }`}
+              className={`block px-4 py-3 rounded transition ${isActive('/dashboard') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+                }`}
             >
               Dashboard
             </Link>
-            <Link 
-              to="/active-cases" 
+            <Link
+              to="/active-cases"
               onClick={() => setMobileMenuOpen(false)}
-              className={`block px-4 py-3 rounded transition ${
-                isActive('/active-cases') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-              }`}
+              className={`block px-4 py-3 rounded transition ${isActive('/active-cases') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+                }`}
             >
               Active Cases
             </Link>
-            <Link 
-              to="/stock" 
+            <Link
+              to="/stock"
               onClick={() => setMobileMenuOpen(false)}
-              className={`block px-4 py-3 rounded transition flex items-center ${
-                isActive('/stock') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-              }`}
+              className={`block px-4 py-3 rounded transition flex items-center ${isActive('/stock') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+                }`}
             >
               <span className="mr-2">📦</span> Stock Management
             </Link>
-            <Link 
-              to="/purchase" 
+            <Link
+              to="/purchase"
               onClick={() => setMobileMenuOpen(false)}
-              className={`block px-4 py-3 rounded transition ${
-                isActive('/purchase') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-              }`}
+              className={`block px-4 py-3 rounded transition ${isActive('/purchase') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+                }`}
             >
               Purchase Orders
             </Link>
-            <Link 
-              to="/repatriation-trip" 
+            <Link
+              to="/repatriation-trip"
               onClick={() => setMobileMenuOpen(false)}
-              className={`block px-4 py-3 rounded transition ${
-                isActive('/repatriation-trip') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-              }`}
+              className={`block px-4 py-3 rounded transition ${isActive('/repatriation-trip') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+                }`}
             >
               Repatriation Trip
             </Link>
-            <Link 
-              to="/airtime-requests" 
+            <Link
+              to="/airtime-requests"
               onClick={() => setMobileMenuOpen(false)}
-              className={`block px-4 py-3 rounded transition ${
-                isActive('/airtime-requests') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-              }`}
+              className={`block px-4 py-3 rounded transition ${isActive('/airtime-requests') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+                }`}
             >
               Airtime Requests
             </Link>
             {/* Admin-only: Users link (mobile) */}
             {isAuthenticated && user?.role === 'admin' && (
-              <Link 
-                to="/users" 
+              <Link
+                to="/users"
                 onClick={() => setMobileMenuOpen(false)}
-                className={`block px-4 py-3 rounded transition flex items-center ${
-                  isActive('/users') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
-                }`}
+                className={`block px-4 py-3 rounded transition flex items-center ${isActive('/users') ? 'bg-red-700 text-yellow-400' : 'hover:text-yellow-500 hover:bg-red-700'
+                  }`}
               >
                 <span className="mr-2">👥</span> Users
               </Link>
@@ -323,8 +308,8 @@ function Navigation() {
 
       {/* Close dropdown when clicking outside */}
       {userMenuOpen && (
-        <div 
-          className="fixed inset-0 z-40" 
+        <div
+          className="fixed inset-0 z-40"
           onClick={() => setUserMenuOpen(false)}
         />
       )}
@@ -412,6 +397,11 @@ function AppContent() {
         <Route path="/airtime-requests" element={
           <ProtectedRoute>
             <AirtimeRequests />
+          </ProtectedRoute>
+        } />
+        <Route path="/roster" element={
+          <ProtectedRoute>
+            <Roster />
           </ProtectedRoute>
         } />
       </Routes>

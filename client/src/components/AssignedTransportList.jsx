@@ -21,7 +21,12 @@ export default function AssignedTransportList({ roster = [] }) {
                         </div>
                     )}
                     <div>
-                        <span className="font-semibold text-gray-600">Vehicle:</span> {r.vehicle?.reg_number} <span className="text-gray-500">({formatVehicleType(r.vehicle?.type)})</span>
+                        <span className="font-semibold text-gray-600">Vehicle:</span>
+                        {r.external_vehicle ? (
+                            <span> {r.external_vehicle} <span className="text-red-500 text-xs uppercase font-bold">(Hired)</span></span>
+                        ) : (
+                            <span> {r.vehicle?.reg_number} <span className="text-gray-500">({formatVehicleType(r.vehicle?.type)})</span></span>
+                        )}
                     </div>
                     <div>
                         <span className="font-semibold text-gray-600">Driver:</span> {r.driver?.name || "TBD"}
