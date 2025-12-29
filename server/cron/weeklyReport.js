@@ -55,14 +55,14 @@ const generatePDFBuffer = (data, dateRange) => {
 
 // Core function to generate and send report
 const sendWeeklyReportLogic = async (options = {}) => {
+    // Check email config first
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        console.error('❌ Missing SMTP configuration (SMTP_HOST, SMTP_USER, SMTP_PASS)');
+        return { success: false, error: 'Server email configuration is missing.' };
+    }
+
     // Default to last 7 days if no options provided
     let { days, startDate, endDate } = options;
-
-    // Logic: 
-    // 1. If startDate/endDate provided, use them.
-    // 2. If days provided, use now - days.
-    // 3. Default to 7 days.
-    // User requested constraint: Start data from 2025-12-08 (Real Data Start)
 
     let queryParams = [];
     let dateFilter = "";
@@ -70,10 +70,7 @@ const sendWeeklyReportLogic = async (options = {}) => {
 
     if (startDate && endDate) {
         dateFilter = "sm.created_at >= $1 AND sm.created_at <= $2";
-        queryParams = [startDate, endDate]; // Ensure these include time if needed, e.g. .setHours(23,59,59)
-        // For simple dates (YYYY-MM-DD), casting might be needed or standard comp works if DB matches.
-        // Let's assume passed as strings 'YYYY-MM-DD'.
-        // Appending time for full day coverage:
+        queryParams = [startDate, endDate];
         if (startDate.length === 10) queryParams[0] = `${startDate} 00:00:00`;
         if (endDate.length === 10) queryParams[1] = `${endDate} 23:59:59`;
         dateRangeDisplay = `${new Date(queryParams[0]).toLocaleDateString()} - ${new Date(queryParams[1]).toLocaleDateString()}`;
@@ -85,30 +82,18 @@ const sendWeeklyReportLogic = async (options = {}) => {
         dateRangeDisplay = `Last ${d} Days`;
     }
 
-    // Hard Constraint from User: "start on 08 dec 2025"
-    // We should strictly ignore anything before this date if possible, or trust the inputs.
-    // Given the request "it should start on 08 dec 2025", let's clamp the start date in the SQL effectively?
-    // Actually, SQL allows multiple conditions. Let's add the floor.
-    // dateFilter += " AND sm.created_at >= '2025-12-08 00:00:00'"; 
-
-    // However, if the user explicitly asks for older data (unlikely given the prompt), we might block it.
-    // Let's add the constraint to valid data.
-    // Ensure the actualStartDate is not before '2025-12-08 00:00:00'
-    // Ensure the startDate is not before '2025-12-08 00:00:00'
     const minAllowedDate = new Date('2025-12-08T00:00:00');
-    // Use startDate / endDate from the destructuring above
-    // We need to ensure queryParams uses these correctly
-
-    // Recalculate query params here to be safe
     let startD = startDate;
     let endD = endDate;
 
     if (startDate && startDate.length === 10) startD = `${startDate} 00:00:00`;
     if (endDate && endDate.length === 10) endD = `${endDate} 23:59:59`;
 
-    const currentStartDate = new Date(startD);
-    if (currentStartDate < minAllowedDate) {
-        startD = '2025-12-08 00:00:00';
+    if (startD) {
+        const currentStartDate = new Date(startD);
+        if (currentStartDate < minAllowedDate) {
+            startD = '2025-12-08 00:00:00';
+        }
     }
 
     // If not provided (auto mode), calculate them
@@ -126,6 +111,20 @@ const sendWeeklyReportLogic = async (options = {}) => {
     console.log(`📊 Generating Inventory Report. Filter: ${dateRangeDisplay}, Params: ${queryParams}`);
 
     try {
+        // Ensure table exists to prevent 500
+        const tableCheck = await query(`
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'stock_movements'
+            ) as exists
+        `);
+
+        if (!tableCheck.rows[0].exists) {
+            console.warn('⚠️ stock_movements table does not exist yet. Returning empty report.');
+            return { success: false, error: 'No stock movement history found (table missing).' };
+        }
+
         const sql = `
             SELECT 
                 COALESCE(sm.created_at, c.funeral_date) as created_at,
@@ -163,7 +162,7 @@ const sendWeeklyReportLogic = async (options = {}) => {
 
         if (result.rows.length === 0) {
             console.log('No movements. Skipping email.');
-            return { success: false, message: 'No movements found for this period.' };
+            return { success: false, error: 'No movements found for this period to report.' };
         }
 
         const html = generatePDFBuffer(result.rows, dateRangeDisplay);
@@ -183,7 +182,7 @@ const sendWeeklyReportLogic = async (options = {}) => {
 
     } catch (error) {
         console.error('❌ Failed to send weekly report:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: 'Server error: ' + error.message };
     }
 };
 
