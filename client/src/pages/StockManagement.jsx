@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { API_HOST } from '../api/config';
-import { getAccessToken } from '../api/auth';
+import { getAccessToken, clearAuthData } from '../api/auth';
 import StockTakeModal from '../components/StockTake/StockTakeModal';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable"; // import the function
@@ -81,6 +81,14 @@ export default function StockManagement() {
       const response = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
+
+      if (response.status === 401) {
+        // Session expired
+        clearAuthData();
+        window.location.href = '/login';
+        return;
+      }
+
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       console.log('Inventory response: ', data);
@@ -95,7 +103,7 @@ export default function StockManagement() {
       } else setError(data.error);
     } catch (err) {
       console.error('Inventory error:', err);
-      setError('Failed to load inventory data.');
+      setError('Failed to load inventory data. ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -217,6 +225,12 @@ export default function StockManagement() {
       const response = await fetch(`${API_URL}/api/inventory/stats`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
+
+      if (response.status === 401) {
+        clearAuthData();
+        return; // Navigation handled by fetchInventory usually, but safe to ignore here
+      }
+
       if (response.ok) {
         const data = await response.json();
         if (data.success) setStats(data.stats);
@@ -274,13 +288,21 @@ export default function StockManagement() {
         headers: token ? { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } : { 'Content-Type': 'application/json' },
         body: JSON.stringify({ startDate, endDate })
       });
+
+      if (response.status === 401) {
+        clearAuthData();
+        window.location.href = '/login';
+        return;
+      }
+
       const data = await response.json();
       if (data.success) {
         alert('Report sent successfully!');
       } else {
-        alert('Failed to send report: ' + data.error);
+        alert('Failed to send report: ' + (data.error || 'Unknown error'));
       }
     } catch (err) {
+      console.error('Email report error:', err);
       alert('Error sending report: ' + err.message);
     }
   };
