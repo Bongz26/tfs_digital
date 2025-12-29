@@ -12,38 +12,50 @@ const ACTIVE_TTL_MS = 5000; // 5 seconds
 router.get('/', async (req, res) => {
   try {
     const now = Date.now();
-    if (activeCasesCache.data && (now - activeCasesCache.time) < ACTIVE_TTL_MS) {
-      return res.json(activeCasesCache.data);
-    }
-    const supabase = req.app.locals.supabase;
-
-    console.log('Fetching active cases...');
-
-    // Get active cases — only required fields, filtered by status/date window
-    const today = new Date().toISOString().split('T')[0];
-    const minDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const maxDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const activeStatuses = ['intake', 'preparation', 'confirmed', 'in_progress'];
-
     const page = parseInt(req.query.page || '1', 10);
     const limit = parseInt(req.query.limit || '20', 10);
     const search = (req.query.search || '').trim();
     const statusFilter = (req.query.status || '').trim();
+    const fromDate = (req.query.from_date || '').trim();
+    const toDate = (req.query.to_date || '').trim();
+
     const from = (page - 1) * limit;
     const to = from + limit - 1;
+
+    // Disable cache if filters are active
+    if (!fromDate && !toDate && !search && activeCasesCache.data && (now - activeCasesCache.time) < ACTIVE_TTL_MS) {
+      return res.json(activeCasesCache.data);
+    }
+
+    const supabase = req.app.locals.supabase;
+    const activeStatuses = ['intake', 'preparation', 'confirmed', 'in_progress'];
 
     let qb = supabase
       .from('cases')
       .select('id,case_number,deceased_name,status,funeral_date,funeral_time,venue_name,venue_address,burial_place,policy_number,requires_grocery,branch', { count: 'exact' })
-      .gte('funeral_date', minDate)
-      .lte('funeral_date', maxDate)
-      .order('funeral_date', { ascending: true });
+      .order('funeral_date', { ascending: true, nullsFirst: false });
 
-    if (statusFilter && statusFilter.toLowerCase() !== 'all') {
-      qb = qb.in('status', [statusFilter]);
+    // Apply Filters
+    if (fromDate) qb = qb.gte('funeral_date', fromDate);
+    if (toDate) qb = qb.lte('funeral_date', toDate);
+
+    if (fromDate || toDate) {
+      // If searching a specific past date range, we might want to see completed/archived cases too?
+      // For now, let's respect the status filter if explicitly set, otherwise if date range is set, show ALL statuses within that range (including past services).
+      if (statusFilter && statusFilter.toLowerCase() !== 'all') {
+        qb = qb.in('status', [statusFilter]);
+      }
+      // If NO status filter is set but DATE range IS set, do NOT filter by 'activeStatuses' by default, 
+      // to allow seeing past completed services.
     } else {
-      qb = qb.in('status', activeStatuses);
+      // Default behavior (no date filter): Show only active cases unless specific status requested
+      if (statusFilter && statusFilter.toLowerCase() !== 'all') {
+        qb = qb.in('status', [statusFilter]);
+      } else {
+        qb = qb.in('status', activeStatuses);
+      }
     }
+
     if (search) {
       const term = `%${search}%`;
       qb = qb.or(`deceased_name.ilike.${term},case_number.ilike.${term},policy_number.ilike.${term}`);
@@ -108,13 +120,23 @@ router.get('/', async (req, res) => {
     if (caseIds.length > 0) {
       const { data: rosterData, error: rosterError } = await supabase
         .from('roster')
-        .select('id, case_id, vehicle_id, driver_name, status, assignment_role')
+        .select('id, case_id, vehicle_id, driver_name, status, assignment_role, external_vehicle')
         .in('case_id', caseIds);
 
       if (!rosterError && rosterData) {
+        // Enrich roster data with vehicle and driver objects
+        const enrichedRoster = rosterData.map(r => {
+          const vehicle = allVehicles.find(v => v.id === r.vehicle_id);
+          return {
+            ...r,
+            vehicle: vehicle || null,
+            driver: { name: r.driver_name || 'TBD' }
+          };
+        });
+
         // Group by case_id
         const rosterByCase = {};
-        rosterData.forEach(r => {
+        enrichedRoster.forEach(r => {
           if (!rosterByCase[r.case_id]) {
             rosterByCase[r.case_id] = [];
           }

@@ -570,10 +570,20 @@ exports.createCase = async (req, res) => {
 // --- ASSIGN VEHICLE TO CASE ---
 exports.assignVehicle = async (req, res) => {
     const { caseId } = req.params;
-    const { vehicle_id, driver_name, pickup_time, assignment_role } = req.body;
+    let { vehicle_id, driver_name, pickup_time, assignment_role, is_hired, external_vehicle } = req.body;
 
-    if (!vehicle_id) {
-        return res.status(400).json({ success: false, error: 'vehicle_id is required' });
+    // Normalize driver name
+    if (typeof driver_name === 'string') {
+        driver_name = driver_name.trim();
+    }
+    if (!driver_name) driver_name = null;
+
+    if (!is_hired && !vehicle_id) {
+        return res.status(400).json({ success: false, error: 'vehicle_id is required for internal vehicles' });
+    }
+
+    if (is_hired && !external_vehicle) {
+        return res.status(400).json({ success: false, error: 'Vehicle details required for hired transport' });
     }
 
     const client = await getClient();
@@ -581,17 +591,30 @@ exports.assignVehicle = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // Ensure roster has assignment_role column
+        // Ensure roster has assignment_role and external_vehicle columns
         try {
-            const colCheck = await client.query(
-                `SELECT 1 FROM information_schema.columns WHERE table_name = 'roster' AND column_name = 'assignment_role'`
-            );
-            if (colCheck.rows.length === 0) {
-                await client.query(`ALTER TABLE roster ADD COLUMN assignment_role VARCHAR(20)`);
-            }
+            await client.query(`
+                DO $$ 
+                BEGIN 
+                    BEGIN
+                        ALTER TABLE roster ADD COLUMN assignment_role VARCHAR(20);
+                    EXCEPTION
+                        WHEN duplicate_column THEN NULL;
+                    END;
+                    BEGIN
+                        ALTER TABLE roster ADD COLUMN external_vehicle TEXT;
+                    EXCEPTION
+                        WHEN duplicate_column THEN NULL;
+                    END;
+                    BEGIN
+                         ALTER TABLE roster ALTER COLUMN vehicle_id DROP NOT NULL;
+                    EXCEPTION
+                        WHEN OTHERS THEN NULL; -- Might fail if there are constraints, but usually works
+                    END;
+                END $$;
+            `);
         } catch (e) {
-            // Continue even if check fails; insert will work if column exists
-            console.warn('assignment_role column check failed:', e.message);
+            console.warn('Schema migration in assignVehicle failed:', e.message);
         }
 
         const caseResult = await client.query(
@@ -601,6 +624,18 @@ exports.assignVehicle = async (req, res) => {
         if (caseResult.rows.length === 0) {
             await client.query('ROLLBACK');
             return res.status(404).json({ success: false, error: 'Case not found' });
+        }
+
+        // Prevent multiple hearses
+        if (assignment_role && assignment_role.toLowerCase() === 'hearse') {
+            const dupHearse = await client.query(
+                `SELECT 1 FROM roster WHERE case_id = $1 AND LOWER(assignment_role) = 'hearse' AND status != 'completed'`,
+                [caseId]
+            );
+            if (dupHearse.rows.length > 0) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ success: false, error: 'A hearse is already assigned to this case. Please delete the existing hearse assignment if you wish to change it.' });
+            }
         }
 
         const currentCase = caseResult.rows[0];
@@ -637,32 +672,37 @@ exports.assignVehicle = async (req, res) => {
             calculatedPickupTime = pickup_time || new Date().toISOString();
         }
 
-        const vehicleResult = await client.query(
-            'SELECT id, reg_number, type FROM vehicles WHERE id = $1',
-            [vehicle_id]
-        );
-        if (vehicleResult.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({ success: false, error: 'Vehicle not found' });
+        let dupVehicle = { rows: [] };
+        if (!is_hired) {
+            dupVehicle = await client.query(
+                `SELECT id, driver_name FROM roster WHERE case_id = $1 AND vehicle_id = $2 AND status != 'completed'`,
+                [caseId, vehicle_id]
+            );
         }
-
-        // Prevent duplicate vehicle assignment to the same case
-        // If vehicle is ALREADY assigned, we check if we are just updating the driver.
-        const dupVehicle = await client.query(
-            `SELECT id, driver_name FROM roster WHERE case_id = $1 AND vehicle_id = $2 AND status != 'completed'`,
-            [caseId, vehicle_id]
-        );
 
         if (dupVehicle.rows.length > 0) {
             // Found existing assignment for this vehicle on this case
             if (driver_name && driver_name !== 'TBD') {
-                // The user is likely trying to "Assign Driver" to an existing vehicle slot using the main button
-                // We will UPDATE the existing slot instead of creating a new one (which would fail)
                 const existingRosterId = dupVehicle.rows[0].id;
+
+                // Check if this NEW driver is already assigned to ANOTHER vehicle on this case
+                const driverCheck = await client.query(
+                    `SELECT 1 FROM roster 
+                     WHERE case_id = $1 
+                       AND LOWER(TRIM(driver_name)) = LOWER($2) 
+                       AND id != $3
+                       AND status != 'completed'`,
+                    [caseId, driver_name, existingRosterId]
+                );
+
+                if (driverCheck.rows.length > 0) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ success: false, error: 'This driver is already assigned to another vehicle on this case' });
+                }
 
                 // Get driver ID
                 let driverId = null;
-                const drv = await client.query('SELECT id FROM drivers WHERE LOWER(name) = LOWER($1)', [driver_name.trim()]);
+                const drv = await client.query('SELECT id FROM drivers WHERE LOWER(name) = LOWER($1)', [driver_name]);
                 if (drv.rows.length > 0) driverId = drv.rows[0].id;
 
                 const updatedRow = await client.query(
@@ -670,7 +710,7 @@ exports.assignVehicle = async (req, res) => {
                       SET driver_name = $1, driver_id = $2, assignment_role = COALESCE($3, assignment_role)
                       WHERE id = $4
                       RETURNING *`,
-                    [driver_name.trim(), driverId, assignment_role || null, existingRosterId]
+                    [driver_name, driverId, assignment_role || null, existingRosterId]
                 );
 
                 await client.query('COMMIT');
@@ -692,7 +732,10 @@ exports.assignVehicle = async (req, res) => {
         // Prevent duplicate driver assignment to the same case
         if (driver_name && driver_name !== 'TBD') {
             const dupDriver = await client.query(
-                `SELECT 1 FROM roster WHERE case_id = $1 AND LOWER(driver_name) = LOWER($2) AND status != 'completed'`,
+                `SELECT 1 FROM roster 
+                 WHERE case_id = $1 
+                 AND LOWER(TRIM(driver_name)) = LOWER($2) 
+                 AND status != 'completed'`,
                 [caseId, driver_name]
             );
             if (dupDriver.rows.length > 0) {
@@ -783,22 +826,32 @@ exports.assignVehicle = async (req, res) => {
             : 'TBD';
 
         let driverId = null;
-        if (assignedDriver !== 'TBD') {
+        if (!is_hired && assignedDriver !== 'TBD') {
             const drv = await client.query('SELECT id FROM drivers WHERE LOWER(name) = LOWER($1)', [assignedDriver]);
             if (drv.rows.length > 0) driverId = drv.rows[0].id;
         }
 
         const rosterEntry = await client.query(
-            `INSERT INTO roster (case_id, vehicle_id, driver_name, driver_id, pickup_time, status, assignment_role)
-             VALUES ($1, $2, $3, $4, $5, 'scheduled', $6)
+            `INSERT INTO roster (case_id, vehicle_id, driver_name, driver_id, pickup_time, status, assignment_role, external_vehicle)
+             VALUES ($1, $2, $3, $4, $5, 'scheduled', $6, $7)
              RETURNING *`,
-            [caseId, vehicle_id, assignedDriver, driverId, calculatedPickupTime, (assignment_role || null)]
+            [
+                caseId,
+                is_hired ? null : vehicle_id,
+                assignedDriver,
+                driverId,
+                calculatedPickupTime,
+                (assignment_role || null),
+                is_hired ? external_vehicle : null
+            ]
         );
 
-        await client.query(
-            'UPDATE vehicles SET available = false WHERE id = $1',
-            [vehicle_id]
-        );
+        if (!is_hired) {
+            await client.query(
+                'UPDATE vehicles SET available = false WHERE id = $1',
+                [vehicle_id]
+            );
+        }
         console.log(`🚗 Vehicle ${vehicle_id} marked as unavailable`);
 
         await client.query('COMMIT');

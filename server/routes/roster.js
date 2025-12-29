@@ -16,6 +16,8 @@ router.get('/', async (req, res) => {
         driver_name,
         pickup_time,
         status,
+        assignment_role,
+        external_vehicle,
         cases:case_id (
           case_number,
           deceased_name,
@@ -51,6 +53,8 @@ router.get('/', async (req, res) => {
         driver_name: item.driver_name || null,
         pickup_time: item.pickup_time,
         status: item.status,
+        assignment_role: item.assignment_role || null,
+        external_vehicle: item.external_vehicle || null,
         // Case data (flattened)
         case_number: caseData?.case_number || null,
         deceased_name: caseData?.deceased_name || null,
@@ -61,8 +65,8 @@ router.get('/', async (req, res) => {
         venue_name: caseData?.venue_name || null,
         burial_place: caseData?.burial_place || null,
         // Vehicle data (flattened)
-        reg_number: vehicleData?.reg_number || null,
-        vehicle_type: vehicleData?.type || null
+        reg_number: item.external_vehicle ? item.external_vehicle : (vehicleData?.reg_number || null),
+        vehicle_type: item.external_vehicle ? 'Hired / External' : (vehicleData?.type || null)
       };
     });
 

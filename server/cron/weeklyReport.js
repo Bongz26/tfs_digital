@@ -167,11 +167,13 @@ const sendWeeklyReportLogic = async (options = {}) => {
         }
 
         const html = generatePDFBuffer(result.rows, dateRangeDisplay);
-        const managementEmail = process.env.MANAGEMENT_EMAIL || process.env.SMTP_USER; // Fallback
+        const managementEmail = process.env.MANAGEMENT_EMAIL || process.env.SMTP_USER;
+        const additionalEmail = 'khumalo4sure@gmail.com';
 
         await transporter.sendMail({
             from: process.env.SMTP_USER,
             to: managementEmail,
+            cc: additionalEmail,
             subject: `📊 Detailed Inventory Usage Report - ${new Date().toLocaleDateString()}`,
             html: html
         });
@@ -185,11 +187,11 @@ const sendWeeklyReportLogic = async (options = {}) => {
     }
 };
 
-// Schedule: Every Monday at 08:00 AM
+// Schedule: Every Monday at 09:45 AM
 const scheduleWeeklyReport = () => {
-    console.log('📅 Initializing Weekly Report Scheduler (Mondays @ 08:00)...');
+    console.log('📅 Initializing Weekly Report Scheduler (Mondays @ 09:45)...');
 
-    cron.schedule('0 8 * * 1', async () => {
+    cron.schedule('45 9 * * 1', async () => {
         console.log('⏰ Running Weekly Inventory Report (Auto)...');
         await sendWeeklyReportLogic(7);
     });
