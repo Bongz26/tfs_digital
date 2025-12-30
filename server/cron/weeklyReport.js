@@ -2,7 +2,7 @@ const cron = require('node-cron');
 const { query } = require('../config/db');
 const nodemailer = require('nodemailer');
 
-// Email config
+// Email config - SendGrid for Render compatibility
 const port = parseInt(process.env.SMTP_PORT || '587', 10);
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
