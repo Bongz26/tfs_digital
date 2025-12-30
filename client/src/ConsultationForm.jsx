@@ -359,6 +359,8 @@ export default function ConsultationForm() {
     requires_bus: false,
     programs: 0,
     top_up_amount: 0,
+    top_up_type: 'none',
+    top_up_reference: '',
     airtime: false,
     airtime_network: '',
     airtime_number: '',
@@ -622,7 +624,12 @@ export default function ConsultationForm() {
     if (form.requires_grocery) items.push('Grocery');
     if (form.requires_bus) items.push('Bus');
     if (form.programs) items.push(`Programmes: ${form.programs}`);
-    if (form.top_up_amount) items.push(`Top-Up: R${form.top_up_amount}`);
+    if (form.top_up_amount) {
+      const topupLabel = form.top_up_type === 'book'
+        ? `Book Top-Up (${form.top_up_reference || 'N/A'}): R${form.top_up_amount}`
+        : `Top-Up: R${form.top_up_amount}`;
+      items.push(topupLabel);
+    }
     if (form.airtime) items.push(`Airtime: ${form.airtime_network || ''} ${form.airtime_number || ''}`.trim());
     return items.length ? items.join(', ') : 'None selected';
   };
@@ -950,7 +957,7 @@ export default function ConsultationForm() {
         venue_name: '', venue_address: '', intake_day: '',
         requires_cow: false, requires_sheep: false, requires_tombstone: false, requires_flower: false,
         requires_catering: false, requires_grocery: false, requires_bus: false,
-        programs: 0, top_up_amount: 0, airtime: false, airtime_network: '', airtime_number: '',
+        programs: 0, top_up_amount: 0, top_up_type: 'none', top_up_reference: '', airtime: false, airtime_network: '', airtime_number: '',
         cover_amount: 0, cashback_amount: 0, amount_to_bank: 0,
         total_price: '', casket_type: '', casket_colour: '', tombstone_type: '',
         office_personnel1: '', client_name1: '', date1: '',
@@ -1871,7 +1878,7 @@ export default function ConsultationForm() {
                     <div className="checklist-grid">
                       <div className="checklist-item"><span className="checklist-label">Casket Type</span> <span className="checklist-val">{printedData.casket_type}</span></div>
                       <div className="checklist-item"><span className="checklist-label">Casket Colour</span> <span className="checklist-val">{printedData.casket_colour}</span></div>
-                      <div className="checklist-item"><span className="checklist-label">Top-Up</span> <span className="checklist-val">{printedData.top_up_amount ? `R${printedData.top_up_amount}` : '-'}</span></div>
+                      <div className="checklist-item"><span className="checklist-label">Top-Up</span> <span className="checklist-val">{printedData.top_up_amount ? (printedData.top_up_type === 'book' ? `Book (${printedData.top_up_reference || 'N/A'}): R${printedData.top_up_amount}` : `R${printedData.top_up_amount}`) : '-'}</span></div>
 
                       <div className="checklist-item"><span className="checklist-label">Cow</span> <span className="checklist-val">{printedData.requires_cow ? 'YES' : 'NO'}</span></div>
                       <div className="checklist-item"><span className="checklist-label">Sheep</span> <span className="checklist-val">{printedData.requires_sheep ? 'YES' : 'NO'}</span></div>
