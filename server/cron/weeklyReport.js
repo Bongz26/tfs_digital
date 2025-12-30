@@ -174,9 +174,10 @@ const sendWeeklyReportLogic = async (options = {}) => {
         const html = generatePDFBuffer(result.rows, dateRangeDisplay);
         const managementEmail = process.env.MANAGEMENT_EMAIL || process.env.SMTP_USER;
         const additionalEmail = process.env.REPORT_CC_EMAIL || 'khumalo4sure@gmail.com';
+        const fromEmail = process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER;
 
         await transporter.sendMail({
-            from: process.env.SMTP_USER,
+            from: `Thusanang Reports <${fromEmail}>`,
             to: managementEmail,
             cc: additionalEmail,
             subject: `📊 Detailed Inventory Usage Report - ${new Date().toLocaleDateString()}`,
