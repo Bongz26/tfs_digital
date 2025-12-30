@@ -2039,7 +2039,26 @@ export default function ConsultationForm() {
                     <div className="checklist-grid">
                       <div className="checklist-item"><span className="checklist-label">Casket Type</span> <span className="checklist-val">{printedData.casket_type}</span></div>
                       <div className="checklist-item"><span className="checklist-label">Casket Colour</span> <span className="checklist-val">{printedData.casket_colour}</span></div>
-                      <div className="checklist-item"><span className="checklist-label">Top-Up</span> <span className="checklist-val">{printedData.top_up_amount ? (printedData.top_up_type === 'book' ? `Book (${printedData.top_up_reference || 'N/A'}): R${printedData.top_up_amount}` : `R${printedData.top_up_amount}`) : '-'}</span></div>
+                      {/* Top-Up Display - Enhanced for Book Top-Up */}
+                      {printedData.top_up_type === 'book' && printedData.top_up_amount > 0 ? (
+                        <div className="checklist-item col-span-3 bg-blue-50 border-2 border-blue-300">
+                          <div className="flex flex-col">
+                            <span className="checklist-label font-bold text-blue-900">📚 BOOK TOP-UP (Combined Policies)</span>
+                            <span className="checklist-val text-sm">Policies: {printedData.top_up_reference || 'N/A'}</span>
+                            <span className="checklist-val text-sm font-bold text-blue-700">Combined Value: R{printedData.top_up_amount}</span>
+                          </div>
+                        </div>
+                      ) : printedData.top_up_type === 'cash' && printedData.top_up_amount > 0 ? (
+                        <div className="checklist-item">
+                          <span className="checklist-label">Cash Top-Up</span>
+                          <span className="checklist-val">R{printedData.top_up_amount}</span>
+                        </div>
+                      ) : (
+                        <div className="checklist-item">
+                          <span className="checklist-label">Top-Up</span>
+                          <span className="checklist-val">-</span>
+                        </div>
+                      )}
 
                       <div className="checklist-item"><span className="checklist-label">Cow</span> <span className="checklist-val">{printedData.requires_cow ? 'YES' : 'NO'}</span></div>
                       <div className="checklist-item"><span className="checklist-label">Sheep</span> <span className="checklist-val">{printedData.requires_sheep ? 'YES' : 'NO'}</span></div>
