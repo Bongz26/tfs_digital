@@ -61,11 +61,23 @@ const generatePDFBuffer = (data, dateRange) => {
 
 // Core function to generate and send report
 const sendWeeklyReportLogic = async (options = {}) => {
+    // 🔍 DEBUG: Log all email environment variables
+    console.log('🔍 [EMAIL DEBUG] Starting email report generation...');
+    console.log('🔍 [EMAIL DEBUG] SMTP_HOST:', process.env.SMTP_HOST || 'NOT SET');
+    console.log('🔍 [EMAIL DEBUG] SMTP_PORT:', process.env.SMTP_PORT || 'NOT SET');
+    console.log('🔍 [EMAIL DEBUG] SMTP_USER:', process.env.SMTP_USER || 'NOT SET');
+    console.log('🔍 [EMAIL DEBUG] SMTP_PASS:', process.env.SMTP_PASS ? `SET (${process.env.SMTP_PASS.substring(0, 10)}...)` : 'NOT SET');
+    console.log('🔍 [EMAIL DEBUG] MANAGEMENT_EMAIL:', process.env.MANAGEMENT_EMAIL || 'NOT SET');
+    console.log('🔍 [EMAIL DEBUG] REPORT_CC_EMAIL:', process.env.REPORT_CC_EMAIL || 'NOT SET');
+    console.log('🔍 [EMAIL DEBUG] SENDGRID_FROM_EMAIL:', process.env.SENDGRID_FROM_EMAIL || 'NOT SET');
+
     // Check email config first
     if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-        console.error('❌ Missing SMTP configuration (SMTP_HOST, SMTP_USER, SMTP_PASS)');
+        console.error('❌ [EMAIL DEBUG] Missing SMTP configuration (SMTP_HOST, SMTP_USER, SMTP_PASS)');
         return { success: false, error: 'Server email configuration is missing.' };
     }
+
+    console.log('✅ [EMAIL DEBUG] SMTP configuration verified');
 
     // Default to last 7 days if no options provided
     let { days, startDate, endDate } = options;
@@ -176,16 +188,34 @@ const sendWeeklyReportLogic = async (options = {}) => {
         const additionalEmail = process.env.REPORT_CC_EMAIL || 'khumalo4sure@gmail.com';
         const fromEmail = process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER;
 
-        await transporter.sendMail({
-            from: `Thusanang Reports <${fromEmail}>`,
-            to: managementEmail,
-            cc: additionalEmail,
-            subject: `📊 Detailed Inventory Usage Report - ${new Date().toLocaleDateString()}`,
-            html: html
-        });
+        console.log('📧 [EMAIL DEBUG] Preparing to send email...');
+        console.log('📧 [EMAIL DEBUG] FROM:', fromEmail);
+        console.log('📧 [EMAIL DEBUG] TO:', managementEmail);
+        console.log('📧 [EMAIL DEBUG] CC:', additionalEmail);
+        console.log('📧 [EMAIL DEBUG] Report contains', result.rows.length, 'rows');
 
-        console.log(`✅ Weekly Report Sent to ${managementEmail}`);
-        return { success: true, message: `Report sent to ${managementEmail}` };
+        try {
+            await transporter.sendMail({
+                from: `Thusanang Reports <${fromEmail}>`,
+                to: managementEmail,
+                cc: additionalEmail,
+                subject: `📊 Detailed Inventory Usage Report - ${new Date().toLocaleDateString()}`,
+                html: html
+            });
+
+            console.log(`✅ Weekly Report Sent successfully!`);
+            console.log(`✅ TO: ${managementEmail}`);
+            console.log(`✅ CC: ${additionalEmail}`);
+            return { success: true, message: `Report sent to ${managementEmail}` };
+        } catch (emailError) {
+            console.error('❌ [EMAIL DEBUG] SendMail error details:');
+            console.error('❌ Error code:', emailError.code || 'N/A');
+            console.error('❌ Error message:', emailError.message || 'N/A');
+            console.error('❌ Response code:', emailError.responseCode || 'N/A');
+            console.error('❌ Response:', emailError.response || 'N/A');
+            console.error('❌ Full error:', emailError);
+            throw emailError; // Re-throw to be caught by outer catch
+        }
 
     } catch (error) {
         console.error('❌ Failed to send weekly report:', error);
