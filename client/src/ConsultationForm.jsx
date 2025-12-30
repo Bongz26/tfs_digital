@@ -1534,6 +1534,53 @@ export default function ConsultationForm() {
                   <input type="number" placeholder="0.00" value={form.total_price} onChange={e => handleInputChange('total_price', e.target.value)} className="w-40 px-4 py-3 border-2 rounded-lg text-right text-2xl font-bold" />
                 )}
               </div>
+
+              {/* TOP-UP SECTION */}
+              <div className="mt-6 p-6 bg-blue-50 rounded-xl border-2 border-blue-200">
+                <h4 className="text-lg font-bold text-blue-900 mb-4">💰 Top-Up (Optional)</h4>
+
+                <div className="mb-4">
+                  <label className="block font-semibold mb-2">Top-Up Method:</label>
+                  <select
+                    value={form.top_up_type}
+                    onChange={(e) => handleInputChange('top_up_type', e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg text-lg focus:ring-4 focus:ring-blue-300"
+                  >
+                    <option value="none">None</option>
+                    <option value="cash">Cash Payment</option>
+                    <option value="book">Insurance Book</option>
+                  </select>
+                </div>
+
+                {form.top_up_type === 'book' && (
+                  <div className="mb-4">
+                    <label className="block font-semibold mb-2">Book Number(s):</label>
+                    <input
+                      type="text"
+                      value={form.top_up_reference}
+                      onChange={(e) => handleInputChange('top_up_reference', e.target.value)}
+                      placeholder="Enter book number (e.g., BOOK123, BOOK456)"
+                      className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg text-lg focus:ring-4 focus:ring-blue-300"
+                    />
+                    <small className="text-blue-700 text-sm">Separate multiple books with commas</small>
+                  </div>
+                )}
+
+                {(form.top_up_type === 'cash' || form.top_up_type === 'book') && (
+                  <div>
+                    <label className="block font-semibold mb-2">Top-Up Amount (R):</label>
+                    <input
+                      type="number"
+                      value={form.top_up_amount || ''}
+                      onChange={(e) => handleInputChange('top_up_amount', parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg text-lg focus:ring-4 focus:ring-blue-300"
+                      min="0"
+                    />
+                  </div>
+                )}
+              </div>
+
               {form.airtime && (
                 <div className="mt-4 flex items-center gap-3">
                   <button
