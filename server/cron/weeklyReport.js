@@ -1,23 +1,15 @@
 const cron = require('node-cron');
 const { query } = require('../config/db');
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 
-// Email config - SendGrid for Render compatibility
-const port = parseInt(process.env.SMTP_PORT || '587', 10);
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: port,
-    secure: port === 465, // true for 465, false for other ports
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-    },
-    // Add connection timeout settings
-    connectionTimeout: 10000,
-    greetingTimeout: 5000
-    // logger: true, // Uncomment for debug logs if needed
-    // debug: true
-});
+// Initialize SendGrid with API key
+// Use Web API instead of SMTP to bypass Render's port blocking
+if (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.')) {
+    sgMail.setApiKey(process.env.SMTP_PASS);
+    console.log('📧 SendGrid Web API initialized');
+} else {
+    console.warn('⚠️ SendGrid API key not configured properly');
+}
 
 // Helper to generate PDF Buffer (actually HTML)
 const generatePDFBuffer = (data, dateRange) => {
@@ -195,24 +187,30 @@ const sendWeeklyReportLogic = async (options = {}) => {
         console.log('📧 [EMAIL DEBUG] Report contains', result.rows.length, 'rows');
 
         try {
-            await transporter.sendMail({
-                from: `Thusanang Reports <${fromEmail}>`,
+            // Use SendGrid Web API instead of SMTP
+            const msg = {
                 to: managementEmail,
+                from: {
+                    email: fromEmail,
+                    name: 'Thusanang Reports'
+                },
                 cc: additionalEmail,
                 subject: `📊 Detailed Inventory Usage Report - ${new Date().toLocaleDateString()}`,
                 html: html
-            });
+            };
 
-            console.log(`✅ Weekly Report Sent successfully!`);
+            console.log('📧 [EMAIL DEBUG] Sending via SendGrid Web API...');
+            await sgMail.send(msg);
+
+            console.log(`✅ Weekly Report Sent successfully via SendGrid Web API!`);
             console.log(`✅ TO: ${managementEmail}`);
             console.log(`✅ CC: ${additionalEmail}`);
             return { success: true, message: `Report sent to ${managementEmail}` };
         } catch (emailError) {
-            console.error('❌ [EMAIL DEBUG] SendMail error details:');
+            console.error('❌ [EMAIL DEBUG] SendGrid API error details:');
             console.error('❌ Error code:', emailError.code || 'N/A');
             console.error('❌ Error message:', emailError.message || 'N/A');
-            console.error('❌ Response code:', emailError.responseCode || 'N/A');
-            console.error('❌ Response:', emailError.response || 'N/A');
+            console.error('❌ Response:', emailError.response?.body || 'N/A');
             console.error('❌ Full error:', emailError);
             throw emailError; // Re-throw to be caught by outer catch
         }
