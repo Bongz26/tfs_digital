@@ -167,7 +167,7 @@ const sendWeeklyReportLogic = async (options = {}) => {
 
         const html = generatePDFBuffer(result.rows, dateRangeDisplay);
         const managementEmail = process.env.MANAGEMENT_EMAIL || process.env.SMTP_USER;
-        const additionalEmail = 'khumalo4sure@gmail.com';
+        const additionalEmail = process.env.REPORT_CC_EMAIL || 'khumalo4sure@gmail.com';
 
         await transporter.sendMail({
             from: process.env.SMTP_USER,
