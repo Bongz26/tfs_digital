@@ -220,7 +220,7 @@ exports.createCase = async (req, res) => {
         requires_cow, requires_sheep, requires_tombstone, requires_catering, requires_grocery, requires_bus,
         service_type, total_price, casket_type,
         casket_colour, delivery_date, delivery_time, intake_day,
-        programs, top_up_amount, airtime, airtime_network, airtime_number,
+        programs, top_up_amount, top_up_type, top_up_reference, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
         legacy_plan_name,
         status,
@@ -353,7 +353,7 @@ exports.createCase = async (req, res) => {
         requires_cow, requires_sheep, requires_tombstone, requires_catering, requires_grocery, requires_bus,
         service_type, total_price,
         casket_type, casket_colour, delivery_date, delivery_time, intake_day,
-        programs, top_up_amount, airtime, airtime_network, airtime_number,
+        programs, top_up_amount, top_up_type, top_up_reference, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
         legacy_plan_name, benefit_mode, status, burial_place, branch, tombstone_type)
        VALUES (
@@ -366,9 +366,9 @@ exports.createCase = async (req, res) => {
         $25,$26,$27,$28,$29,$30,
         $31,$32,
         $33,$34,$35,$36,$37,
-        $38,$39,$40,$41,$42,
-        $43,$44,$45,
-        $46,$47,$48,$49,$50, $51)
+        $38,$39,$40,$41,$42,$43,$44,
+        $45,$46,$47,
+        $48,$49,$50,$51,$52,$53)
        RETURNING *`,
             [
                 finalCaseNumber, claim_date || null, policy_number || null,
@@ -380,7 +380,7 @@ exports.createCase = async (req, res) => {
                 !!requires_cow, !!requires_sheep, !!requires_tombstone, !!requires_catering, !!requires_grocery, !!requires_bus,
                 service_type || null, total_price != null ? total_price : 0,
                 casket_type || null, casket_colour || null, delivery_date || null, delivery_time || null, intake_day,
-                programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, !!airtime, airtime_network || null, airtime_number || null,
+                programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, top_up_type || 'cash', top_up_reference || null, !!airtime, airtime_network || null, airtime_number || null,
                 cover_amount != null ? cover_amount : 0, cashback_amount != null ? cashback_amount : 0, amount_to_bank != null ? amount_to_bank : 0,
                 legacy_plan_name || null, benefit_mode || null, status || 'confirmed', burial_place || null, branch || 'Head Office', tombstone_type || null
             ]
