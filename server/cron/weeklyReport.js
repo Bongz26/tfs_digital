@@ -3,14 +3,20 @@ const { query } = require('../config/db');
 const nodemailer = require('nodemailer');
 
 // Email config
+const port = parseInt(process.env.SMTP_PORT || '587', 10);
 const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT,
-    secure: false, // true for 465, false for other ports
+    port: port,
+    secure: port === 465, // true for 465, false for other ports
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS
-    }
+    },
+    // Add connection timeout settings
+    connectionTimeout: 10000,
+    greetingTimeout: 5000
+    // logger: true, // Uncomment for debug logs if needed
+    // debug: true
 });
 
 // Helper to generate PDF Buffer (actually HTML)
@@ -182,6 +188,9 @@ const sendWeeklyReportLogic = async (options = {}) => {
 
     } catch (error) {
         console.error('❌ Failed to send weekly report:', error);
+        if (error.code === 'ETIMEDOUT') {
+            return { success: false, error: 'Email server connection timed out. Host might be blocked or port incorrect.' };
+        }
         return { success: false, error: 'Server error: ' + error.message };
     }
 };
