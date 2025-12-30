@@ -361,6 +361,10 @@ export default function ConsultationForm() {
     top_up_amount: 0,
     top_up_type: 'none',
     top_up_reference: '',
+    top_up_plan_category: 'family',
+    top_up_plan_name: 'Silver',
+    top_up_plan_members: 6,
+    top_up_plan_age: '18-65',
     airtime: false,
     airtime_network: '',
     airtime_number: '',
@@ -599,6 +603,10 @@ export default function ConsultationForm() {
   const getAutoCasketType = () => {
     // If Private, always allow manual override (return form value)
     if (form.service_type === 'private') {
+      return form.casket_type || '';
+    }
+    // If Book Top-Up, always require manual selection (no auto-fill)
+    if (form.top_up_type === 'book') {
       return form.casket_type || '';
     }
     // If Special Plan, allow edit only if top-up > 0, otherwise read-only default
@@ -957,7 +965,9 @@ export default function ConsultationForm() {
         venue_name: '', venue_address: '', intake_day: '',
         requires_cow: false, requires_sheep: false, requires_tombstone: false, requires_flower: false,
         requires_catering: false, requires_grocery: false, requires_bus: false,
-        programs: 0, top_up_amount: 0, top_up_type: 'none', top_up_reference: '', airtime: false, airtime_network: '', airtime_number: '',
+        programs: 0, top_up_amount: 0, top_up_type: 'none', top_up_reference: '',
+        top_up_plan_category: 'family', top_up_plan_name: 'Silver', top_up_plan_members: 6, top_up_plan_age: '18-65',
+        airtime: false, airtime_network: '', airtime_number: '',
         cover_amount: 0, cashback_amount: 0, amount_to_bank: 0,
         total_price: '', casket_type: '', casket_colour: '', tombstone_type: '',
         office_personnel1: '', client_name1: '', date1: '',
@@ -1543,32 +1553,136 @@ export default function ConsultationForm() {
                   <label className="block font-semibold mb-2">Top-Up Method:</label>
                   <select
                     value={form.top_up_type}
-                    onChange={(e) => handleInputChange('top_up_type', e.target.value)}
+                    onChange={(e) => {
+                      handleInputChange('top_up_type', e.target.value);
+                      if (e.target.value === 'none') {
+                        handleInputChange('top_up_amount', 0);
+                        handleInputChange('top_up_reference', '');
+                      }
+                    }}
                     className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg text-lg focus:ring-4 focus:ring-blue-300"
                   >
                     <option value="none">None</option>
                     <option value="cash">Cash Payment</option>
-                    <option value="book">Insurance Book</option>
+                    <option value="book">Insurance Book (Combine Policies)</option>
                   </select>
                 </div>
 
                 {form.top_up_type === 'book' && (
-                  <div className="mb-4">
-                    <label className="block font-semibold mb-2">Book Number(s):</label>
-                    <input
-                      type="text"
-                      value={form.top_up_reference}
-                      onChange={(e) => handleInputChange('top_up_reference', e.target.value)}
-                      placeholder="Enter book number (e.g., BOOK123, BOOK456)"
-                      className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg text-lg focus:ring-4 focus:ring-blue-300"
-                    />
-                    <small className="text-blue-700 text-sm">Separate multiple books with commas</small>
-                  </div>
+                  <>
+                    <div className="mb-4">
+                      <label className="block font-semibold mb-2">Book Policy Number(s):</label>
+                      <input
+                        type="text"
+                        value={form.top_up_reference}
+                        onChange={(e) => handleInputChange('top_up_reference', e.target.value)}
+                        placeholder="Enter policy numbers (e.g. 12340, 24687)"
+                        className="w-full px-4 py-3 border-2 border-blue-300 rounded-lg text-lg focus:ring-4 focus:ring-blue-300"
+                      />
+                      <small className="text-blue-700 text-sm">Separate multiple policies with commas</small>
+                    </div>
+
+                    {/* Book Top-Up Plan Selection */}
+                    <div className="bg-white p-4 rounded-lg border-2 border-blue-300">
+                      <h5 className="font-bold text-blue-900 mb-3">Select Combined Plan Tier:</h5>
+
+                      <div className="grid grid-cols-2 gap-4 mb-3">
+                        <div>
+                          <label className="block text-sm font-semibold mb-1">Category:</label>
+                          <select
+                            value={form.top_up_plan_category || 'family'}
+                            onChange={(e) => handleInputChange('top_up_plan_category', e.target.value)}
+                            className="w-full px-3 py-2 border rounded-lg"
+                          >
+                            <option value="family">Family</option>
+                            <option value="single">Single</option>
+                            <option value="motjha">Motjha</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold mb-1">Plan:</label>
+                          <select
+                            value={form.top_up_plan_name || 'Silver'}
+                            onChange={(e) => {
+                              const planName = e.target.value;
+                              handleInputChange('top_up_plan_name', planName);
+                              // Auto-calculate amount from plan
+                              const category = form.top_up_plan_category || 'family';
+                              const plan = PLAN_DATA[category]?.[planName];
+                              if (plan) {
+                                const key = (category === 'motjha')
+                                  ? (form.top_up_plan_members || 6)
+                                  : (form.top_up_plan_age || '18-65');
+                                const price = plan[key] || 0;
+                                handleInputChange('top_up_amount', price);
+                              }
+                            }}
+                            className="w-full px-3 py-2 border rounded-lg"
+                          >
+                            {Object.keys(PLAN_DATA[form.top_up_plan_category || 'family'] || {}).map(name => (
+                              <option key={name} value={name}>{name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {(form.top_up_plan_category === 'motjha') ? (
+                        <div className="mb-3">
+                          <label className="block text-sm font-semibold mb-1">Members:</label>
+                          <select
+                            value={form.top_up_plan_members || 6}
+                            onChange={(e) => {
+                              const members = parseInt(e.target.value);
+                              handleInputChange('top_up_plan_members', members);
+                              // Recalculate amount
+                              const plan = PLAN_DATA[form.top_up_plan_category]?.[form.top_up_plan_name || 'Silver'];
+                              if (plan) {
+                                const price = plan[members] || 0;
+                                handleInputChange('top_up_amount', price);
+                              }
+                            }}
+                            className="w-full px-3 py-2 border rounded-lg"
+                          >
+                            <option value="6">6 Members</option>
+                            <option value="10">10 Members</option>
+                            <option value="14">14 Members</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="mb-3">
+                          <label className="block text-sm font-semibold mb-1">Age Bracket:</label>
+                          <select
+                            value={form.top_up_plan_age || '18-65'}
+                            onChange={(e) => {
+                              const age = e.target.value;
+                              handleInputChange('top_up_plan_age', age);
+                              // Recalculate amount
+                              const plan = PLAN_DATA[form.top_up_plan_category || 'family']?.[form.top_up_plan_name || 'Silver'];
+                              if (plan) {
+                                const price = plan[age] || 0;
+                                handleInputChange('top_up_amount', price);
+                              }
+                            }}
+                            className="w-full px-3 py-2 border rounded-lg"
+                          >
+                            <option value="18-65">18-65 years</option>
+                            <option value="66-85">66-85 years</option>
+                            <option value="86-100">86-100 years</option>
+                          </select>
+                        </div>
+                      )}
+
+                      <div className="bg-green-50 p-3 rounded border-2 border-green-300">
+                        <span className="text-sm font-semibold">Combined Plan Value:</span>
+                        <span className="text-2xl font-bold text-green-600 ml-2">R{form.top_up_amount || 0}</span>
+                      </div>
+                    </div>
+                  </>
                 )}
 
-                {(form.top_up_type === 'cash' || form.top_up_type === 'book') && (
+                {form.top_up_type === 'cash' && (
                   <div>
-                    <label className="block font-semibold mb-2">Top-Up Amount (R):</label>
+                    <label className="block font-semibold mb-2">Cash Amount (R):</label>
                     <input
                       type="number"
                       value={form.top_up_amount || ''}
