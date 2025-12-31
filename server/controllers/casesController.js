@@ -297,7 +297,22 @@ exports.createCase = async (req, res) => {
             const contactKey = String(nok_contact || '').trim();
 
             let dup = null;
-            if (idKey) {
+
+            // IMPORTANT: Check for COMBINATION of policy + deceased_id (not policy alone)
+            // This allows multiple deceased people on the same family policy
+            if (idKey && polKey) {
+                const r = await query(
+                    `SELECT id, case_number, status, created_at FROM cases 
+                     WHERE deceased_id = $1 
+                       AND UPPER(REGEXP_REPLACE(COALESCE(policy_number,''),'\\s+','', 'g')) = UPPER(REGEXP_REPLACE($2,'\\s+','', 'g'))
+                       AND status != 'cancelled' 
+                     ORDER BY created_at DESC LIMIT 1`,
+                    [idKey, polKey]
+                );
+                dup = r.rows[0] || null;
+            }
+            // If no policy but has ID, check by ID only
+            else if (idKey) {
                 const r = await query(
                     `SELECT id, case_number, status, created_at FROM cases 
                      WHERE deceased_id = $1 AND status != 'cancelled' 
@@ -306,16 +321,7 @@ exports.createCase = async (req, res) => {
                 );
                 dup = r.rows[0] || null;
             }
-            if (!dup && polKey) {
-                const r = await query(
-                    `SELECT id, case_number, status, created_at FROM cases 
-                     WHERE UPPER(REGEXP_REPLACE(COALESCE(policy_number,''),'\\s+','', 'g')) = UPPER(REGEXP_REPLACE($1,'\\s+','', 'g'))
-                       AND status != 'cancelled'
-                     ORDER BY created_at DESC LIMIT 1`,
-                    [polKey]
-                );
-                dup = r.rows[0] || null;
-            }
+            // Check by name + contact (for cases without ID)
             if (!dup && nameKey && contactKey) {
                 const r = await query(
                     `SELECT id, case_number, status, created_at FROM cases 
@@ -742,6 +748,45 @@ exports.assignVehicle = async (req, res) => {
                 await client.query('ROLLBACK');
                 return res.status(400).json({ success: false, error: 'This driver is already assigned to this case' });
             }
+
+            // Also check for time-based conflicts with driver assignments on OTHER cases
+            if (currentFuneralDate && currentFuneralTime) {
+                const driverConflicts = await client.query(`
+                    SELECT 
+                      r.case_id,
+                      c.funeral_date,
+                      c.funeral_time,
+                      c.case_number,
+                      c.deceased_name
+                    FROM roster r
+                    JOIN cases c ON r.case_id = c.id
+                    WHERE LOWER(TRIM(r.driver_name)) = LOWER($1)
+                      AND r.case_id != $2
+                      AND r.status != 'completed'
+                      AND c.funeral_date = $3
+                `, [driver_name, caseId, currentFuneralDate]);
+
+                if (driverConflicts.rows.length > 0) {
+                    const MIN_GAP_HOURS = 1.5;
+                    const currentTime = new Date(`${currentFuneralDate}T${currentFuneralTime}`);
+
+                    for (const conflict of driverConflicts.rows) {
+                        if (conflict.funeral_time) {
+                            const conflictTime = new Date(`${conflict.funeral_date}T${conflict.funeral_time}`);
+                            const timeDiffMs = Math.abs(currentTime - conflictTime);
+                            const timeDiffHours = timeDiffMs / (1000 * 60 * 60);
+
+                            if (timeDiffHours < MIN_GAP_HOURS && !isAdmin) {
+                                await client.query('ROLLBACK');
+                                return res.status(400).json({
+                                    success: false,
+                                    error: `Driver time conflict: ${driver_name} is already assigned to ${conflict.case_number} (${conflict.deceased_name}) at ${conflict.funeral_time}. Services must be at least 1.5 hours apart.`
+                                });
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if (currentFuneralDate) {
@@ -761,13 +806,12 @@ exports.assignVehicle = async (req, res) => {
       `, [vehicle_id, caseId, currentFuneralDate]);
 
             if (conflictingAssignments.rows.length > 0) {
-                // If it's a past funeral, admins might be doing cleanup, so we might want to be more lenient.
-                // Current logic allows admins to bypass conflicts.
-                const BUFFER_HOURS = 1.5;
+                // BUFFER_HOURS: Minimum time gap required between services for same vehicle/driver
+                // Services must be AT LEAST 1.5 hours apart to allow same vehicle/driver
+                const MIN_GAP_HOURS = 1.5;
 
                 if (currentFuneralTime) {
                     const currentTime = new Date(`${currentFuneralDate}T${currentFuneralTime}`);
-                    const currentEndTime = new Date(currentTime.getTime() + (BUFFER_HOURS * 60 * 60 * 1000));
 
                     for (const assignment of conflictingAssignments.rows) {
                         // Check if time conflict actually exists
@@ -775,13 +819,13 @@ exports.assignVehicle = async (req, res) => {
 
                         if (assignment.funeral_time) {
                             const assignmentTime = new Date(`${assignment.funeral_date}T${assignment.funeral_time}`);
-                            const assignmentEndTime = new Date(assignmentTime.getTime() + (BUFFER_HOURS * 60 * 60 * 1000));
 
-                            if (
-                                (currentTime >= assignmentTime && currentTime < assignmentEndTime) ||
-                                (currentEndTime > assignmentTime && currentEndTime <= assignmentEndTime) ||
-                                (currentTime <= assignmentTime && currentEndTime >= assignmentEndTime)
-                            ) {
+                            // Calculate time gap between services (in hours)
+                            const timeDiffMs = Math.abs(currentTime - assignmentTime);
+                            const timeDiffHours = timeDiffMs / (1000 * 60 * 60);
+
+                            // Conflict if services are LESS than 1.5 hours apart
+                            if (timeDiffHours < MIN_GAP_HOURS) {
                                 isConflict = true;
                             }
                         } else {

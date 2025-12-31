@@ -434,14 +434,17 @@ export default function ConsultationForm() {
       const contactCandidate = (form.nok_contact || '').trim();
       const hasNameContact = nameCandidate && contactCandidate;
       const hasId = idCandidate && /^\d{13}$/.test(idCandidate);
-      const hasPolicy = !!policyCandidate;
-      if (!hasId && !hasPolicy && !hasNameContact) return;
+
+      // IMPORTANT: Only lookup by deceased identity (ID or Name+Contact), NOT by policy number alone
+      // This allows multiple deceased people to use the same policy number without overwriting each other
+      if (!hasId && !hasNameContact) return;
+
       try {
         const found = await lookupCase({
           deceased_id: hasId ? idCandidate : undefined,
-          policy_number: hasPolicy ? policyCandidate : undefined,
           deceased_name: hasNameContact ? nameCandidate : undefined,
           nok_contact: hasNameContact ? contactCandidate : undefined
+          // NOTE: policy_number removed from lookup to prevent loading wrong deceased person's data
         });
         if (found) {
           setForm(prev => ({
@@ -506,7 +509,7 @@ export default function ConsultationForm() {
       } catch (e) { }
     }, 400);
     return () => clearTimeout(timeout);
-  }, [form.deceased_id, form.policy_number, form.deceased_name, form.nok_contact]);
+  }, [form.deceased_id, form.deceased_name, form.nok_contact]);
 
   useEffect(() => {
     const isSpecialPlan = form.plan_category === 'specials';
@@ -516,9 +519,15 @@ export default function ConsultationForm() {
     const nextBenefitMode = isSpecialPlan ? 'benefits' : form.benefit_mode;
     const nextCashbackAmount = isSpecialPlan ? 0 : (form.benefit_mode === 'cashback' ? (benefits.cover || 0) : 0);
     const hasAirtimeBenefit = (typeof benefits.airtime !== 'undefined') && nextBenefitMode === 'benefits';
+
+    // Auto-set casket ONLY when there's no top-up (book or cash)
+    // Manual selection is ONLY for: private services, book top-ups, or cash top-ups
+    const hasTopUp = form.top_up_type === 'book' || (form.top_up_amount > 0);
+    const shouldAutoSetCasket = form.service_type !== 'private' && !hasTopUp;
+
     setForm(prev => ({
       ...prev,
-      casket_type: benefits.casket || '',
+      casket_type: shouldAutoSetCasket ? (benefits.casket || '') : prev.casket_type,
       casket_colour: isSpecialPlan ? (prev.casket_colour || 'Cherry') : prev.casket_colour,
       cover_amount: benefits.cover || 0,
       cashback_amount: nextCashbackAmount,
@@ -527,7 +536,7 @@ export default function ConsultationForm() {
       airtime: hasAirtimeBenefit ? true : false,
       // You can auto-set more fields if needed, e.g., requires_flower: !!benefits.flower
     }));
-  }, [form.plan_name, form.plan_category, form.benefit_mode]);
+  }, [form.plan_name, form.plan_category, form.benefit_mode, form.service_type, form.top_up_type, form.top_up_amount]);
 
   useEffect(() => {
     let mounted = true;
@@ -993,7 +1002,7 @@ export default function ConsultationForm() {
         <div className="space-y-2">
           <div className="font-semibold">{formatPlanTitle(data)} Package</div>
           <ul className="list-disc pl-5">
-            {benefits.casket && <li>Casket: {benefits.casket}</li>}
+            {data.casket_type && <li>Casket: {data.casket_type}</li>}
             {Array.isArray(benefits.benefits) && benefits.benefits.map((b, i) => (
               <li key={i}>{b}</li>
             ))}
@@ -1022,7 +1031,16 @@ export default function ConsultationForm() {
                   <li>Additional Selected: {selected.length ? selected.join(', ') : 'None'}</li>
                   <li>Not Selected: {notSelected.length ? notSelected.join(', ') : 'None'}</li>
                   <li>Airtime Details: {data.airtime ? `${data.airtime_network || ''} ${data.airtime_number || ''}`.trim() || 'Provided' : 'None'}</li>
-                  <li>Top-Up Amount: {data.top_up_amount || 'None'}</li>
+                  {data.top_up_type === 'book' && data.top_up_amount > 0 ? (
+                    (() => {
+                      const topUpPlanBenefits = PLAN_BENEFITS[data.top_up_plan_name];
+                      const coverAmount = topUpPlanBenefits?.cover;
+                      const categoryLabel = formatCategory(data.top_up_plan_category || 'family');
+                      return <li>Top-Up: Book ({categoryLabel} - {data.top_up_plan_name}, Premium R{data.top_up_amount}) - Cover: R{(coverAmount || 0).toLocaleString()}</li>;
+                    })()
+                  ) : data.top_up_amount > 0 ? (
+                    <li>Top-Up Amount: R{data.top_up_amount}</li>
+                  ) : <li>Top-Up Amount: None</li>}
                   <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
                 </>
               );
@@ -1077,7 +1095,16 @@ export default function ConsultationForm() {
                   <li>Not Selected: {notSelected.length ? notSelected.join(', ') : 'None'}</li>
                   <li>Programmes: {data.programs || 'None'}</li>
                   <li>Airtime Details: {data.airtime ? `${data.airtime_network || ''} ${data.airtime_number || ''}`.trim() || 'Provided' : 'None'}</li>
-                  <li>Top-Up Amount: {data.top_up_amount || 'None'}</li>
+                  {data.top_up_type === 'book' && data.top_up_amount > 0 ? (
+                    (() => {
+                      const topUpPlanBenefits = PLAN_BENEFITS[data.top_up_plan_name];
+                      const coverAmount = topUpPlanBenefits?.cover;
+                      const categoryLabel = formatCategory(data.top_up_plan_category || 'family');
+                      return <li>Top-Up: Book ({categoryLabel} - {data.top_up_plan_name}, Premium R{data.top_up_amount}) - Cover: R{(coverAmount || 0).toLocaleString()}</li>;
+                    })()
+                  ) : data.top_up_amount > 0 ? (
+                    <li>Top-Up Amount: R{data.top_up_amount}</li>
+                  ) : <li>Top-Up Amount: None</li>}
                   <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
                 </>
               );
@@ -1091,7 +1118,7 @@ export default function ConsultationForm() {
         <div className="space-y-2">
           <div className="font-semibold">{formatPlanTitle(data)} Package</div>
           <ul className="list-disc pl-5">
-            {benefits.casket && <li>Casket: {benefits.casket}</li>}
+            {data.casket_type && <li>Casket: {data.casket_type}</li>}
             {benefits.tombstone && <li>Tombstone: {benefits.tombstone}</li>}
             {typeof benefits.tent !== 'undefined' && <li>{benefits.tent} Tent</li>}
             {typeof benefits.table !== 'undefined' && <li>{benefits.table} Table</li>}
@@ -1140,7 +1167,16 @@ export default function ConsultationForm() {
                   <li>Not Selected: {notSelected.length ? notSelected.join(', ') : 'None'}</li>
                   <li>Programmes: {data.programs || 'None'}</li>
                   <li>Airtime Details: {data.airtime ? `${data.airtime_network || ''} ${data.airtime_number || ''}`.trim() || 'Provided' : 'None'}</li>
-                  <li>Top-Up Amount: {data.top_up_amount || 'None'}</li>
+                  {data.top_up_type === 'book' && data.top_up_amount > 0 ? (
+                    (() => {
+                      const topUpPlanBenefits = PLAN_BENEFITS[data.top_up_plan_name];
+                      const coverAmount = topUpPlanBenefits?.cover;
+                      const categoryLabel = formatCategory(data.top_up_plan_category || 'family');
+                      return <li>Top-Up: Book ({categoryLabel} - {data.top_up_plan_name}, Premium R{data.top_up_amount}) - Cover: R{(coverAmount || 0).toLocaleString()}</li>;
+                    })()
+                  ) : data.top_up_amount > 0 ? (
+                    <li>Top-Up Amount: R{data.top_up_amount}</li>
+                  ) : <li>Top-Up Amount: None</li>}
                   <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
                 </>
               );
@@ -1151,7 +1187,7 @@ export default function ConsultationForm() {
     }
     return (
       <ul className="list-disc pl-5">
-        {benefits.casket && <li>Casket: {benefits.casket}</li>}
+        {data.casket_type && <li>Casket: {data.casket_type}</li>}
         {benefits.tombstone && <li>Tombstone: {benefits.tombstone}</li>}
         {typeof benefits.tent !== 'undefined' && <li>{benefits.tent} Tent</li>}
         {typeof benefits.table !== 'undefined' && <li>{benefits.table} Table</li>}
@@ -1194,7 +1230,16 @@ export default function ConsultationForm() {
               <li>Additional Selected: {selected.length ? selected.join(', ') : 'None'}</li>
               <li>Not Selected: {notSelected.length ? notSelected.join(', ') : 'None'}</li>
               <li>Airtime Details: {data.airtime ? `${data.airtime_network || ''} ${data.airtime_number || ''}`.trim() || 'Provided' : 'None'}</li>
-              <li>Top-Up Amount: {data.top_up_amount || 'None'}</li>
+              {data.top_up_type === 'book' && data.top_up_amount > 0 ? (
+                (() => {
+                  const topUpPlanBenefits = PLAN_BENEFITS[data.top_up_plan_name];
+                  const coverAmount = topUpPlanBenefits?.cover;
+                  const categoryLabel = formatCategory(data.top_up_plan_category || 'family');
+                  return <li>Top-Up: Book ({categoryLabel} - {data.top_up_plan_name}, Premium R{data.top_up_amount}) - Cover: R{(coverAmount || 0).toLocaleString()}</li>;
+                })()
+              ) : data.top_up_amount > 0 ? (
+                <li>Top-Up Amount: R{data.top_up_amount}</li>
+              ) : <li>Top-Up Amount: None</li>}
               <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
             </>
           );
@@ -1673,8 +1718,21 @@ export default function ConsultationForm() {
                       )}
 
                       <div className="bg-green-50 p-3 rounded border-2 border-green-300">
-                        <span className="text-sm font-semibold">Combined Plan Value:</span>
+                        <span className="text-sm font-semibold">Combined Plan Premium (Monthly):</span>
                         <span className="text-2xl font-bold text-green-600 ml-2">R{form.top_up_amount || 0}</span>
+                        {(() => {
+                          const topUpPlanBenefits = PLAN_BENEFITS[form.top_up_plan_name || 'Silver'];
+                          const coverAmount = topUpPlanBenefits?.cover;
+                          if (coverAmount) {
+                            return (
+                              <div className="mt-2 pt-2 border-t border-green-300">
+                                <span className="text-xs font-semibold">Cover Amount:</span>
+                                <span className="text-lg font-bold text-blue-700 ml-2">R{coverAmount.toLocaleString()}</span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
                   </>
@@ -1883,7 +1941,20 @@ export default function ConsultationForm() {
                 <label className="flex items-center"><input type="checkbox" checked={form.requires_grocery} onChange={e => handleInputChange('requires_grocery', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Grocery</span></label>
                 <label className="flex items-center"><input type="checkbox" checked={form.requires_bus} onChange={e => handleInputChange('requires_bus', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Bus</span></label>
                 <div><label>Programmes (Number)</label><input type="number" value={form.programs} onChange={e => handleInputChange('programs', parseInt(e.target.value) || 0)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
-                <div><label>Top-Up Amount R</label><input type="number" value={form.top_up_amount} onChange={e => handleInputChange('top_up_amount', parseFloat(e.target.value) || 0)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
+                <div>
+                  <label>Top-Up Amount R {form.top_up_type === 'book' && <span className="text-xs text-blue-600">(Managed in Top-Up section above)</span>}</label>
+                  <input
+                    type="number"
+                    value={form.top_up_amount}
+                    onChange={e => handleInputChange('top_up_amount', parseFloat(e.target.value) || 0)}
+                    className={`w-full px-4 py-3 border rounded-lg mt-2 ${form.top_up_type === 'book' ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                    disabled={form.top_up_type === 'book'}
+                    readOnly={form.top_up_type === 'book'}
+                  />
+                  {form.top_up_type === 'book' && (
+                    <p className="text-xs text-blue-600 mt-1">⚠️ This amount is automatically set from the book top-up plan selection above.</p>
+                  )}
+                </div>
                 <label className="flex items-center"><input type="checkbox" checked={form.airtime} onChange={e => handleInputChange('airtime', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Airtime</span></label>
                 {form.airtime && (
                   <div className="grid grid-cols-2 gap-4 ml-8">
@@ -1946,7 +2017,7 @@ export default function ConsultationForm() {
           <>
             <style>{`@media print {
             @page { size: A4; margin: 5mm; }
-            html, body { margin: 0; padding: 0; }
+            html, body { margin: 0; padding: 0; height: auto; overflow: visible; }
             body * { visibility: hidden !important; }
             #tfs-print-root, #tfs-print-root * { visibility: visible !important; }
             #tfs-print-root {
@@ -1955,9 +2026,11 @@ export default function ConsultationForm() {
               font-size: 10px;
               color: #000;
               background: white;
+              page-break-after: avoid;
+              overflow: visible;
             }
             .print-header { border-bottom: 2px solid #b91c1c; padding-bottom: 10px; margin-bottom: 10px; }
-            .print-section { margin-bottom: 8px; border: 1px solid #ccc; break-inside: avoid; }
+            .print-section { margin-bottom: 8px; border: 1px solid #ccc; break-inside: avoid; page-break-inside: avoid; }
             .print-section-title { background: #f3f4f6; font-weight: bold; padding: 4px 8px; border-bottom: 1px solid #ccc; font-size: 11px; color: #991b1b; }
             .print-grid { display: grid; grid-template-columns: repeat(2, 1fr); }
             .print-row { display: flex; border-bottom: 1px solid #eee; }
@@ -1969,7 +2042,7 @@ export default function ConsultationForm() {
             .checklist-item:nth-child(3n) { border-right: none; }
             .checklist-label { font-weight: 600; color: #555; }
             .checklist-val { font-weight: bold; }
-            .sign-off-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+            .sign-off-table { width: 100%; border-collapse: collapse; margin-top: 10px; page-break-inside: avoid; }
             .sign-off-table td { border: 1px solid #ccc; padding: 6px; vertical-align: top; height: 40px; }
             .sign-off-label { font-size: 9px; color: #666; margin-bottom: 4px; display: block; font-weight: bold; }
           }`}</style>
@@ -2042,10 +2115,40 @@ export default function ConsultationForm() {
                       {/* Top-Up Display - Enhanced for Book Top-Up */}
                       {printedData.top_up_type === 'book' && printedData.top_up_amount > 0 ? (
                         <div className="checklist-item col-span-3 bg-blue-50 border-2 border-blue-300">
-                          <div className="flex flex-col">
-                            <span className="checklist-label font-bold text-blue-900">📚 BOOK TOP-UP (Combined Policies)</span>
-                            <span className="checklist-val text-sm">Policies: {printedData.top_up_reference || 'N/A'}</span>
-                            <span className="checklist-val text-sm font-bold text-blue-700">Combined Value: R{printedData.top_up_amount}</span>
+                          <div className="flex flex-col gap-1">
+                            <div>
+                              <span className="checklist-label font-bold text-blue-900">📚 BOOK TOP-UP (Combined Policies)</span>
+                            </div>
+                            <div className="text-xs">
+                              <span className="font-semibold">Policies:</span> {printedData.top_up_reference || 'N/A'}
+                            </div>
+                            <div className="text-xs">
+                              <span className="font-semibold">Plan:</span> {printedData.top_up_plan_name || 'N/A'}
+                              {printedData.top_up_plan_category === 'motjha' && printedData.top_up_plan_members && ` (${printedData.top_up_plan_members} Members)`}
+                              {(printedData.top_up_plan_category === 'family' || printedData.top_up_plan_category === 'single') && printedData.top_up_plan_age && ` (${printedData.top_up_plan_age} years)`}
+                            </div>
+                            {(() => {
+                              const topUpPlanBenefits = PLAN_BENEFITS[printedData.top_up_plan_name];
+                              const coverAmount = topUpPlanBenefits?.cover;
+                              const casketType = topUpPlanBenefits?.casket;
+                              return (
+                                <>
+                                  <div className="text-xs">
+                                    <span className="font-semibold">Premium:</span> <span className="font-bold text-blue-700">R{printedData.top_up_amount}</span>
+                                  </div>
+                                  {coverAmount && (
+                                    <div className="text-xs">
+                                      <span className="font-semibold">Cover Amount:</span> <span className="font-bold text-green-700">R{coverAmount.toLocaleString()}</span>
+                                    </div>
+                                  )}
+                                  {casketType && (
+                                    <div className="text-xs">
+                                      <span className="font-semibold">Casket (from top-up):</span> {casketType}
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                         </div>
                       ) : printedData.top_up_type === 'cash' && printedData.top_up_amount > 0 ? (
