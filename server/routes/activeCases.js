@@ -18,12 +18,13 @@ router.get('/', async (req, res) => {
     const statusFilter = (req.query.status || '').trim();
     const fromDate = (req.query.from_date || '').trim();
     const toDate = (req.query.to_date || '').trim();
+    const ageFilter = (req.query.age_filter || '').trim(); // 'recent' (< 13 days) or 'older' (> 13 days)
 
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
     // Disable cache if filters are active
-    if (!fromDate && !toDate && !search && activeCasesCache.data && (now - activeCasesCache.time) < ACTIVE_TTL_MS) {
+    if (!fromDate && !toDate && !search && !ageFilter && activeCasesCache.data && (now - activeCasesCache.time) < ACTIVE_TTL_MS) {
       return res.json(activeCasesCache.data);
     }
 
@@ -32,10 +33,22 @@ router.get('/', async (req, res) => {
 
     let qb = supabase
       .from('cases')
-      .select('id,case_number,deceased_name,status,funeral_date,funeral_time,venue_name,venue_address,burial_place,policy_number,requires_grocery,branch', { count: 'exact' })
+      .select('id,case_number,deceased_name,status,funeral_date,funeral_time,venue_name,venue_address,burial_place,policy_number,requires_grocery,branch,created_at', { count: 'exact' })
       .order('funeral_date', { ascending: true, nullsFirst: false });
 
     // Apply Filters
+    if (ageFilter === 'recent') {
+      // Created within the last 13 days (strictly less than 13 days old)
+      const thirteenDaysAgo = new Date();
+      thirteenDaysAgo.setDate(thirteenDaysAgo.getDate() - 13);
+      qb = qb.gt('created_at', thirteenDaysAgo.toISOString());
+    } else if (ageFilter === 'older') {
+      // Created 13 days ago or more
+      const thirteenDaysAgo = new Date();
+      thirteenDaysAgo.setDate(thirteenDaysAgo.getDate() - 13);
+      qb = qb.lte('created_at', thirteenDaysAgo.toISOString());
+    }
+
     if (fromDate) qb = qb.gte('funeral_date', fromDate);
     if (toDate) qb = qb.lte('funeral_date', toDate);
 

@@ -10,6 +10,10 @@ export const fetchActiveCases = async (params = {}) => {
         if (params.limit) searchParams.append('limit', String(params.limit));
         if (params.search) searchParams.append('search', params.search);
         if (params.status) searchParams.append('status', params.status);
+        if (params.from_date) searchParams.append('from_date', params.from_date);
+        if (params.to_date) searchParams.append('to_date', params.to_date);
+        if (params.age_filter) searchParams.append('age_filter', params.age_filter);
+
         const url = searchParams.toString() ? `${BASE_URL}?${searchParams.toString()}` : BASE_URL;
         const res = await axios.get(url);
         return {

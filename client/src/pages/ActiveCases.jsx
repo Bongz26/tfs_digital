@@ -20,6 +20,7 @@ export default function ActiveCases() {
   const [statusFilter, setStatusFilter] = useState(initialStatus);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [ageFilter, setAgeFilter] = useState("recent"); // 'recent' or 'older'
 
   const [cases, setCases] = useState([]);
   const [cancelled, setCancelled] = useState([]);
@@ -54,7 +55,8 @@ export default function ActiveCases() {
           limit,
           status: statusParam,
           from_date: fromDate || undefined,
-          to_date: toDate || undefined
+          to_date: toDate || undefined,
+          age_filter: ageFilter // Pass the age filter
         }),
         fetchCancelledCases(),
         fetchDrivers(),
@@ -76,7 +78,7 @@ export default function ActiveCases() {
 
   useEffect(() => {
     loadData();
-  }, [page, statusFilter, fromDate, toDate]);
+  }, [page, statusFilter, fromDate, toDate, ageFilter]); // Re-load when ageFilter changes
 
   const handleAssignVehicle = async (caseId, assignmentData) => {
     try {
@@ -132,6 +134,23 @@ export default function ActiveCases() {
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
         <div className="flex flex-wrap items-center gap-4">
           <h1 className="text-3xl font-bold text-gray-800">Active Cases</h1>
+
+          {/* VIEW FILTER TOGGLE */}
+          <div className="bg-white p-1 rounded-lg border flex shadow-sm">
+            <button
+              onClick={() => { setAgeFilter('recent'); setPage(1); }}
+              className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${ageFilter === 'recent' ? 'bg-red-600 text-white shadow' : 'text-gray-600 hover:bg-gray-50'}`}
+            >
+              Recent Cases
+            </button>
+            <button
+              onClick={() => { setAgeFilter('older'); setPage(1); }}
+              className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${ageFilter === 'older' ? 'bg-red-600 text-white shadow' : 'text-gray-600 hover:bg-gray-50'}`}
+            >
+              Older {'>'} 2 Weeks
+            </button>
+          </div>
+
           <select
             value={statusFilter}
             onChange={(e) => {
