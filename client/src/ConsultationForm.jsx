@@ -382,11 +382,8 @@ export default function ConsultationForm() {
     office_personnel2: '',
     client_name2: '',
     date2: '',
-    office_personnel2: '',
-    client_name2: '',
-    date2: '',
-    burial_place: '',
-    tombstone_type: ''
+    tombstone_type: '',
+    benefit_exchange: 'standard'
   });
 
   const [message, setMessage] = useState('');
@@ -502,6 +499,7 @@ export default function ConsultationForm() {
             cleansing_time: found.cleansing_time || prev.cleansing_time,
             delivery_date: found.delivery_date || prev.delivery_date,
             delivery_time: found.delivery_time || prev.delivery_time,
+            delivery_time: found.delivery_time || prev.delivery_time,
             intake_day: found.intake_day || prev.intake_day
           }));
           setMessage('Existing case data auto-filled');
@@ -525,6 +523,9 @@ export default function ConsultationForm() {
     const hasTopUp = form.top_up_type === 'book' || (form.top_up_amount > 0);
     const shouldAutoSetCasket = form.service_type !== 'private' && !hasTopUp;
 
+    // Exchange Logic: Auto-check the required item if swapped
+    const isExchange = form.benefit_exchange && form.benefit_exchange !== 'standard';
+
     setForm(prev => ({
       ...prev,
       casket_type: shouldAutoSetCasket ? (benefits.casket || '') : prev.casket_type,
@@ -534,9 +535,14 @@ export default function ConsultationForm() {
       benefit_mode: nextBenefitMode,
       programs: benefits.programmes || prev.programs,
       airtime: hasAirtimeBenefit ? true : false,
-      // You can auto-set more fields if needed, e.g., requires_flower: !!benefits.flower
+
+      // Auto-set requirements based on exchange
+      requires_catering: form.benefit_exchange === 'catering' ? true : prev.requires_catering,
+      requires_cow: form.benefit_exchange === 'cow' ? true : prev.requires_cow,
+      requires_tombstone: form.benefit_exchange === 'tombstone' ? true : prev.requires_tombstone,
+      requires_grocery: form.benefit_exchange === 'grocery' ? true : prev.requires_grocery,
     }));
-  }, [form.plan_name, form.plan_category, form.benefit_mode, form.service_type, form.top_up_type, form.top_up_amount]);
+  }, [form.plan_name, form.plan_category, form.benefit_mode, form.service_type, form.top_up_type, form.top_up_amount, form.benefit_exchange]);
 
   useEffect(() => {
     let mounted = true;
@@ -684,7 +690,13 @@ export default function ConsultationForm() {
     else if (b.groceries) parts.push(b.groceries);
     if (b.cow) parts.push('Cow');
     if (b.sheep) parts.push('Sheep');
-    if (b.service) parts.push(b.service);
+    if (b.service) {
+      if (form.benefit_exchange && form.benefit_exchange !== 'standard') {
+        parts.push(`Service Swapped for ${form.benefit_exchange.toUpperCase()}`);
+      } else {
+        parts.push(b.service);
+      }
+    }
     if (isColorGrade(form.plan_name) && form.plan_name !== 'Green') parts.push('Free Repatriation');
     if (form.plan_name === 'Pearl' && form.benefit_mode === 'benefits') {
       if (form.pearl_bonus === 'cow') parts.push('Bonus: Cow');
@@ -859,8 +871,8 @@ export default function ConsultationForm() {
       return;
     }
 
-    // Require cleansing details
-    if (!form.cleansing_date || !form.cleansing_time) {
+    // Require cleansing details (ONLY for standard service)
+    if (form.benefit_exchange === 'standard' && (!form.cleansing_date || !form.cleansing_time)) {
       setMessage('Please fill Cleansing (Ho Hlapisa) date and time');
       setSubmitting(false);
       return;
@@ -919,21 +931,23 @@ export default function ConsultationForm() {
     };
 
     try {
-      if (!form.intake_day) {
-        setMessage('Intake day is required and must be a Wednesday');
-        setSubmitting(false);
-        return;
-      }
-      const intakeDate = new Date(form.intake_day);
-      if (isNaN(intakeDate.getTime()) || intakeDate.getDay() !== 3) {
-        setMessage('Intake day must be a Wednesday');
-        setSubmitting(false);
-        return;
-      }
-      if (!form.delivery_date || !form.delivery_time || !form.service_date || !form.service_time) {
-        setMessage('Delivery and service date/time are required');
-        setSubmitting(false);
-        return;
+      if (form.benefit_exchange === 'standard') {
+        if (!form.intake_day) {
+          setMessage('Intake day is required and must be a Wednesday');
+          setSubmitting(false);
+          return;
+        }
+        const intakeDate = new Date(form.intake_day);
+        if (isNaN(intakeDate.getTime()) || intakeDate.getDay() !== 3) {
+          setMessage('Intake day must be a Wednesday');
+          setSubmitting(false);
+          return;
+        }
+        if (!form.delivery_date || !form.delivery_time || !form.service_date || !form.service_time) {
+          setMessage('Delivery and service date/time are required');
+          setSubmitting(false);
+          return;
+        }
       }
       if (form.id) {
         await updateCase(form.id, data);
@@ -1133,7 +1147,13 @@ export default function ConsultationForm() {
             )}
             {benefits.grocery && <li>{benefits.grocery}</li>}
             {benefits.groceries && <li>{benefits.groceries}</li>}
-            {benefits.service && <li>{benefits.service}</li>}
+            {benefits.service && (
+              <li>
+                {form.benefit_exchange && form.benefit_exchange !== 'standard'
+                  ? <span className="font-bold text-amber-700">Service Swapped for {form.benefit_exchange.toUpperCase()}</span>
+                  : benefits.service}
+              </li>
+            )}
             {data.plan_name !== 'Green' && <li>Free Repatriation</li>}
             {data.plan_name === 'Pearl' && data.benefit_mode === 'benefits' && data.pearl_bonus && (
               <li>Bonus: {data.pearl_bonus === 'cow' ? 'Cow' : 'Tombstone'}</li>
@@ -1202,7 +1222,13 @@ export default function ConsultationForm() {
         )}
         {benefits.grocery && <li>{benefits.grocery}</li>}
         {benefits.groceries && <li>{benefits.groceries}</li>}
-        {benefits.service && <li>{benefits.service}</li>}
+        {benefits.service && (
+          <li>
+            {form.benefit_exchange && form.benefit_exchange !== 'standard'
+              ? <span className="font-bold text-amber-600">Service Swapped for {form.benefit_exchange.toUpperCase()}</span>
+              : benefits.service}
+          </li>
+        )}
 
         <li>Programmes Selected: {data.programs}</li>
         {(() => {
@@ -1577,6 +1603,31 @@ export default function ConsultationForm() {
                   </div>
                 </div>
               )}
+
+              {/* Benefit Exchange Selector */}
+              {form.benefit_mode === 'benefits' && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <label className="block text-sm font-bold text-gray-800 mb-2">Benefit Exchange (Swap Service):</label>
+                  <div className="md:w-2/3">
+                    <select
+                      value={form.benefit_exchange || 'standard'}
+                      onChange={(e) => handleInputChange('benefit_exchange', e.target.value)}
+                      className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 focus:bg-white focus:border-blue-500"
+                    >
+                      <option value="standard">Standard (Keep Service)</option>
+                      <option value="catering">Swap for Catering</option>
+                      <option value="cow">Swap for Cow</option>
+                      <option value="tombstone">Swap for Tombstone</option>
+                      <option value="grocery">Swap for Grocery</option>
+                    </select>
+                    {form.benefit_exchange && form.benefit_exchange !== 'standard' && (
+                      <p className="text-sm text-amber-700 mt-2 bg-amber-50 p-2 rounded border border-amber-200">
+                        <span className="font-bold">⚠️ Note:</span> By selecting this swap, the Service benefit is removed and replaced by <strong>{form.benefit_exchange.toUpperCase()}</strong>. The corresponding checklist item below will be checked automatically.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Total Price (end of Plan Selection & Pricing) */}
@@ -1790,120 +1841,125 @@ export default function ConsultationForm() {
 
           </div>
 
-          {/* SCHEDULE DETAILS */}
-          <div className="p-8 border-b border-gray-200">
-            <div className="flex items-center mb-4">
-              <h3 className="text-xl font-bold text-red-800 flex items-center">
-                <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">3</span>
-                Schedule Details (Cleansing, Delivery, Service, Church)
-              </h3>
-              <button type="button" onClick={() => setScheduleOpen(v => !v)} className="ml-auto px-4 py-2 rounded-lg border text-sm font-semibold hover:bg-gray-100">
-                {scheduleOpen ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            {!scheduleOpen && (
-              <div className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                {getScheduleSummary()}
-              </div>
-            )}
-            {scheduleOpen && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700">Cleansing Date</label>
-                    <input type="date" value={form.cleansing_date} onChange={e => handleInputChange('cleansing_date', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700">Cleansing Time</label>
-                    <input type="time" value={form.cleansing_time} onChange={e => handleInputChange('cleansing_time', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-                  </div>
+          {form.benefit_exchange === 'standard' && (
+            <>
+              {/* SCHEDULE DETAILS */}
+              <div className="p-8 border-b border-gray-200">
+                <div className="flex items-center mb-4">
+                  <h3 className="text-xl font-bold text-red-800 flex items-center">
+                    <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">3</span>
+                    Schedule Details (Cleansing, Delivery, Service, Church)
+                  </h3>
+                  <button type="button" onClick={() => setScheduleOpen(v => !v)} className="ml-auto px-4 py-2 rounded-lg border text-sm font-semibold hover:bg-gray-100">
+                    {scheduleOpen ? 'Hide' : 'Show'}
+                  </button>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700">Delivery Date</label>
-                    <input type="date" value={form.delivery_date} onChange={e => handleInputChange('delivery_date', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                {!scheduleOpen && (
+                  <div className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    {getScheduleSummary()}
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700">Delivery Time</label>
-                    <input type="time" value={form.delivery_time} onChange={e => handleInputChange('delivery_time', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                )}
+                {scheduleOpen && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Collection / Intake Logic */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700">Cleansing Date</label>
+                        <input type="date" value={form.cleansing_date} onChange={e => handleInputChange('cleansing_date', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700">Cleansing Time</label>
+                        <input type="time" value={form.cleansing_time} onChange={e => handleInputChange('cleansing_time', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700">Delivery Date</label>
+                        <input type="date" value={form.delivery_date} onChange={e => handleInputChange('delivery_date', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700">Delivery Time</label>
+                        <input type="time" value={form.delivery_time} onChange={e => handleInputChange('delivery_time', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700">Service Date</label>
+                        <input type="date" value={form.service_date} onChange={e => handleInputChange('service_date', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700">Service Time</label>
+                        <input type="time" value={form.service_time} onChange={e => handleInputChange('service_time', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700">Church Date</label>
+                        <input type="date" value={form.church_date} onChange={e => handleInputChange('church_date', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700">Church Time</label>
+                        <input type="time" value={form.church_time} onChange={e => handleInputChange('church_time', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700">Service Date</label>
-                    <input type="date" value={form.service_date} onChange={e => handleInputChange('service_date', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700">Service Time</label>
-                    <input type="time" value={form.service_time} onChange={e => handleInputChange('service_time', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700">Church Date</label>
-                    <input type="date" value={form.church_date} onChange={e => handleInputChange('church_date', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700">Church Time</label>
-                    <input type="time" value={form.church_time} onChange={e => handleInputChange('church_time', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* CASKET & VENUE */}
-          <div className="p-8 border-b border-gray-200">
-            <h3 className="text-xl font-bold text-red-800 mb-6 flex items-center">
-              <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">4</span>
-              Casket & Venue Details
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label>Casket Type</label>
-                {isSpecialPlan && form.service_type !== 'private' && (!form.top_up_amount || form.top_up_amount <= 0) ? (
-                  <div className="w-full px-4 py-3 bg-green-50 border border-green-300 rounded-lg font-bold text-green-800">
-                    {getAutoCasketType()} (Included)
-                  </div>
-                ) : (
-                  <select
-                    value={getAutoCasketType()}
-                    onChange={e => handleInputChange('casket_type', e.target.value)}
-                    className="w-full px-4 py-3 border rounded-lg bg-white"
-                  >
-                    <option value="">-- Select Casket --</option>
-                    {casketOptions.map((opt, idx) => (
-                      <option key={idx} value={opt}>{opt}</option>
-                    ))}
-                    {/* Ensure current value is shown even if not in options (e.g. legacy data) */}
-                    {getAutoCasketType() && !casketOptions.includes(getAutoCasketType()) && (
-                      <option value={getAutoCasketType()}>{getAutoCasketType()}</option>
-                    )}
-                  </select>
                 )}
               </div>
-              <div>
-                <label>Casket Colour</label>
-                <select value={form.casket_colour} onChange={e => handleInputChange('casket_colour', e.target.value)} className="w-full px-4 py-3 border rounded-lg">
-                  <option value="">Select colour</option>
-                  <option value="Cherry">Cherry</option>
-                  <option value="Kiaat">Kiaat</option>
-                  <option value="Redwood">Redwood</option>
-                  <option value="Ash">Ash</option>
-                  <option value="White">White</option>
-                  <option value="Black">Black</option>
-                  <option value="Brown">Brown</option>
-                  <option value="MIDBROWN">MIDBROWN</option>
-                </select>
+
+              {/* CASKET & VENUE */}
+              <div className="p-8 border-b border-gray-200">
+                <h3 className="text-xl font-bold text-red-800 mb-6 flex items-center">
+                  <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">4</span>
+                  Casket & Venue Details
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label>Casket Type</label>
+                    {isSpecialPlan && form.service_type !== 'private' && (!form.top_up_amount || form.top_up_amount <= 0) ? (
+                      <div className="w-full px-4 py-3 bg-green-50 border border-green-300 rounded-lg font-bold text-green-800">
+                        {getAutoCasketType()} (Included)
+                      </div>
+                    ) : (
+                      <select
+                        value={getAutoCasketType()}
+                        onChange={e => handleInputChange('casket_type', e.target.value)}
+                        className="w-full px-4 py-3 border rounded-lg bg-white"
+                      >
+                        <option value="">-- Select Casket --</option>
+                        {casketOptions.map((opt, idx) => (
+                          <option key={idx} value={opt}>{opt}</option>
+                        ))}
+                        {/* Ensure current value is shown even if not in options (e.g. legacy data) */}
+                        {getAutoCasketType() && !casketOptions.includes(getAutoCasketType()) && (
+                          <option value={getAutoCasketType()}>{getAutoCasketType()}</option>
+                        )}
+                      </select>
+                    )}
+                  </div>
+                  <div>
+                    <label>Casket Colour</label>
+                    <select value={form.casket_colour} onChange={e => handleInputChange('casket_colour', e.target.value)} className="w-full px-4 py-3 border rounded-lg">
+                      <option value="">Select colour</option>
+                      <option value="Cherry">Cherry</option>
+                      <option value="Kiaat">Kiaat</option>
+                      <option value="Redwood">Redwood</option>
+                      <option value="Ash">Ash</option>
+                      <option value="White">White</option>
+                      <option value="Black">Black</option>
+                      <option value="Brown">Brown</option>
+                      <option value="MIDBROWN">MIDBROWN</option>
+                    </select>
+                  </div>
+                  <div><label>Service Venue</label><input value={form.venue_name} onChange={e => handleInputChange('venue_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+                  <div><label>Full Address (GPS) <span className="text-red-600">*</span></label><input required value={form.venue_address} onChange={e => handleInputChange('venue_address', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+                  <div className="md:col-span-2">
+                    <label>Burial Place</label>
+                    <input value={form.burial_place} onChange={e => handleInputChange('burial_place', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder="e.g. Avalon Cemetery" />
+                  </div>
+                </div>
               </div>
-              <div><label>Service Venue</label><input value={form.venue_name} onChange={e => handleInputChange('venue_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
-              <div><label>Full Address (GPS) <span className="text-red-600">*</span></label><input required value={form.venue_address} onChange={e => handleInputChange('venue_address', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
-              <div className="md:col-span-2">
-                <label>Burial Place</label>
-                <input value={form.burial_place} onChange={e => handleInputChange('burial_place', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder="e.g. Avalon Cemetery" />
-              </div>
-            </div>
-          </div>
+            </>
+          )}
 
           <div className="p-8 border-b border-gray-200">
             <div className="flex items-center mb-4">
@@ -2095,14 +2151,24 @@ export default function ConsultationForm() {
                       <div className="print-row"><div className="print-label">CONTACT</div><div className="print-value">{printedData.nok_contact}</div></div>
                     </div>
 
-                    {/* Right Column: Logistics */}
+                    {/* Right Column: Logistics or Exchange Info */}
                     <div className="print-section">
-                      <div className="print-section-title">LOGISTICS</div>
-                      <div className="print-row"><div className="print-label">CLEANSING</div><div className="print-value">{printedData.cleansing_date} {printedData.cleansing_time}</div></div>
-                      <div className="print-row"><div className="print-label">DELIVERY</div><div className="print-value">{printedData.delivery_date} {printedData.delivery_time}</div></div>
-                      <div className="print-row"><div className="print-label">SERVICE</div><div className="print-value">{printedData.service_date} {printedData.service_time}</div></div>
-                      <div className="print-row"><div className="print-label">CHURCH</div><div className="print-value">{printedData.church_date} {printedData.church_time}</div></div>
-                      <div className="print-row"><div className="print-label">VENUE</div><div className="print-value">{printedData.venue_name}</div></div>
+                      <div className="print-section-title">{printedData.benefit_exchange === 'standard' ? 'LOGISTICS' : 'BENEFIT EXCHANGE'}</div>
+                      {printedData.benefit_exchange === 'standard' ? (
+                        <>
+                          <div className="print-row"><div className="print-label">CLEANSING</div><div className="print-value">{printedData.cleansing_date} {printedData.cleansing_time}</div></div>
+                          <div className="print-row"><div className="print-label">DELIVERY</div><div className="print-value">{printedData.delivery_date} {printedData.delivery_time}</div></div>
+                          <div className="print-row"><div className="print-label">SERVICE</div><div className="print-value">{printedData.service_date} {printedData.service_time}</div></div>
+                          <div className="print-row"><div className="print-label">CHURCH</div><div className="print-value">{printedData.church_date} {printedData.church_time}</div></div>
+                          <div className="print-row"><div className="print-label">VENUE</div><div className="print-value">{printedData.venue_name}</div></div>
+                        </>
+                      ) : (
+                        <div className="p-4 text-center">
+                          <div className="font-bold text-lg text-red-800 uppercase">Service Benefit Swapped</div>
+                          <div className="mt-2 text-md">Exchanged for: <strong>{String(printedData.benefit_exchange).toUpperCase()}</strong></div>
+                          <p className="text-[9px] mt-4 text-gray-500 italic">This claim does not include standard funeral service logistics.</p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -2110,8 +2176,12 @@ export default function ConsultationForm() {
                   <div className="print-section">
                     <div className="print-section-title">SERVICE REQUIREMENTS & CHECKLIST</div>
                     <div className="checklist-grid">
-                      <div className="checklist-item"><span className="checklist-label">Casket Type</span> <span className="checklist-val">{printedData.casket_type}</span></div>
-                      <div className="checklist-item"><span className="checklist-label">Casket Colour</span> <span className="checklist-val">{printedData.casket_colour}</span></div>
+                      {printedData.benefit_exchange === 'standard' && (
+                        <>
+                          <div className="checklist-item"><span className="checklist-label">Casket Type</span> <span className="checklist-val">{printedData.casket_type}</span></div>
+                          <div className="checklist-item"><span className="checklist-label">Casket Colour</span> <span className="checklist-val">{printedData.casket_colour}</span></div>
+                        </>
+                      )}
                       {/* Top-Up Display - Enhanced for Book Top-Up */}
                       {printedData.top_up_type === 'book' && printedData.top_up_amount > 0 ? (
                         <div className="checklist-item col-span-3 bg-blue-50 border-2 border-blue-300">
