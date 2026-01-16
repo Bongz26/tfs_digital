@@ -280,6 +280,13 @@ const SPECIAL_PLAN_BENEFITS = {
   }
 };
 
+const EXTRA_PRICES = {
+  chair: 8,
+  table: 70,
+  toilet: 350,
+  tent: 800
+};
+
 // LEGACY PLAN MAPPING — Maps old brochure plan names to new system plan names
 // Based on actual brochure prices from the image
 const LEGACY_PLAN_MAPPING = {
@@ -383,7 +390,12 @@ export default function ConsultationForm() {
     client_name2: '',
     date2: '',
     tombstone_type: '',
-    benefit_exchange: 'standard'
+    benefit_exchange: 'standard',
+    extra_chairs: 0,
+    extra_tables: 0,
+    extra_toilets: 0,
+    extra_tents: 0,
+    supplier_name: ''
   });
 
   const [message, setMessage] = useState('');
@@ -602,13 +614,24 @@ export default function ConsultationForm() {
     loadCaskets();
   }, []);
 
+
+
   const getAutoPrice = () => {
     if (form.plan_category === 'colour_grade') return 0;
     const plan = PLAN_DATA[form.plan_category]?.[form.plan_name];
     const key = form.plan_category === 'motjha' || form.plan_category === 'specials'
       ? form.plan_members
       : form.plan_age_bracket;
-    return plan?.[key] || 0;
+
+    const basePrice = plan?.[key] || 0;
+
+    // Calculate Extra Items Cost
+    const extrasTotal = (parseInt(form.extra_chairs) || 0) * EXTRA_PRICES.chair +
+      (parseInt(form.extra_tables) || 0) * EXTRA_PRICES.table +
+      (parseInt(form.extra_tents) || 0) * EXTRA_PRICES.tent +
+      (parseInt(form.extra_toilets) || 0) * EXTRA_PRICES.toilet;
+
+    return basePrice + extrasTotal;
   };
 
   const displayedPrice = form.service_type === 'book' ? getAutoPrice() : form.total_price || '';
@@ -654,6 +677,13 @@ export default function ConsultationForm() {
       items.push(topupLabel);
     }
     if (form.airtime) items.push(`Airtime: ${form.airtime_network || ''} ${form.airtime_number || ''}`.trim());
+
+    // Add Billable Extras to summary
+    if (form.extra_chairs > 0) items.push(`Extra Chairs: ${form.extra_chairs}`);
+    if (form.extra_tables > 0) items.push(`Extra Tables: ${form.extra_tables}`);
+    if (form.extra_toilets > 0) items.push(`Extra Toilets: ${form.extra_toilets}`);
+    if (form.extra_tents > 0) items.push(`Extra Tents: ${form.extra_tents}`);
+
     return items.length ? items.join(', ') : 'None selected';
   };
 
@@ -1005,6 +1035,13 @@ export default function ConsultationForm() {
     }
   };
 
+  const handlePrintSupplier = (e) => {
+    e.preventDefault();
+    setPrintedData({ ...form });
+    setPrintMode('supplier');
+    setTimeout(() => window.print(), 500);
+  };
+
   const renderBenefitsList = (data) => {
     const isSpecial = data.plan_category === 'specials';
     const benefits = isSpecial
@@ -1056,6 +1093,10 @@ export default function ConsultationForm() {
                     <li>Top-Up Amount: R{data.top_up_amount}</li>
                   ) : <li>Top-Up Amount: None</li>}
                   <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
+                  {data.extra_chairs > 0 && <li>Extra Chairs: {data.extra_chairs}</li>}
+                  {data.extra_tables > 0 && <li>Extra Tables: {data.extra_tables}</li>}
+                  {data.extra_toilets > 0 && <li>Extra Toilets: {data.extra_toilets}</li>}
+                  {data.extra_tents > 0 && <li>Extra Tents: {data.extra_tents}</li>}
                 </>
               );
             })()}
@@ -1069,6 +1110,10 @@ export default function ConsultationForm() {
           <div className="font-semibold">Plan Package: {formatPlanTitle(data)}</div>
           <ul className="list-disc pl-5">
             <li>Cashback: R{(data.cover_amount || 0).toLocaleString()}</li>
+            {data.extra_chairs > 0 && <li>Extra Chairs: {data.extra_chairs}</li>}
+            {data.extra_tables > 0 && <li>Extra Tables: {data.extra_tables}</li>}
+            {data.extra_toilets > 0 && <li>Extra Toilets: {data.extra_toilets}</li>}
+            {data.extra_tents > 0 && <li>Extra Tents: {data.extra_tents}</li>}
           </ul>
         </div>
       );
@@ -1120,6 +1165,10 @@ export default function ConsultationForm() {
                     <li>Top-Up Amount: R{data.top_up_amount}</li>
                   ) : <li>Top-Up Amount: None</li>}
                   <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
+                  {data.extra_chairs > 0 && <li>Extra Chairs: {data.extra_chairs}</li>}
+                  {data.extra_tables > 0 && <li>Extra Tables: {data.extra_tables}</li>}
+                  {data.extra_toilets > 0 && <li>Extra Toilets: {data.extra_toilets}</li>}
+                  {data.extra_tents > 0 && <li>Extra Tents: {data.extra_tents}</li>}
                 </>
               );
             })()}
@@ -1198,6 +1247,10 @@ export default function ConsultationForm() {
                     <li>Top-Up Amount: R{data.top_up_amount}</li>
                   ) : <li>Top-Up Amount: None</li>}
                   <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
+                  {data.extra_chairs > 0 && <li>Extra Chairs: {data.extra_chairs}</li>}
+                  {data.extra_tables > 0 && <li>Extra Tables: {data.extra_tables}</li>}
+                  {data.extra_toilets > 0 && <li>Extra Toilets: {data.extra_toilets}</li>}
+                  {data.extra_tents > 0 && <li>Extra Tents: {data.extra_tents}</li>}
                 </>
               );
             })()}
@@ -1267,6 +1320,10 @@ export default function ConsultationForm() {
                 <li>Top-Up Amount: R{data.top_up_amount}</li>
               ) : <li>Top-Up Amount: None</li>}
               <li>Amount to Bank: R{(data.amount_to_bank || 0).toLocaleString()}</li>
+              {data.extra_chairs > 0 && <li>Extra Chairs: {data.extra_chairs}</li>}
+              {data.extra_tables > 0 && <li>Extra Tables: {data.extra_tables}</li>}
+              {data.extra_toilets > 0 && <li>Extra Toilets: {data.extra_toilets}</li>}
+              {data.extra_tents > 0 && <li>Extra Tents: {data.extra_tents}</li>}
             </>
           );
         })()}
@@ -1436,199 +1493,204 @@ export default function ConsultationForm() {
               </div>
             </div>
 
-            {/* Quick Legacy Plan Selector */}
-            <div className="mb-8 bg-amber-50 border border-amber-200 rounded-xl p-6">
-              <label className="block text-sm font-bold text-amber-900 mb-3">
-                📋 Quick Select: Brochure Plan Name (Optional)
-              </label>
-              <select
-                onChange={(e) => {
-                  if (e.target.value) {
-                    handleLegacyPlanSelect(e.target.value);
-                    e.target.value = '';
-                  }
-                }}
-                className="w-full px-4 py-3 border-2 border-amber-300 rounded-lg text-lg font-medium focus:ring-4 focus:ring-amber-300"
-                defaultValue=""
-              >
-                <option value="">– Select from brochure (auto-fills below) –</option>
-                <optgroup label="Motjha O Tlhele / Society Plans">
-                  {Object.keys(LEGACY_PLAN_MAPPING).filter(k => k.includes('MOTJHA')).map(name => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Family Plans">
-                  {Object.keys(LEGACY_PLAN_MAPPING).filter(k => k.includes('FAMILY')).map(name => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Single Plans">
-                  {Object.keys(LEGACY_PLAN_MAPPING).filter(k => k.includes('SINGLE')).map(name => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Spring Specials">
-                  {Object.keys(LEGACY_PLAN_MAPPING).filter(k => k.includes('SPRING')).map(name => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </optgroup>
-              </select>
-              <p className="text-xs text-amber-700 mt-2">
-                💡 Select a plan from the brochure to automatically configure Category, Grade, Members/Age below
-              </p>
-            </div>
-
-            {/* Current Plan Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Category</label>
-                <select value={form.plan_category} onChange={(e) => {
-                  const cat = e.target.value;
-                  const defaultName = cat === 'specials' ? 'Spring A' :
-                    cat === 'motjha' ? 'Budget Buster' :
-                      cat === 'single' ? 'Budget Buster' :
-                        'Budget Buster';
-                  const defaultsForMembers = (cat === 'motjha' || cat === 'specials') ? 6 : form.plan_members;
-                  const defaultsForAge = (cat === 'family' || cat === 'single') ? '18-65' : '';
-                  setForm(prev => ({
-                    ...prev,
-                    plan_category: cat,
-                    plan_name: defaultName,
-                    plan_members: defaultsForMembers,
-                    plan_age_bracket: defaultsForAge
-                  }));
-                }} className="w-full px-4 py-3 border rounded-lg">
-                  <option value="motjha">Motjha O Tlhele</option>
-                  <option value="single">Single Plan</option>
-                  <option value="family">Family Plan</option>
-                  <option value="specials">Spring Specials</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Grade</label>
-                <select value={form.plan_name} onChange={e => handleInputChange('plan_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg bg-gray-50">
-                  {Object.keys(PLAN_DATA[form.plan_category] || {}).map(p => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </div>
-
-              {(form.plan_category === 'motjha' || form.plan_category === 'specials') && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Members</label>
-                  <select value={form.plan_members} onChange={e => handleInputChange('plan_members', parseInt(e.target.value))} className="w-full px-4 py-3 border rounded-lg">
-                    {[6, 10, 14].map(n => <option key={n} value={n}>{n} Members</option>)}
+            {/* Show Plan Details & Options ONLY for Book Cases */}
+            {form.service_type === 'book' && (
+              <>
+                {/* Quick Legacy Plan Selector */}
+                <div className="mb-8 bg-amber-50 border border-amber-200 rounded-xl p-6">
+                  <label className="block text-sm font-bold text-amber-900 mb-3">
+                    📋 Quick Select: Brochure Plan Name (Optional)
+                  </label>
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleLegacyPlanSelect(e.target.value);
+                        e.target.value = '';
+                      }
+                    }}
+                    className="w-full px-4 py-3 border-2 border-amber-300 rounded-lg text-lg font-medium focus:ring-4 focus:ring-amber-300"
+                    defaultValue=""
+                  >
+                    <option value="">– Select from brochure (auto-fills below) –</option>
+                    <optgroup label="Motjha O Tlhele / Society Plans">
+                      {Object.keys(LEGACY_PLAN_MAPPING).filter(k => k.includes('MOTJHA')).map(name => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Family Plans">
+                      {Object.keys(LEGACY_PLAN_MAPPING).filter(k => k.includes('FAMILY')).map(name => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Single Plans">
+                      {Object.keys(LEGACY_PLAN_MAPPING).filter(k => k.includes('SINGLE')).map(name => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Spring Specials">
+                      {Object.keys(LEGACY_PLAN_MAPPING).filter(k => k.includes('SPRING')).map(name => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </optgroup>
                   </select>
+                  <p className="text-xs text-amber-700 mt-2">
+                    💡 Select a plan from the brochure to automatically configure Category, Grade, Members/Age below
+                  </p>
                 </div>
-              )}
 
-              {(form.plan_category === 'single' || form.plan_category === 'family') && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Age Bracket</label>
-                  <select value={form.plan_age_bracket} onChange={e => handleInputChange('plan_age_bracket', e.target.value)} className="w-full px-4 py-3 border rounded-lg">
-                    <option value="18-65">18–65 yrs</option>
-                    <option value="66-85">66–85 yrs</option>
-                    <option value="86-100">86–100 yrs</option>
-                  </select>
-                </div>
-              )}
-            </div>
-
-            {/* Show Selected Plan Summary */}
-            {form.plan_name && (
-              <div className="bg-blue-50 border border-blue-300 rounded-lg p-5 mb-6">
-                <p className="font-bold text-blue-900 mb-2">
-                  Selected Plan: <span className="text-xl">{form.plan_name}</span>
-                  {getLegacyPlanName() && <span className="ml-3 text-green-700 text-sm">(Brochure: {getLegacyPlanName()})</span>}
-                </p>
-                <p className="text-sm text-blue-700 mb-2">
-                  {form.plan_category === 'motjha' && `${form.plan_members} members`}
-                  {form.plan_category === 'family' && `Family • ${form.plan_age_bracket} years`}
-                  {form.plan_category === 'single' && `Single • ${form.plan_age_bracket} years`}
-                  {form.plan_category === 'specials' && `Special Offer • ${form.plan_members} members`}
-                </p>
-                {/* Show plan benefits if available */}
-                {PLAN_BENEFITS[form.plan_name] && (
-                  <div className="mt-3 pt-3 border-t border-blue-200">
-                    {PLAN_BENEFITS[form.plan_name].cover && (
-                      <p className="text-sm font-bold text-blue-900 mb-2">
-                        Cover Amount: R{PLAN_BENEFITS[form.plan_name].cover.toLocaleString()}
-                      </p>
-                    )}
-                    <p className="text-xs font-semibold text-blue-800 mb-1">Includes:</p>
-                    <p className="text-xs text-blue-700">{getPlanIncludesText()}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Special Benefits */}
-            {isSpecialPlan && SPECIAL_PLAN_BENEFITS[form.plan_name] && (
-              (() => {
-                const special = SPECIAL_PLAN_BENEFITS[form.plan_name];
-                return (
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-6 mb-6">
-                    <h4 className="font-bold text-green-800 text-lg mb-3">{form.plan_name} Benefits:</h4>
-                    <ul className="text-sm text-green-700 space-y-1">
-                      {special.casket && <li>• {special.casket}</li>}
-                      {Array.isArray(special.benefits) && special.benefits.map((b, i) => <li key={i}>• {b}</li>)}
-                    </ul>
-                  </div>
-                );
-              })()
-            )}
-
-            {/* Cover Option: Cashback vs Benefits */}
-            <div className="bg-gray-50 p-6 rounded-xl mb-6">
-              <label className="block font-semibold mb-4">Cover Option:</label>
-              <div className="flex gap-8 mb-3">
-                {!isSpecialPlan && (
-                  <label className="flex items-center"><input type="radio" name="benefit_mode" value="cashback" checked={form.benefit_mode === 'cashback'} onChange={e => handleInputChange('benefit_mode', e.target.value)} className="mr-3" /><span className="font-medium">Cashback (R{(PLAN_BENEFITS[form.plan_name]?.cover || form.cover_amount).toLocaleString()})</span></label>
-                )}
-                <label className="flex items-center"><input type="radio" name="benefit_mode" value="benefits" checked={form.benefit_mode === 'benefits'} onChange={e => handleInputChange('benefit_mode', e.target.value)} className="mr-3" /><span className="font-medium">Benefits per plan</span></label>
-              </div>
-              {form.plan_category === 'motjha' && form.plan_name === 'Green' && form.benefit_mode === 'benefits' && (
-                <p className="text-sm text-gray-700">Includes: {PLAN_BENEFITS.Green.juice_liters}L Juice, {PLAN_BENEFITS.Green.cakes_liters}L Cakes, Grocery ({PLAN_BENEFITS.Green.grocery_items.join(', ')})</p>
-              )}
-              {isColorGrade(form.plan_name) && form.plan_name !== 'Green' && form.benefit_mode === 'benefits' && (
-                <p className="text-sm text-gray-700">Includes: {getPlanIncludesText()}</p>
-              )}
-              {form.plan_name === 'Pearl' && form.benefit_mode === 'benefits' && (
-                <div className="mt-4">
-                  <label className="block text-sm font-semibold mb-2">Pearl Bonus (choose one):</label>
-                  <div className="flex gap-6">
-                    <label className="flex items-center"><input type="radio" name="pearl_bonus" value="cow" checked={form.pearl_bonus === 'cow'} onChange={e => handleInputChange('pearl_bonus', e.target.value)} className="mr-2" />Cow</label>
-                    <label className="flex items-center"><input type="radio" name="pearl_bonus" value="tombstone" checked={form.pearl_bonus === 'tombstone'} onChange={e => handleInputChange('pearl_bonus', e.target.value)} className="mr-2" />Tombstone</label>
-                  </div>
-                </div>
-              )}
-
-              {/* Benefit Exchange Selector */}
-              {form.benefit_mode === 'benefits' && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <label className="block text-sm font-bold text-gray-800 mb-2">Benefit Exchange (Swap Service):</label>
-                  <div className="md:w-2/3">
-                    <select
-                      value={form.benefit_exchange || 'standard'}
-                      onChange={(e) => handleInputChange('benefit_exchange', e.target.value)}
-                      className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 focus:bg-white focus:border-blue-500"
-                    >
-                      <option value="standard">Standard (Keep Service)</option>
-                      <option value="catering">Swap for Catering</option>
-                      <option value="cow">Swap for Cow</option>
-                      <option value="tombstone">Swap for Tombstone</option>
-                      <option value="grocery">Swap for Grocery</option>
+                {/* Current Plan Fields */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Category</label>
+                    <select value={form.plan_category} onChange={(e) => {
+                      const cat = e.target.value;
+                      const defaultName = cat === 'specials' ? 'Spring A' :
+                        cat === 'motjha' ? 'Budget Buster' :
+                          cat === 'single' ? 'Budget Buster' :
+                            'Budget Buster';
+                      const defaultsForMembers = (cat === 'motjha' || cat === 'specials') ? 6 : form.plan_members;
+                      const defaultsForAge = (cat === 'family' || cat === 'single') ? '18-65' : '';
+                      setForm(prev => ({
+                        ...prev,
+                        plan_category: cat,
+                        plan_name: defaultName,
+                        plan_members: defaultsForMembers,
+                        plan_age_bracket: defaultsForAge
+                      }));
+                    }} className="w-full px-4 py-3 border rounded-lg">
+                      <option value="motjha">Motjha O Tlhele</option>
+                      <option value="single">Single Plan</option>
+                      <option value="family">Family Plan</option>
+                      <option value="specials">Spring Specials</option>
                     </select>
-                    {form.benefit_exchange && form.benefit_exchange !== 'standard' && (
-                      <p className="text-sm text-amber-700 mt-2 bg-amber-50 p-2 rounded border border-amber-200">
-                        <span className="font-bold">⚠️ Note:</span> By selecting this swap, the Service benefit is removed and replaced by <strong>{form.benefit_exchange.toUpperCase()}</strong>. The corresponding checklist item below will be checked automatically.
-                      </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">Grade</label>
+                    <select value={form.plan_name} onChange={e => handleInputChange('plan_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg bg-gray-50">
+                      {Object.keys(PLAN_DATA[form.plan_category] || {}).map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {(form.plan_category === 'motjha' || form.plan_category === 'specials') && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Members</label>
+                      <select value={form.plan_members} onChange={e => handleInputChange('plan_members', parseInt(e.target.value))} className="w-full px-4 py-3 border rounded-lg">
+                        {[6, 10, 14].map(n => <option key={n} value={n}>{n} Members</option>)}
+                      </select>
+                    </div>
+                  )}
+
+                  {(form.plan_category === 'single' || form.plan_category === 'family') && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Age Bracket</label>
+                      <select value={form.plan_age_bracket} onChange={e => handleInputChange('plan_age_bracket', e.target.value)} className="w-full px-4 py-3 border rounded-lg">
+                        <option value="18-65">18–65 yrs</option>
+                        <option value="66-85">66–85 yrs</option>
+                        <option value="86-100">86–100 yrs</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Show Selected Plan Summary */}
+                {form.plan_name && (
+                  <div className="bg-blue-50 border border-blue-300 rounded-lg p-5 mb-6">
+                    <p className="font-bold text-blue-900 mb-2">
+                      Selected Plan: <span className="text-xl">{form.plan_name}</span>
+                      {getLegacyPlanName() && <span className="ml-3 text-green-700 text-sm">(Brochure: {getLegacyPlanName()})</span>}
+                    </p>
+                    <p className="text-sm text-blue-700 mb-2">
+                      {form.plan_category === 'motjha' && `${form.plan_members} members`}
+                      {form.plan_category === 'family' && `Family • ${form.plan_age_bracket} years`}
+                      {form.plan_category === 'single' && `Single • ${form.plan_age_bracket} years`}
+                      {form.plan_category === 'specials' && `Special Offer • ${form.plan_members} members`}
+                    </p>
+                    {/* Show plan benefits if available */}
+                    {PLAN_BENEFITS[form.plan_name] && (
+                      <div className="mt-3 pt-3 border-t border-blue-200">
+                        {PLAN_BENEFITS[form.plan_name].cover && (
+                          <p className="text-sm font-bold text-blue-900 mb-2">
+                            Cover Amount: R{PLAN_BENEFITS[form.plan_name].cover.toLocaleString()}
+                          </p>
+                        )}
+                        <p className="text-xs font-semibold text-blue-800 mb-1">Includes:</p>
+                        <p className="text-xs text-blue-700">{getPlanIncludesText()}</p>
+                      </div>
                     )}
                   </div>
+                )}
+
+                {/* Special Benefits */}
+                {isSpecialPlan && SPECIAL_PLAN_BENEFITS[form.plan_name] && (
+                  (() => {
+                    const special = SPECIAL_PLAN_BENEFITS[form.plan_name];
+                    return (
+                      <div className="bg-green-50 border border-green-200 rounded-xl p-6 mb-6">
+                        <h4 className="font-bold text-green-800 text-lg mb-3">{form.plan_name} Benefits:</h4>
+                        <ul className="text-sm text-green-700 space-y-1">
+                          {special.casket && <li>• {special.casket}</li>}
+                          {Array.isArray(special.benefits) && special.benefits.map((b, i) => <li key={i}>• {b}</li>)}
+                        </ul>
+                      </div>
+                    );
+                  })()
+                )}
+
+                {/* Cover Option: Cashback vs Benefits */}
+                <div className="bg-gray-50 p-6 rounded-xl mb-6">
+                  <label className="block font-semibold mb-4">Cover Option:</label>
+                  <div className="flex gap-8 mb-3">
+                    {!isSpecialPlan && (
+                      <label className="flex items-center"><input type="radio" name="benefit_mode" value="cashback" checked={form.benefit_mode === 'cashback'} onChange={e => handleInputChange('benefit_mode', e.target.value)} className="mr-3" /><span className="font-medium">Cashback (R{(PLAN_BENEFITS[form.plan_name]?.cover || form.cover_amount).toLocaleString()})</span></label>
+                    )}
+                    <label className="flex items-center"><input type="radio" name="benefit_mode" value="benefits" checked={form.benefit_mode === 'benefits'} onChange={e => handleInputChange('benefit_mode', e.target.value)} className="mr-3" /><span className="font-medium">Benefits per plan</span></label>
+                  </div>
+                  {form.plan_category === 'motjha' && form.plan_name === 'Green' && form.benefit_mode === 'benefits' && (
+                    <p className="text-sm text-gray-700">Includes: {PLAN_BENEFITS.Green.juice_liters}L Juice, {PLAN_BENEFITS.Green.cakes_liters}L Cakes, Grocery ({PLAN_BENEFITS.Green.grocery_items.join(', ')})</p>
+                  )}
+                  {isColorGrade(form.plan_name) && form.plan_name !== 'Green' && form.benefit_mode === 'benefits' && (
+                    <p className="text-sm text-gray-700">Includes: {getPlanIncludesText()}</p>
+                  )}
+                  {form.plan_name === 'Pearl' && form.benefit_mode === 'benefits' && (
+                    <div className="mt-4">
+                      <label className="block text-sm font-semibold mb-2">Pearl Bonus (choose one):</label>
+                      <div className="flex gap-6">
+                        <label className="flex items-center"><input type="radio" name="pearl_bonus" value="cow" checked={form.pearl_bonus === 'cow'} onChange={e => handleInputChange('pearl_bonus', e.target.value)} className="mr-2" />Cow</label>
+                        <label className="flex items-center"><input type="radio" name="pearl_bonus" value="tombstone" checked={form.pearl_bonus === 'tombstone'} onChange={e => handleInputChange('pearl_bonus', e.target.value)} className="mr-2" />Tombstone</label>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Benefit Exchange Selector */}
+                  {form.benefit_mode === 'benefits' && (
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <label className="block text-sm font-bold text-gray-800 mb-2">Benefit Exchange (Swap Service):</label>
+                      <div className="md:w-2/3">
+                        <select
+                          value={form.benefit_exchange || 'standard'}
+                          onChange={(e) => handleInputChange('benefit_exchange', e.target.value)}
+                          className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 focus:bg-white focus:border-blue-500"
+                        >
+                          <option value="standard">Standard (Keep Service)</option>
+                          <option value="catering">Swap for Catering</option>
+                          <option value="cow">Swap for Cow</option>
+                          <option value="tombstone">Swap for Tombstone</option>
+                          <option value="grocery">Swap for Grocery</option>
+                        </select>
+                        {form.benefit_exchange && form.benefit_exchange !== 'standard' && (
+                          <p className="text-sm text-amber-700 mt-2 bg-amber-50 p-2 rounded border border-amber-200">
+                            <span className="font-bold">⚠️ Note:</span> By selecting this swap, the Service benefit is removed and replaced by <strong>{form.benefit_exchange.toUpperCase()}</strong>. The corresponding checklist item below will be checked automatically.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
 
             {/* Total Price (end of Plan Selection & Pricing) */}
             <div className="bg-gray-50 p-6 rounded-xl">
@@ -1841,7 +1903,7 @@ export default function ConsultationForm() {
 
           </div>
 
-          {form.benefit_exchange === 'standard' && (
+          {form.benefit_exchange === 'standard' && form.benefit_mode !== 'cashback' && (
             <>
               {/* SCHEDULE DETAILS */}
               <div className="p-8 border-b border-gray-200">
@@ -1961,70 +2023,98 @@ export default function ConsultationForm() {
             </>
           )}
 
-          <div className="p-8 border-b border-gray-200">
-            <div className="flex items-center mb-4">
-              <h3 className="text-xl font-bold text-red-800 flex items-center">
-                <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">5</span>
-                Additional Services & Benefits
-              </h3>
-              <button type="button" onClick={() => setExtrasOpen(v => !v)} className="ml-auto px-4 py-2 rounded-lg border text-sm font-semibold hover:bg-gray-100">
-                {extrasOpen ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            {!extrasOpen && (
-              <div className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                {getExtrasSummary()}
+          {form.benefit_mode !== 'cashback' && (
+            <div className="p-8 border-b border-gray-200">
+              <div className="flex items-center mb-4">
+                <h3 className="text-xl font-bold text-red-800 flex items-center">
+                  <span className="bg-red-100 text-red-600 rounded-full w-8 h-8 flex items-center justify-center mr-3">5</span>
+                  Additional Services & Benefits
+                </h3>
+                <button type="button" onClick={() => setExtrasOpen(v => !v)} className="ml-auto px-4 py-2 rounded-lg border text-sm font-semibold hover:bg-gray-100">
+                  {extrasOpen ? 'Hide' : 'Show'}
+                </button>
               </div>
-            )}
-            {extrasOpen && (
-              <div className="space-y-4">
-                <label className="flex items-center"><input type="checkbox" checked={form.requires_cow} onChange={e => handleInputChange('requires_cow', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Cow</span></label>
-                <label className="flex items-center"><input type="checkbox" checked={form.requires_sheep} onChange={e => handleInputChange('requires_sheep', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Sheep</span></label>
-                <label className="flex items-center"><input type="checkbox" checked={form.requires_tombstone} onChange={e => handleInputChange('requires_tombstone', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Tombstone</span></label>
-                {form.requires_tombstone && (
-                  <div className="ml-8 mt-2">
-                    <label className="block text-sm font-semibold text-gray-700">Tombstone Type</label>
-                    <input
-                      value={form.tombstone_type}
-                      onChange={e => handleInputChange('tombstone_type', e.target.value)}
-                      className="w-full px-4 py-2 border rounded-lg"
-                      placeholder="CH111"
-                    />
-                  </div>
-                )}
-                <label className="flex items-center"><input type="checkbox" checked={form.requires_flower} onChange={e => handleInputChange('requires_flower', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Flower</span></label>
-                <label className="flex items-center"><input type="checkbox" checked={form.requires_catering} onChange={e => handleInputChange('requires_catering', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Catering</span></label>
-                <label className="flex items-center"><input type="checkbox" checked={form.requires_grocery} onChange={e => handleInputChange('requires_grocery', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Grocery</span></label>
-                <label className="flex items-center"><input type="checkbox" checked={form.requires_bus} onChange={e => handleInputChange('requires_bus', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Bus</span></label>
-                <div><label>Programmes (Number)</label><input type="number" value={form.programs} onChange={e => handleInputChange('programs', parseInt(e.target.value) || 0)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
-                <div>
-                  <label>Top-Up Amount R {form.top_up_type === 'book' && <span className="text-xs text-blue-600">(Managed in Top-Up section above)</span>}</label>
-                  <input
-                    type="number"
-                    value={form.top_up_amount}
-                    onChange={e => handleInputChange('top_up_amount', parseFloat(e.target.value) || 0)}
-                    className={`w-full px-4 py-3 border rounded-lg mt-2 ${form.top_up_type === 'book' ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                    disabled={form.top_up_type === 'book'}
-                    readOnly={form.top_up_type === 'book'}
-                  />
-                  {form.top_up_type === 'book' && (
-                    <p className="text-xs text-blue-600 mt-1">⚠️ This amount is automatically set from the book top-up plan selection above.</p>
-                  )}
+              {!extrasOpen && (
+                <div className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  {getExtrasSummary()}
                 </div>
-                <label className="flex items-center"><input type="checkbox" checked={form.airtime} onChange={e => handleInputChange('airtime', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Airtime</span></label>
-                {form.airtime && (
-                  <div className="grid grid-cols-2 gap-4 ml-8">
-                    <div><label>Network</label><input value={form.airtime_network} onChange={e => handleInputChange('airtime_network', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
-                    <div><label>Number</label><input value={form.airtime_number} onChange={e => handleInputChange('airtime_number', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+              )}
+              {extrasOpen && (
+                <div className="space-y-4">
+                  <label className="flex items-center"><input type="checkbox" checked={form.requires_cow} onChange={e => handleInputChange('requires_cow', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Cow</span></label>
+                  <label className="flex items-center"><input type="checkbox" checked={form.requires_sheep} onChange={e => handleInputChange('requires_sheep', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Sheep</span></label>
+                  <label className="flex items-center"><input type="checkbox" checked={form.requires_tombstone} onChange={e => handleInputChange('requires_tombstone', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Tombstone</span></label>
+                  {form.requires_tombstone && (
+                    <div className="ml-8 mt-2">
+                      <label className="block text-sm font-semibold text-gray-700">Tombstone Type</label>
+                      <input
+                        value={form.tombstone_type}
+                        onChange={e => handleInputChange('tombstone_type', e.target.value)}
+                        className="w-full px-4 py-2 border rounded-lg"
+                        placeholder="CH111"
+                      />
+                    </div>
+                  )}
+                  <label className="flex items-center"><input type="checkbox" checked={form.requires_flower} onChange={e => handleInputChange('requires_flower', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Flower</span></label>
+                  <label className="flex items-center"><input type="checkbox" checked={form.requires_catering} onChange={e => handleInputChange('requires_catering', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Catering</span></label>
+                  <label className="flex items-center"><input type="checkbox" checked={form.requires_grocery} onChange={e => handleInputChange('requires_grocery', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Grocery</span></label>
+                  <label className="flex items-center"><input type="checkbox" checked={form.requires_bus} onChange={e => handleInputChange('requires_bus', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Bus</span></label>
+                  <div><label>Programmes (Number)</label><input type="number" value={form.programs} onChange={e => handleInputChange('programs', parseInt(e.target.value) || 0)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
+                  <div>
+                    <label>Top-Up Amount R {form.top_up_type === 'book' && <span className="text-xs text-blue-600">(Managed in Top-Up section above)</span>}</label>
+                    <input
+                      type="number"
+                      value={form.top_up_amount}
+                      onChange={e => handleInputChange('top_up_amount', parseFloat(e.target.value) || 0)}
+                      className={`w-full px-4 py-3 border rounded-lg mt-2 ${form.top_up_type === 'book' ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                      disabled={form.top_up_type === 'book'}
+                      readOnly={form.top_up_type === 'book'}
+                    />
+                    {form.top_up_type === 'book' && (
+                      <p className="text-xs text-blue-600 mt-1">⚠️ This amount is automatically set from the book top-up plan selection above.</p>
+                    )}
                   </div>
-                )}
-                <div><label>Cashback Amount (Auto)</label><input disabled value={form.cashback_amount} className="w-full px-4 py-3 border rounded-lg bg-gray-100 mt-2" /></div>
-                <div><label>Amount to Bank</label><input type="number" value={form.amount_to_bank} onChange={e => handleInputChange('amount_to_bank', parseFloat(e.target.value) || 0)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
-                <div><label>Cover Amount (Auto)</label><input disabled value={form.cover_amount} className="w-full px-4 py-3 border rounded-lg bg-gray-100 mt-2" /></div>
-                <div><label>Intake Day (Wednesday)</label><input type="date" value={form.intake_day} onChange={e => handleInputChange('intake_day', e.target.value)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
-              </div>
-            )}
-          </div>
+                  <label className="flex items-center"><input type="checkbox" checked={form.airtime} onChange={e => handleInputChange('airtime', e.target.checked)} className="mr-3 w-5 h-5" /><span className="font-medium">Airtime</span></label>
+                  {form.airtime && (
+                    <div className="grid grid-cols-2 gap-4 ml-8">
+                      <div><label>Network</label><input value={form.airtime_network} onChange={e => handleInputChange('airtime_network', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+                      <div><label>Number</label><input value={form.airtime_number} onChange={e => handleInputChange('airtime_number', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+                    </div>
+                  )}
+                  <div><label>Cashback Amount (Auto)</label><input disabled value={form.cashback_amount} className="w-full px-4 py-3 border rounded-lg bg-gray-100 mt-2" /></div>
+                  <div><label>Amount to Bank</label><input type="number" value={form.amount_to_bank} onChange={e => handleInputChange('amount_to_bank', parseFloat(e.target.value) || 0)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
+                  <div><label>Cover Amount (Auto)</label><input disabled value={form.cover_amount} className="w-full px-4 py-3 border rounded-lg bg-gray-100 mt-2" /></div>
+
+                  {/* BILLABLE EXTRAS SECTION */}
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <h4 className="font-bold text-gray-800 mb-4 flex items-center">
+                      <span className="mr-2">➕</span> Billable Extras (Additional Quantity)
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>
+                        <label className="text-xs font-bold text-gray-500 uppercase">Extra Chairs</label>
+                        <input type="number" min="0" value={form.extra_chairs} onChange={e => handleInputChange('extra_chairs', parseInt(e.target.value) || 0)} className="w-full px-3 py-2 border rounded-lg mt-1" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-gray-500 uppercase">Extra Tables</label>
+                        <input type="number" min="0" value={form.extra_tables} onChange={e => handleInputChange('extra_tables', parseInt(e.target.value) || 0)} className="w-full px-3 py-2 border rounded-lg mt-1" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-gray-500 uppercase">Extra Toilets</label>
+                        <input type="number" min="0" value={form.extra_toilets} onChange={e => handleInputChange('extra_toilets', parseInt(e.target.value) || 0)} className="w-full px-3 py-2 border rounded-lg mt-1" />
+                      </div>
+                      <div><label>Extra Tents</label><input type="number" min="0" value={form.extra_tents} onChange={e => handleInputChange('extra_tents', parseInt(e.target.value) || 0)} className="w-full px-3 py-2 border rounded-lg mt-1" /></div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div><label>Intake Day (Wednesday)</label><input type="date" value={form.intake_day} onChange={e => handleInputChange('intake_day', e.target.value)} className="w-full px-4 py-3 border rounded-lg mt-2" /></div>
+                    <div><label>Supplier Name (Optional)</label><input value={form.supplier_name} onChange={e => handleInputChange('supplier_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg mt-2" placeholder="e.g. QwaQwa Tents Hire" /></div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* SIGN OFF */}
           <div className="p-8">
@@ -2044,15 +2134,16 @@ export default function ConsultationForm() {
             </div>
           </div>
 
-
-
           {/* SUBMIT BUTTONS */}
-          <div className="p-8 bg-gray-50 border-t flex gap-4">
-            <button type="button" onClick={handleSaveDraft} disabled={submitting} className="flex-1 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-400 text-white font-bold py-5 rounded-xl text-xl transition">
-              {submitting ? "Saving..." : "Save Claim Draft & Print Receipt"}
+          <div className="p-8 bg-gray-50 border-t flex flex-wrap gap-4">
+            <button type="button" onClick={handleSaveDraft} disabled={submitting} className="flex-1 bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-400 text-white font-bold py-5 rounded-xl text-xl transition shadow-lg">
+              {submitting ? "Saving..." : "Save Draft & Print Receipt"}
             </button>
-            <button type="submit" onClick={handleFinalSubmit} disabled={submitting} className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-bold py-5 rounded-xl text-xl transition">
-              {submitting ? "Submitting..." : "Confirm & Print Full Checklist"}
+            <button type="button" onClick={handlePrintSupplier} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-5 rounded-xl text-xl transition shadow-lg">
+              Print Supplier Order
+            </button>
+            <button type="submit" onClick={handleFinalSubmit} disabled={submitting} className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white font-bold py-5 rounded-xl text-xl transition shadow-lg">
+              {submitting ? "Submitting..." : "Confirm & Print Checklist"}
             </button>
           </div>
           {message && (
@@ -2065,13 +2156,12 @@ export default function ConsultationForm() {
         <div className="mt-8 text-center text-sm text-gray-600">
           <p>Toll Free: <span className="font-bold text-red-600">0800 01 4574</span> | Serving with Dignity</p>
         </div>
-      </div >
+      </div>
 
       {/* Printable Section */}
-      {
-        printedData && printMode && (
-          <>
-            <style>{`@media print {
+      {printedData && printMode && (
+        <>
+          <style>{`@media print {
             @page { size: A4; margin: 5mm; }
             html, body { margin: 0; padding: 0; height: auto; overflow: visible; }
             body * { visibility: hidden !important; }
@@ -2103,203 +2193,315 @@ export default function ConsultationForm() {
             .sign-off-label { font-size: 9px; color: #666; margin-bottom: 4px; display: block; font-weight: bold; }
           }`}</style>
 
-            <div id="tfs-print-root">
-              {/* Header */}
-              <div className="print-header flex justify-between items-start">
-                <div className="flex items-center gap-4">
-                  {/* Logo Placeholder if needed */}
-                  <div>
-                    <h1 className="text-2xl font-bold text-red-800 leading-none">THUSANANG</h1>
-                    <div className="text-lg font-bold text-gray-800 tracking-widest">FUNERAL SERVICES</div>
-                    <div className="text-[9px] mt-1 text-gray-500 font-semibold tracking-wider">RESPECTFUL | PROFESSIONAL | DIGNIFIED</div>
-                  </div>
-                </div>
-                <div className="text-right text-[9px] leading-tight text-gray-600">
-                  <p><strong className="text-gray-800">Head Office:</strong> Site 1, Portion 2, Beirut, Phuthaditjhaba</p>
-                  <p className="my-0.5"><strong className="text-gray-800">Tel:</strong> 08000 145 74 | <strong className="text-gray-800">Cell:</strong> 071 480 5050</p>
-                  <p>info@thusanangfs.co.za | www.thusanangfs.co.za</p>
-                  <p className="mt-0.5 font-bold text-red-800">FSP: 39701</p>
+          <div id="tfs-print-root">
+            {/* Header */}
+            <div className="print-header flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-red-800 leading-none">THUSANANG</h1>
+                  <div className="text-lg font-bold text-gray-800 tracking-widest">FUNERAL SERVICES</div>
+                  <div className="text-[9px] mt-1 text-gray-500 font-semibold tracking-wider">RESPECTFUL | PROFESSIONAL | DIGNIFIED</div>
                 </div>
               </div>
+              <div className="text-right text-[9px] leading-tight text-gray-600">
+                <p><strong className="text-gray-800">Head Office:</strong> Site 1, Portion 2, Beirut, Phuthaditjhaba</p>
+                <p className="my-0.5"><strong className="text-gray-800">Tel:</strong> 08000 145 74 | <strong className="text-gray-800">Cell:</strong> 071 480 5050</p>
+                <p>info@thusanangfs.co.za | www.thusanangfs.co.za</p>
+                <p className="mt-0.5 font-bold text-red-800">FSP: 39701</p>
+              </div>
+            </div>
 
-              {printMode === 'receipt' ? (
-                <div className="p-4 border-2 border-gray-800 rounded">
-                  <h2 className="text-xl font-bold text-center text-red-800 mb-6 border-b-2 border-red-800 pb-2">CLAIM RECEIPT</h2>
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                    <div className="print-row"><span className="font-bold w-32">Policy Number:</span> <span>{printedData.policy_number}</span></div>
-                    <div className="print-row"><span className="font-bold w-32">Claim Date:</span> <span>{printedData.claim_date}</span></div>
-                    <div className="print-row col-span-2"><span className="font-bold w-32">Deceased:</span> <span>{printedData.deceased_name}</span></div>
-                    <div className="print-row col-span-2"><span className="font-bold w-32">Claimant:</span> <span>{printedData.nok_name}</span></div>
-                    <div className="print-row col-span-2"><span className="font-bold w-32">Contact:</span> <span>{printedData.nok_contact}</span></div>
+            {printMode === 'receipt' ? (
+              <div className="p-4 border-2 border-gray-800 rounded">
+                <h2 className="text-xl font-bold text-center text-red-800 mb-6 border-b-2 border-red-800 pb-2">CLAIM RECEIPT</h2>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                  <div className="print-row"><span className="font-bold w-32">Policy Number:</span> <span>{printedData.policy_number}</span></div>
+                  <div className="print-row"><span className="font-bold w-32">Claim Date:</span> <span>{printedData.claim_date}</span></div>
+                  <div className="print-row col-span-2"><span className="font-bold w-32">Deceased:</span> <span>{printedData.deceased_name}</span></div>
+                  <div className="print-row col-span-2"><span className="font-bold w-32">Claimant:</span> <span>{printedData.nok_name}</span></div>
+                  <div className="print-row col-span-2"><span className="font-bold w-32">Contact:</span> <span>{printedData.nok_contact}</span></div>
+                </div>
+                <div className="mt-6">
+                  <h3 className="font-bold border-b border-gray-300 mb-2">Plan Benefits Included:</h3>
+                  {renderBenefitsList(printedData)}
+                </div>
+              </div>
+            ) : printMode === 'supplier' ? (
+              <div className="p-6">
+                <div className="border-b-2 border-red-800 pb-4 mb-6 flex justify-between items-end">
+                  <div>
+                    <h2 className="text-2xl font-black text-red-800">EQUIPMENT WORK ORDER</h2>
+                    <p className="text-gray-600 font-bold uppercase tracking-widest">{printedData.supplier_name || 'SERVICE PROVIDER'}</p>
                   </div>
-                  <div className="mt-6">
-                    <h3 className="font-bold border-b border-gray-300 mb-2">Plan Benefits Included:</h3>
-                    {renderBenefitsList(printedData)}
+                  <div className="text-right">
+                    <p className="text-xs text-gray-400">Order Generated: {new Date().toLocaleDateString()}</p>
+                    <p className="text-sm font-bold">CASE: {printedData.policy_number}</p>
                   </div>
                 </div>
-              ) : (
-                <>
-                  {/* Main Details Grid */}
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Left Column: Personal Info */}
-                    <div className="print-section">
-                      <div className="print-section-title">CASE DETAILS</div>
-                      <div className="print-row"><div className="print-label">POLICY NUMBER</div><div className="print-value font-bold text-lg">{printedData.policy_number}</div></div>
-                      <div className="print-row"><div className="print-label">CLAIM DATE</div><div className="print-value">{printedData.claim_date}</div></div>
-                      <div className="print-row"><div className="print-label">DECEASED NAME</div><div className="print-value font-bold">{printedData.deceased_name}</div></div>
-                      <div className="print-row"><div className="print-label">CLAIMANT NAME</div><div className="print-value">{printedData.nok_name}</div></div>
-                      <div className="print-row"><div className="print-label">CONTACT</div><div className="print-value">{printedData.nok_contact}</div></div>
-                    </div>
 
-                    {/* Right Column: Logistics or Exchange Info */}
-                    <div className="print-section">
-                      <div className="print-section-title">{printedData.benefit_exchange === 'standard' ? 'LOGISTICS' : 'BENEFIT EXCHANGE'}</div>
-                      {printedData.benefit_exchange === 'standard' ? (
-                        <>
-                          <div className="print-row"><div className="print-label">CLEANSING</div><div className="print-value">{printedData.cleansing_date} {printedData.cleansing_time}</div></div>
-                          <div className="print-row"><div className="print-label">DELIVERY</div><div className="print-value">{printedData.delivery_date} {printedData.delivery_time}</div></div>
-                          <div className="print-row"><div className="print-label">SERVICE</div><div className="print-value">{printedData.service_date} {printedData.service_time}</div></div>
-                          <div className="print-row"><div className="print-label">CHURCH</div><div className="print-value">{printedData.church_date} {printedData.church_time}</div></div>
-                          <div className="print-row"><div className="print-label">VENUE</div><div className="print-value">{printedData.venue_name}</div></div>
-                        </>
-                      ) : (
-                        <div className="p-4 text-center">
-                          <div className="font-bold text-lg text-red-800 uppercase">Service Benefit Swapped</div>
-                          <div className="mt-2 text-md">Exchanged for: <strong>{String(printedData.benefit_exchange).toUpperCase()}</strong></div>
-                          <p className="text-[9px] mt-4 text-gray-500 italic">This claim does not include standard funeral service logistics.</p>
-                        </div>
-                      )}
+                <div className="grid grid-cols-2 gap-8 mb-8">
+                  <div className="space-y-4">
+                    <div className="bg-gray-50 p-4 border rounded">
+                      <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Delivery Venue</h4>
+                      <p className="font-bold text-lg">{printedData.venue_name || 'N/A'}</p>
+                      <p className="text-sm text-gray-600 whitespace-pre-wrap">{printedData.venue_address || 'N/A'}</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 border rounded border-blue-100">
+                      <h4 className="text-xs font-bold text-blue-600 uppercase mb-2">Primary On-Site Contact</h4>
+                      <p className="font-bold">{printedData.nok_name}</p>
+                      <p className="text-lg font-black text-blue-900 tracking-wider font-mono">{printedData.nok_contact}</p>
+                    </div>
+                    <div className="bg-gray-50 p-4 border rounded">
+                      <h4 className="text-xs font-bold text-gray-500 uppercase mb-2">Schedule</h4>
+                      <div className="text-sm">
+                        <span className="text-gray-500 font-bold uppercase text-[10px]">Service / Funeral Schedule:</span>
+                        <div className="font-bold text-lg text-red-900 mt-1">{printedData.service_date} @ {printedData.service_time}</div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Checklist Grid (Compact) */}
-                  <div className="print-section">
-                    <div className="print-section-title">SERVICE REQUIREMENTS & CHECKLIST</div>
-                    <div className="checklist-grid">
-                      {printedData.benefit_exchange === 'standard' && (
-                        <>
-                          <div className="checklist-item"><span className="checklist-label">Casket Type</span> <span className="checklist-val">{printedData.casket_type}</span></div>
-                          <div className="checklist-item"><span className="checklist-label">Casket Colour</span> <span className="checklist-val">{printedData.casket_colour}</span></div>
-                        </>
-                      )}
-                      {/* Top-Up Display - Enhanced for Book Top-Up */}
-                      {printedData.top_up_type === 'book' && printedData.top_up_amount > 0 ? (
-                        <div className="checklist-item col-span-3 bg-blue-50 border-2 border-blue-300">
-                          <div className="flex flex-col gap-1">
-                            <div>
-                              <span className="checklist-label font-bold text-blue-900">📚 BOOK TOP-UP (Combined Policies)</span>
-                            </div>
-                            <div className="text-xs">
-                              <span className="font-semibold">Policies:</span> {printedData.top_up_reference || 'N/A'}
-                            </div>
-                            <div className="text-xs">
-                              <span className="font-semibold">Plan:</span> {printedData.top_up_plan_name || 'N/A'}
-                              {printedData.top_up_plan_category === 'motjha' && printedData.top_up_plan_members && ` (${printedData.top_up_plan_members} Members)`}
-                              {(printedData.top_up_plan_category === 'family' || printedData.top_up_plan_category === 'single') && printedData.top_up_plan_age && ` (${printedData.top_up_plan_age} years)`}
-                            </div>
-                            {(() => {
-                              const topUpPlanBenefits = PLAN_BENEFITS[printedData.top_up_plan_name];
-                              const coverAmount = topUpPlanBenefits?.cover;
-                              const casketType = topUpPlanBenefits?.casket;
-                              return (
-                                <>
-                                  <div className="text-xs">
-                                    <span className="font-semibold">Premium:</span> <span className="font-bold text-blue-700">R{printedData.top_up_amount}</span>
-                                  </div>
-                                  {coverAmount && (
-                                    <div className="text-xs">
-                                      <span className="font-semibold">Cover Amount:</span> <span className="font-bold text-green-700">R{coverAmount.toLocaleString()}</span>
-                                    </div>
-                                  )}
-                                  {casketType && (
-                                    <div className="text-xs">
-                                      <span className="font-semibold">Casket (from top-up):</span> {casketType}
-                                    </div>
-                                  )}
-                                </>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      ) : printedData.top_up_type === 'cash' && printedData.top_up_amount > 0 ? (
-                        <div className="checklist-item">
-                          <span className="checklist-label">Cash Top-Up</span>
-                          <span className="checklist-val">R{printedData.top_up_amount}</span>
-                        </div>
-                      ) : (
-                        <div className="checklist-item">
-                          <span className="checklist-label">Top-Up</span>
-                          <span className="checklist-val">-</span>
-                        </div>
-                      )}
-
-                      <div className="checklist-item"><span className="checklist-label">Cow</span> <span className="checklist-val">{printedData.requires_cow ? 'YES' : 'NO'}</span></div>
-                      <div className="checklist-item"><span className="checklist-label">Sheep</span> <span className="checklist-val">{printedData.requires_sheep ? 'YES' : 'NO'}</span></div>
-                      <div className="checklist-item"><span className="checklist-label">Tombstone</span> <span className="checklist-val">{printedData.requires_tombstone ? (printedData.tombstone_type ? `YES (${printedData.tombstone_type})` : 'YES') : 'NO'}</span></div>
-
-                      <div className="checklist-item"><span className="checklist-label">Flower</span> <span className="checklist-val">{printedData.requires_flower ? 'YES' : 'NO'}</span></div>
-                      <div className="checklist-item"><span className="checklist-label">Bus</span> <span className="checklist-val">{printedData.requires_bus ? 'YES' : 'NO'}</span></div>
-                      <div className="checklist-item"><span className="checklist-label">Programmes</span> <span className="checklist-val">{printedData.programs || 'NO'}</span></div>
-
-                      <div className="checklist-item"><span className="checklist-label">Catering</span> <span className="checklist-val">{printedData.requires_catering ? 'YES' : 'NO'}</span></div>
-                      <div className="checklist-item"><span className="checklist-label">Airtime</span> <span className="checklist-val">{printedData.airtime ? 'YES' : 'NO'}</span></div>
-                      <div className="checklist-item"><span className="checklist-label">Network/No</span> <span className="checklist-val text-[9px]">{printedData.airtime ? `${printedData.airtime_network} ${printedData.airtime_number}` : '-'}</span></div>
-
-                      <div className="checklist-item col-span-3"><span className="checklist-label mr-2">Grocery:</span> <span className="checklist-val font-normal text-[9px]">
+                  <div className="border-2 border-red-100 p-4 rounded bg-red-50/30">
+                    <h4 className="text-xs font-bold text-red-800 uppercase mb-4 border-b border-red-200 pb-2">Equipment Requirements</h4>
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="text-[10px] text-gray-500 uppercase border-b border-red-100">
+                          <th className="py-2">Item Description</th>
+                          <th className="py-2 text-right">Quantity</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-sm">
                         {(() => {
                           const isSpecial = printedData.plan_category === 'specials';
-                          const benefits = isSpecial ? (SPECIAL_PLAN_BENEFITS[printedData.plan_name] || {}) : (PLAN_BENEFITS[printedData.plan_name] || {});
-                          if (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0) return benefits.grocery_items.join(', ');
-                          if (benefits.grocery) return String(benefits.grocery);
-                          if (benefits.groceries) return String(benefits.groceries);
-                          return printedData.requires_grocery ? 'Standard Grocery Benefit' : 'None';
+                          const bData = isSpecial ? (SPECIAL_PLAN_BENEFITS[printedData.plan_name] || {}) : (PLAN_BENEFITS[printedData.plan_name] || {});
+                          const list = [];
+
+                          // Base Quantities
+                          if (bData.tent) list.push({ name: 'Standard Tents', qty: bData.tent });
+                          if (bData.table) list.push({ name: 'Standard Tables', qty: bData.table });
+                          if (bData.toilet) list.push({ name: 'Toilets', qty: bData.toilet });
+                          if (bData.chairs) list.push({ name: 'Standard Chairs', qty: bData.chairs });
+
+                          // Specials parsing
+                          if (isSpecial && Array.isArray(bData.benefits)) {
+                            bData.benefits.forEach(b => {
+                              if (b.includes('Chairs')) list.push({ name: 'Standard Chairs', qty: b });
+                              if (b.includes('Tent')) list.push({ name: 'Standard Equipment', qty: b });
+                            });
+                          }
+
+                          // Extras
+                          if (printedData.extra_chairs > 0) list.push({ name: 'Extra Chairs', qty: printedData.extra_chairs, variant: 'bold' });
+                          if (printedData.extra_tables > 0) list.push({ name: 'Extra Tables', qty: printedData.extra_tables, variant: 'bold' });
+                          if (printedData.extra_toilets > 0) list.push({ name: 'Extra Toilets', qty: printedData.extra_toilets, variant: 'bold' });
+                          if (printedData.extra_tents > 0) list.push({ name: 'Extra Tents', qty: printedData.extra_tents, variant: 'bold' });
+
+                          return list.length > 0 ? list.map((item, idx) => (
+                            <tr key={idx} className={`border-b border-red-50 ${item.variant === 'bold' ? 'font-bold text-red-900 bg-red-100/50' : ''}`}>
+                              <td className="py-2 uppercase text-xs">{item.name}</td>
+                              <td className="py-2 text-right">{item.qty}</td>
+                            </tr>
+                          )) : <tr><td colSpan="2" className="py-4 text-center text-gray-400 italic">No equipment listed for this plan</td></tr>;
                         })()}
-                      </span></div>
-
-                      <div className="checklist-item"><span className="checklist-label">Cashback</span> <span className="checklist-val">R{Number(printedData.cashback_amount || 0).toLocaleString()}</span></div>
-                      <div className="checklist-item"><span className="checklist-label">Bank Amount</span> <span className="checklist-val">R{Number(printedData.amount_to_bank || 0).toLocaleString()}</span></div>
-                      <div className="checklist-item"><span className="checklist-label">Total Value</span> <span className="checklist-val">R{Number(printedData.cover_amount || 0).toLocaleString()}</span></div>
-                    </div>
-                  </div>
-
-                  {/* Sign Off Section */}
-                  <div className="mt-2">
-                    <table className="sign-off-table">
-                      <tbody>
-                        <tr>
-                          <td width="25%">
-                            <span className="sign-off-label">OFFICE PERSONNEL</span>
-                            <div className="font-bold">{printedData.office_personnel1}</div>
-                          </td>
-                          <td width="25%">
-                            <span className="sign-off-label">SIGNATURE</span>
-                          </td>
-                          <td width="25%">
-                            <span className="sign-off-label">CLIENT NAME</span>
-                            <div className="font-bold">{printedData.client_name1}</div>
-                          </td>
-                          <td width="25%">
-                            <span className="sign-off-label">SIGNATURE</span>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <span className="sign-off-label">DATE</span>
-                            <div>{printedData.date1}</div>
-                          </td>
-                          <td colSpan="3" className="bg-gray-50 text-[9px] text-gray-500 italic align-middle">
-                            I acknowledge that all details above are correct and confirmed.
-                          </td>
-                        </tr>
                       </tbody>
                     </table>
+                    <div className="mt-4 p-2 bg-white rounded border border-red-100 text-[10px] text-gray-500">
+                      Reference Deceased: <span className="font-bold">{printedData.deceased_name}</span>
+                    </div>
                   </div>
-                </>
-              )}
-            </div>
-          </>
-        )
-      }
-    </div >
+                </div>
+
+                <div className="grid grid-cols-2 gap-8 mt-12">
+                  <div className="border-t border-gray-400 pt-2">
+                    <p className="text-[10px] uppercase text-gray-500 font-bold">Authorized By (THUSANANG)</p>
+                    <div className="h-12"></div>
+                  </div>
+                  <div className="border-t border-gray-400 pt-2">
+                    <p className="text-[10px] uppercase text-gray-500 font-bold">Supplier Acknowledgement</p>
+                    <div className="h-12"></div>
+                  </div>
+                </div>
+
+                <p className="mt-12 text-center text-[8px] text-gray-400 uppercase tracking-widest">
+                  Thusanang Funeral Services Equipment Hire Order • Case {printedData.id || printedData.policy_number}
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Main Details Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Left Column: Personal Info */}
+                  <div className="print-section">
+                    <div className="print-section-title">CASE DETAILS</div>
+                    <div className="print-row"><div className="print-label">POLICY NUMBER</div><div className="print-value font-bold text-lg">{printedData.policy_number}</div></div>
+                    <div className="print-row"><div className="print-label">CLAIM DATE</div><div className="print-value">{printedData.claim_date}</div></div>
+                    <div className="print-row"><div className="print-label">DECEASED NAME</div><div className="print-value font-bold">{printedData.deceased_name}</div></div>
+                    <div className="print-row"><div className="print-label">CLAIMANT NAME</div><div className="print-value">{printedData.nok_name}</div></div>
+                    <div className="print-row"><div className="print-label">CONTACT</div><div className="print-value">{printedData.nok_contact}</div></div>
+                  </div>
+
+                  {/* Right Column: Logistics or Exchange Info */}
+                  <div className="print-section">
+                    <div className="print-section-title">{printedData.benefit_exchange === 'standard' ? 'LOGISTICS' : 'BENEFIT EXCHANGE'}</div>
+                    {printedData.benefit_exchange === 'standard' ? (
+                      <>
+                        <div className="print-row"><div className="print-label">CLEANSING</div><div className="print-value">{printedData.cleansing_date} {printedData.cleansing_time}</div></div>
+                        <div className="print-row"><div className="print-label">DELIVERY</div><div className="print-value">{printedData.delivery_date} {printedData.delivery_time}</div></div>
+                        <div className="print-row"><div className="print-label">SERVICE</div><div className="print-value">{printedData.service_date} {printedData.service_time}</div></div>
+                        <div className="print-row"><div className="print-label">CHURCH</div><div className="print-value">{printedData.church_date} {printedData.church_time}</div></div>
+                        <div className="print-row"><div className="print-label">VENUE</div><div className="print-value">{printedData.venue_name}</div></div>
+                      </>
+                    ) : (
+                      <div className="p-4 text-center">
+                        <div className="font-bold text-lg text-red-800 uppercase">Service Benefit Swapped</div>
+                        <div className="mt-2 text-md">Exchanged for: <strong>{String(printedData.benefit_exchange).toUpperCase()}</strong></div>
+                        <p className="text-[9px] mt-4 text-gray-500 italic">This claim does not include standard funeral service logistics.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Checklist Grid (Compact) */}
+                <div className="print-section">
+                  <div className="print-section-title">SERVICE REQUIREMENTS & CHECKLIST</div>
+                  <div className="checklist-grid">
+                    {printedData.benefit_exchange === 'standard' && (
+                      <>
+                        <div className="checklist-item"><span className="checklist-label">Casket Type</span> <span className="checklist-val">{printedData.casket_type}</span></div>
+                        <div className="checklist-item"><span className="checklist-label">Casket Colour</span> <span className="checklist-val">{printedData.casket_colour}</span></div>
+                      </>
+                    )}
+                    {/* Top-Up Display - Enhanced for Book Top-Up */}
+                    {printedData.top_up_type === 'book' && printedData.top_up_amount > 0 ? (
+                      <div className="checklist-item col-span-3 bg-blue-50 border-2 border-blue-300">
+                        <div className="flex flex-col gap-1">
+                          <div>
+                            <span className="checklist-label font-bold text-blue-900">📚 BOOK TOP-UP (Combined Policies)</span>
+                          </div>
+                          <div className="text-xs">
+                            <span className="font-semibold">Policies:</span> {printedData.top_up_reference || 'N/A'}
+                          </div>
+                          <div className="text-xs">
+                            <span className="font-semibold">Plan:</span> {printedData.top_up_plan_name || 'N/A'}
+                            {printedData.top_up_plan_category === 'motjha' && printedData.top_up_plan_members && ` (${printedData.top_up_plan_members} Members)`}
+                            {(printedData.top_up_plan_category === 'family' || printedData.top_up_plan_category === 'single') && printedData.top_up_plan_age && ` (${printedData.top_up_plan_age} years)`}
+                          </div>
+                          {(() => {
+                            const topUpPlanBenefits = PLAN_BENEFITS[printedData.top_up_plan_name];
+                            const coverAmount = topUpPlanBenefits?.cover;
+                            const casketType = topUpPlanBenefits?.casket;
+                            return (
+                              <>
+                                <div className="text-xs">
+                                  <span className="font-semibold">Premium:</span> <span className="font-bold text-blue-700">R{printedData.top_up_amount}</span>
+                                </div>
+                                {coverAmount && (
+                                  <div className="text-xs">
+                                    <span className="font-semibold">Cover Amount:</span> <span className="font-bold text-green-700">R{coverAmount.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                {casketType && (
+                                  <div className="text-xs">
+                                    <span className="font-semibold">Casket (from top-up):</span> {casketType}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    ) : printedData.top_up_type === 'cash' && printedData.top_up_amount > 0 ? (
+                      <div className="checklist-item">
+                        <span className="checklist-label">Cash Top-Up</span>
+                        <span className="checklist-val">R{printedData.top_up_amount}</span>
+                      </div>
+                    ) : (
+                      <div className="checklist-item">
+                        <span className="checklist-label">Top-Up</span>
+                        <span className="checklist-val">-</span>
+                      </div>
+                    )}
+
+                    <div className="checklist-item"><span className="checklist-label">Cow</span> <span className="checklist-val">{printedData.requires_cow ? 'YES' : 'NO'}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Sheep</span> <span className="checklist-val">{printedData.requires_sheep ? 'YES' : 'NO'}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Tombstone</span> <span className="checklist-val">{printedData.requires_tombstone ? (printedData.tombstone_type ? `YES (${printedData.tombstone_type})` : 'YES') : 'NO'}</span></div>
+
+                    <div className="checklist-item"><span className="checklist-label">Flower</span> <span className="checklist-val">{printedData.requires_flower ? 'YES' : 'NO'}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Bus</span> <span className="checklist-val">{printedData.requires_bus ? 'YES' : 'NO'}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Programmes</span> <span className="checklist-val">{printedData.programs || 'NO'}</span></div>
+
+                    <div className="checklist-item"><span className="checklist-label">Catering</span> <span className="checklist-val">{printedData.requires_catering ? 'YES' : 'NO'}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Airtime</span> <span className="checklist-val">{printedData.airtime ? 'YES' : 'NO'}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Network/No</span> <span className="checklist-val text-[9px]">{printedData.airtime ? `${printedData.airtime_network} ${printedData.airtime_number}` : '-'}</span></div>
+
+                    <div className="checklist-item col-span-3"><span className="checklist-label mr-2">Grocery:</span> <span className="checklist-val font-normal text-[9px]">
+                      {(() => {
+                        const isSpecial = printedData.plan_category === 'specials';
+                        const benefits = isSpecial ? (SPECIAL_PLAN_BENEFITS[printedData.plan_name] || {}) : (PLAN_BENEFITS[printedData.plan_name] || {});
+                        if (Array.isArray(benefits.grocery_items) && benefits.grocery_items.length > 0) return benefits.grocery_items.join(', ');
+                        if (benefits.grocery) return String(benefits.grocery);
+                        if (benefits.groceries) return String(benefits.groceries);
+                        return printedData.requires_grocery ? 'Standard Grocery Benefit' : 'None';
+                      })()}
+                    </span></div>
+
+                    {/* Extra Items Row */}
+                    {(printedData.extra_chairs > 0 || printedData.extra_tables > 0 || printedData.extra_toilets > 0 || printedData.extra_tents > 0) && (
+                      <div className="checklist-item col-span-3 bg-amber-50">
+                        <span className="checklist-label mr-2">Additional Extras:</span>
+                        <span className="checklist-val text-[9px]">
+                          {[
+                            printedData.extra_chairs > 0 && `${printedData.extra_chairs} Chairs`,
+                            printedData.extra_tables > 0 && `${printedData.extra_tables} Tables`,
+                            printedData.extra_toilets > 0 && `${printedData.extra_toilets} Toilets`,
+                            printedData.extra_tents > 0 && `${printedData.extra_tents} Tents`
+                          ].filter(Boolean).join(' | ')}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="checklist-item"><span className="checklist-label">Cashback</span> <span className="checklist-val">R{Number(printedData.cashback_amount || 0).toLocaleString()}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Bank Amount</span> <span className="checklist-val">R{Number(printedData.amount_to_bank || 0).toLocaleString()}</span></div>
+                    <div className="checklist-item"><span className="checklist-label">Total Value</span> <span className="checklist-val">R{Number(printedData.cover_amount || 0).toLocaleString()}</span></div>
+                  </div>
+                </div>
+
+                {/* Sign Off Section */}
+                <div className="mt-2 text-right">
+                  <table className="sign-off-table">
+                    <tbody>
+                      <tr>
+                        <td width="25%">
+                          <span className="sign-off-label">OFFICE PERSONNEL</span>
+                          <div className="font-bold">{printedData.office_personnel1}</div>
+                        </td>
+                        <td width="25%">
+                          <span className="sign-off-label">SIGNATURE</span>
+                        </td>
+                        <td width="25%">
+                          <span className="sign-off-label">CLIENT NAME</span>
+                          <div className="font-bold">{printedData.client_name1}</div>
+                        </td>
+                        <td width="25%">
+                          <span className="sign-off-label">SIGNATURE</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <span className="sign-off-label">DATE</span>
+                          <div>{printedData.date1}</div>
+                        </td>
+                        <td colSpan="3" className="bg-gray-50 text-[9px] text-gray-500 italic align-middle">
+                          I acknowledge that all details above are correct and confirmed.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
