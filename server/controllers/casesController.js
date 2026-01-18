@@ -970,7 +970,7 @@ exports.updateCaseStatus = async (req, res) => {
                 return res.status(400).json({ success: false, error: 'Cancellation reason is required' });
             }
         }
-        const caseCheck = await query('SELECT id, status, funeral_time, burial_place FROM cases WHERE id = $1', [id]);
+        const caseCheck = await query('SELECT id, status, funeral_time, burial_place, is_yard_burial FROM cases WHERE id = $1', [id]);
         if (caseCheck.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Case not found' });
         }
@@ -978,14 +978,21 @@ exports.updateCaseStatus = async (req, res) => {
         const oldStatus = caseCheck.rows[0].status;
         const existingFuneralTime = caseCheck.rows[0].funeral_time;
         const existingBurialPlace = caseCheck.rows[0].burial_place;
+        const isYard = caseCheck.rows[0].is_yard_burial;
 
         if (oldStatus === 'intake' && status !== 'intake') {
             const missingTime = !existingFuneralTime || String(existingFuneralTime).trim() === '';
-            const missingBurial = !existingBurialPlace || String(existingBurialPlace).trim() === '';
+            const missingBurial = !isYard && (!existingBurialPlace || String(existingBurialPlace).trim() === '');
+
             if (missingTime || missingBurial) {
+                const msg = missingTime && missingBurial
+                    ? 'Set funeral time and burial place'
+                    : missingTime ? 'Set funeral time' : 'Set burial place';
+
+                console.warn(`⚠️ Status update rejected for case ${id}: ${msg}`);
                 return res.status(400).json({
                     success: false,
-                    error: 'Set funeral time and cemetery venue before changing status from intake'
+                    error: `${msg} before changing status from intake`
                 });
             }
         }
@@ -1197,8 +1204,9 @@ exports.updateCaseVenue = async (req, res) => {
     const { id } = req.params;
     const { venue_name, venue_address, venue_lat, venue_lng, burial_place, branch, is_yard_burial } = req.body || {};
 
+    console.log(`📥 updateCaseVenue for case ${id}:`, req.body);
     try {
-        const caseCheck = await query('SELECT id, venue_name, venue_address, venue_lat, venue_lng, burial_place FROM cases WHERE id = $1', [id]);
+        const caseCheck = await query('SELECT id, venue_name, venue_address, venue_lat, venue_lng, burial_place, is_yard_burial FROM cases WHERE id = $1', [id]);
         if (caseCheck.rows.length === 0) {
             return res.status(404).json({ success: false, error: 'Case not found' });
         }
@@ -1219,7 +1227,8 @@ exports.updateCaseVenue = async (req, res) => {
         values.push(id);
 
         if (values.length <= 1) {
-            return res.status(400).json({ success: false, error: 'No valid fields to update' });
+            console.warn('⚠️ updateCaseVenue: No fields to update', { body: req.body, fields, values });
+            return res.status(400).json({ success: false, error: 'No valid fields provided for update', received: req.body });
         }
 
         const result = await query(
