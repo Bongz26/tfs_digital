@@ -1195,7 +1195,7 @@ exports.updateFuneralTime = async (req, res) => {
 
 exports.updateCaseVenue = async (req, res) => {
     const { id } = req.params;
-    const { venue_name, venue_address, venue_lat, venue_lng, burial_place, branch } = req.body || {};
+    const { venue_name, venue_address, venue_lat, venue_lng, burial_place, branch, is_yard_burial } = req.body || {};
 
     try {
         const caseCheck = await query('SELECT id, venue_name, venue_address, venue_lat, venue_lng, burial_place FROM cases WHERE id = $1', [id]);
