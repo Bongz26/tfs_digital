@@ -156,36 +156,54 @@ export default function RepatriationTripSheet() {
             <h2 className="text-lg font-bold text-red-800">Trip Information</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div>
-                <label className="text-sm font-semibold">Vehicle</label>
-                <select value={form.vehicle_id || ''} onChange={e => handleChange('vehicle_id', e.target.value)} className="w-full px-4 py-2 border rounded-lg">
-                  <option value="">Select vehicle</option>
-                  {vehicles.map(v => (
-                    <option key={v.id} value={v.id}>{v.reg_number} • {v.type}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-semibold">Driver</label>
-                <select value={form.driver_id || ''} onChange={e => handleChange('driver_id', e.target.value)} className="w-full px-4 py-2 border rounded-lg">
-                  <option value="">Select driver</option>
-                  {drivers.map(d => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-2">
                 <label className="text-sm font-semibold">Collection Type</label>
-                <div className="flex items-center gap-6 mt-2">
-                  <label className="inline-flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-4 mt-2">
+                  <label className="inline-flex items-center gap-2 cursor-pointer bg-white px-3 py-2 border rounded hover:bg-gray-50">
                     <input type="radio" name="collection_type" value="book" checked={form.collection_type === 'book'} onChange={e => handleChange('collection_type', e.target.value)} />
-                    <span>Book</span>
+                    <span>Our Vehicle (Book)</span>
                   </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input type="radio" name="collection_type" value="private" checked={form.collection_type === 'private'} onChange={e => handleChange('collection_type', e.target.value)} />
-                    <span>Private</span>
+                  <label className="inline-flex items-center gap-2 cursor-pointer bg-blue-50 px-3 py-2 border border-blue-200 rounded hover:bg-blue-100">
+                    <input type="radio" name="collection_type" value="private" checked={form.collection_type === 'private'} onChange={e => {
+                      setForm(prev => ({ ...prev, collection_type: e.target.value, time_out: '', odometer_closing: '' }));
+                    }} />
+                    <span>Private / Family</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2 cursor-pointer bg-red-50 px-3 py-2 border border-red-200 rounded hover:bg-red-100">
+                    <input type="radio" name="collection_type" value="ems" checked={form.collection_type === 'ems'} onChange={e => {
+                      setForm(prev => ({ ...prev, collection_type: e.target.value, time_out: '', odometer_closing: '' }));
+                    }} />
+                    <span className="font-semibold text-red-800">EMS / Ambulance</span>
+                  </label>
+                  <label className="inline-flex items-center gap-2 cursor-pointer bg-yellow-50 px-3 py-2 border border-yellow-200 rounded hover:bg-yellow-100">
+                    <input type="radio" name="collection_type" value="police" checked={form.collection_type === 'police'} onChange={e => {
+                      setForm(prev => ({ ...prev, collection_type: e.target.value, time_out: '', odometer_closing: '' }));
+                    }} />
+                    <span>Police / Forensic</span>
                   </label>
                 </div>
               </div>
+              {!['ems', 'police', 'family', 'private'].includes(form.collection_type) && (
+                <>
+                  <div>
+                    <label className="text-sm font-semibold">Vehicle</label>
+                    <select value={form.vehicle_id || ''} onChange={e => handleChange('vehicle_id', e.target.value)} className="w-full px-4 py-2 border rounded-lg">
+                      <option value="">Select vehicle</option>
+                      {vehicles.map(v => (
+                        <option key={v.id} value={v.id}>{v.reg_number} • {v.type}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold">Driver</label>
+                    <select value={form.driver_id || ''} onChange={e => handleChange('driver_id', e.target.value)} className="w-full px-4 py-2 border rounded-lg">
+                      <option value="">Select driver</option>
+                      {drivers.map(d => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
               <div>
                 <label className="text-sm font-semibold">From</label>
                 <input value={form.from_location} onChange={e => handleChange('from_location', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
@@ -207,20 +225,36 @@ export default function RepatriationTripSheet() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div>
                 <label className="text-sm font-semibold">Odometer Closing (km)</label>
-                <input type="number" value={form.odometer_closing} onChange={e => handleChange('odometer_closing', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
-                <p className="text-xs text-gray-600 mt-1">Previous closing: {lastClosingOdo || 'N/A'}</p>
-                <p className="text-sm font-semibold text-red-700 mt-1">KM traveled: {(() => {
-                  const last = parseFloat(lastClosingOdo);
-                  const clos = parseFloat(form.odometer_closing);
-                  if (!isNaN(last) && !isNaN(clos) && clos >= last) {
-                    return (clos - last).toString();
-                  }
-                  return 'N/A';
-                })()}</p>
+                <input type="number"
+                  disabled={['ems', 'police', 'family', 'private'].includes(form.collection_type)}
+                  value={form.odometer_closing}
+                  onChange={e => handleChange('odometer_closing', e.target.value)}
+                  className={`w-full px-4 py-2 border rounded-lg ${['ems', 'police', 'family', 'private'].includes(form.collection_type) ? 'bg-gray-100 text-gray-400' : ''}`}
+                  placeholder={['ems', 'police', 'family', 'private'].includes(form.collection_type) ? 'N/A' : ''}
+                />
+                {!['ems', 'police', 'family'].includes(form.collection_type) && (
+                  <>
+                    <p className="text-xs text-gray-600 mt-1">Previous closing: {lastClosingOdo || 'N/A'}</p>
+                    <p className="text-sm font-semibold text-red-700 mt-1">KM traveled: {(() => {
+                      const last = parseFloat(lastClosingOdo);
+                      const clos = parseFloat(form.odometer_closing);
+                      if (!isNaN(last) && !isNaN(clos) && clos >= last) {
+                        return (clos - last).toString();
+                      }
+                      return 'N/A';
+                    })()}</p>
+                  </>
+                )}
               </div>
               <div>
                 <label className="text-sm font-semibold">Time Out</label>
-                <input value={form.time_out} onChange={e => handleChange('time_out', e.target.value)} className="w-full px-4 py-2 border rounded-lg" />
+                <input
+                  value={form.time_out}
+                  onChange={e => handleChange('time_out', e.target.value)}
+                  disabled={['ems', 'police', 'family', 'private'].includes(form.collection_type)}
+                  className={`w-full px-4 py-2 border rounded-lg ${['ems', 'police', 'family', 'private'].includes(form.collection_type) ? 'bg-gray-100 text-gray-400' : ''}`}
+                  placeholder={['ems', 'police', 'family', 'private'].includes(form.collection_type) ? 'N/A' : ''}
+                />
               </div>
               <div>
                 <label className="text-sm font-semibold">Time In</label>
@@ -255,7 +289,7 @@ export default function RepatriationTripSheet() {
                   odometer_closing: form.odometer_closing ? parseInt(form.odometer_closing) : null,
                   time_out: form.time_out,
                   time_in: form.time_in,
-                  notes: null,
+                  notes: form.collection_type === 'ems' ? `EMS Reference: ${form.tag_number || 'N/A'}` : null,
                   collection_type: form.collection_type || null,
                   tag_number: form.tag_number || null,
                   created_by: 'system'

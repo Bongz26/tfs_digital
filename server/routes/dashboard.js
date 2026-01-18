@@ -54,38 +54,33 @@ router.get('/', async (req, res) => {
 
     if (inventoryError) throw inventoryError;
 
-    // 4️⃣ Grocery: total that should be given (by policy) and submitted (roster assigns)
+    // 4️⃣ Grocery: total that should be given (by policy) and submitted/scheduled (delivery_date set)
     let groceriesTotal = 0;
     let groceriesSubmitted = 0;
     const activeStatuses = ['intake', 'preparation', 'confirmed', 'in_progress'];
     const minDate = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const maxDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     try {
+      // Simplified approach: Get all active cases first, then filter in JS to be safe and accurate.
+      // This avoids complex OR logic issues with Supabase filters for nulls + ranges.
       const { data: activeCases, error: activeErr } = await supabase
         .from('cases')
-        .select('id, status, funeral_date, requires_grocery')
-        .in('status', activeStatuses)
-        .gte('funeral_date', minDate)
-        .lte('funeral_date', maxDate);
+        .select('id, status, funeral_date, requires_grocery, delivery_date')
+        .in('status', activeStatuses);
+
       if (activeErr) throw activeErr;
-      const groceryEligible = (activeCases || []).filter(c => c.requires_grocery === true);
+
+      // Filter by date range OR null date in memory
+      const groceryEligible = (activeCases || []).filter(c => {
+        if (c.requires_grocery !== true) return false;
+        if (!c.funeral_date) return true; // Include if no date set yet
+        return c.funeral_date >= minDate && c.funeral_date <= maxDate;
+      });
       groceriesTotal = groceryEligible.length;
-      const caseIds = groceryEligible.map(c => c.id);
-      if (caseIds.length > 0) {
-        const { data: rosterRows, error: rosterErr } = await supabase
-          .from('roster')
-          .select('case_id, vehicle_id, driver_name, status')
-          .in('case_id', caseIds)
-          .neq('status', 'completed')
-          .neq('status', 'cancelled');
-        if (rosterErr) throw rosterErr;
-        const submittedCaseIds = new Set(
-          (rosterRows || [])
-            .filter(r => r.vehicle_id != null && (r.driver_name && String(r.driver_name).trim() !== ''))
-            .map(r => r.case_id)
-        );
-        groceriesSubmitted = submittedCaseIds.size;
-      }
+
+      // Count cases that have a delivery_date set
+      groceriesSubmitted = groceryEligible.filter(c => c.delivery_date && c.delivery_date.trim() !== '').length;
+
     } catch (e) {
       // If supabase path fails, fallback below
       console.warn('⚠️ Grocery stats via Supabase failed:', e.message);
@@ -113,7 +108,7 @@ router.get('/', async (req, res) => {
       try {
         const { count } = await supabase.from('claim_drafts').select('*', { count: 'exact', head: true });
         outstandingDrafts = count || 0;
-      } catch (_) {}
+      } catch (_) { }
     }
 
     let outstandingIntakes = 0;
@@ -126,7 +121,7 @@ router.get('/', async (req, res) => {
       try {
         const { count } = await supabase.from('cases').select('*', { count: 'exact', head: true }).eq('status', 'intake');
         outstandingIntakes = count || 0;
-      } catch (_) {}
+      } catch (_) { }
     }
 
     const payload = {
@@ -154,21 +149,18 @@ router.get('/', async (req, res) => {
         `SELECT COUNT(*)::int AS total 
          FROM cases 
          WHERE requires_grocery = true 
-           AND funeral_date BETWEEN $1 AND $2
+           AND (funeral_date BETWEEN $1 AND $2 OR funeral_date IS NULL)
            AND status IN ('intake','preparation','confirmed','in_progress')`,
         [minDate, maxDate]
       );
       const gsRes = await query(
-        `SELECT COUNT(DISTINCT c.id)::int AS submitted
-         FROM cases c
-         JOIN roster r ON r.case_id = c.id
-         WHERE c.requires_grocery = true
-           AND c.funeral_date BETWEEN $1 AND $2
-           AND c.status IN ('intake','preparation','confirmed','in_progress')
-           AND r.status <> 'completed'
-           AND r.status <> 'cancelled'
-           AND r.vehicle_id IS NOT NULL
-           AND COALESCE(NULLIF(r.driver_name, ''), NULL) IS NOT NULL`,
+        `SELECT COUNT(*)::int AS submitted
+         FROM cases 
+         WHERE requires_grocery = true 
+           AND (funeral_date BETWEEN $1 AND $2 OR funeral_date IS NULL)
+           AND status IN ('intake','preparation','confirmed','in_progress')
+           AND delivery_date IS NOT NULL 
+           AND delivery_date <> ''`,
         [minDate, maxDate]
       );
 

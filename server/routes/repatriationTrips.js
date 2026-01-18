@@ -70,8 +70,13 @@ router.post('/', async (req, res) => {
       tag_number
     } = req.body;
 
-    if (!vehicle_id || odometer_closing === undefined || odometer_closing === null) {
-      return res.status(400).json({ success: false, error: 'vehicle_id and odometer_closing are required' });
+    console.log('Received Repatriation Payload:', req.body); // DEBUG LOG
+
+    // If collection_type is 'ems' or 'police' or 'family', vehicle and odometer are not required
+    const isExternalTransport = ['ems', 'police', 'family'].includes((collection_type || '').toLowerCase());
+
+    if (!isExternalTransport && (!vehicle_id || odometer_closing === undefined || odometer_closing === null)) {
+      return res.status(400).json({ success: false, error: 'vehicle_id and odometer_closing are required for internal fleet trips' });
     }
 
     const idVal = (deceased_id || '').trim();
@@ -167,8 +172,8 @@ router.post('/', async (req, res) => {
         const generatedCaseNumber = `THS-${year}-${String(nextNumber).padStart(3, '0')}`;
 
         const insertCaseRes = await query(
-          `INSERT INTO cases (case_number, deceased_name, deceased_id, nok_name, nok_contact, policy_number, funeral_date, status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `INSERT INTO cases (case_number, deceased_name, deceased_id, nok_name, nok_contact, policy_number, funeral_date, date_of_death, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            RETURNING id, case_number`,
           [
             generatedCaseNumber,
@@ -177,7 +182,8 @@ router.post('/', async (req, res) => {
             family_contact_name,
             family_contact_number,
             policyCandidate || null,
-            null, // funeral_date is initially null
+            null, // funeral_date
+            date_of_death || null, // Added date_of_death
             'intake'
           ]
         );
@@ -187,35 +193,40 @@ router.post('/', async (req, res) => {
     }
 
     // Fetch last closing for this vehicle
-    const lastRes = await query(
-      `SELECT odometer_closing 
-       FROM repatriation_trips 
-       WHERE vehicle_id = $1 
-       ORDER BY created_at DESC 
-       LIMIT 1`,
-      [parseInt(vehicle_id)]
-    );
-    const lastClosing = lastRes.rows[0]?.odometer_closing || null;
-
-    let kmTraveled = null;
-    const closingVal = parseInt(odometer_closing);
-    if (!isNaN(closingVal) && lastClosing !== null && closingVal >= lastClosing) {
-      kmTraveled = closingVal - lastClosing;
-    } else if (!isNaN(closingVal) && lastClosing === null) {
-      // First trip recorded for this vehicle
-      kmTraveled = 0;
+    let lastClosing = null;
+    if (vehicle_id && !isNaN(parseInt(vehicle_id))) {
+      const lastRes = await query(
+        `SELECT odometer_closing 
+         FROM repatriation_trips 
+         WHERE vehicle_id = $1 
+         ORDER BY created_at DESC 
+         LIMIT 1`,
+        [parseInt(vehicle_id)]
+      );
+      lastClosing = lastRes.rows[0]?.odometer_closing || null;
     }
 
-    const finalNotes = [collection_type ? `collection_type:${collection_type}` : null, notes].filter(Boolean).join(' | ') || null;
+    let kmTraveled = null;
+    const closingVal = odometer_closing ? parseInt(odometer_closing) : null;
+
+    if (vehicle_id && !isNaN(closingVal)) {
+      if (lastClosing !== null && closingVal >= lastClosing) {
+        kmTraveled = closingVal - lastClosing;
+      } else if (lastClosing === null) {
+        kmTraveled = 0;
+      }
+    }
+
+    const finalNotes = notes || null;
 
     const insertRes = await query(
       `INSERT INTO repatriation_trips 
-       (case_id, vehicle_id, driver_id, from_location, from_address, to_location, to_address, odometer_closing, km_traveled, time_out, time_in, notes, created_by, tag_number)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       (case_id, vehicle_id, driver_id, from_location, from_address, to_location, to_address, odometer_closing, km_traveled, time_out, time_in, notes, created_by, tag_number, collection_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        RETURNING *`,
       [
         finalCaseId,
-        parseInt(vehicle_id),
+        vehicle_id ? parseInt(vehicle_id) : null,
         driver_id ? parseInt(driver_id) : null,
         from_location || null,
         from_address || null,
@@ -227,7 +238,8 @@ router.post('/', async (req, res) => {
         time_in,
         finalNotes,
         created_by || null,
-        tag_number || null // Added tag_number
+        tag_number || null,
+        collection_type || null
       ]
     );
 

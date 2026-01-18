@@ -226,7 +226,9 @@ exports.createCase = async (req, res) => {
         status,
         burial_place,
         branch,
-        tombstone_type
+        tombstone_type,
+        collection_type,
+        collection_note
     } = req.body;
 
     try {
@@ -361,7 +363,7 @@ exports.createCase = async (req, res) => {
         casket_type, casket_colour, delivery_date, delivery_time, intake_day,
         programs, top_up_amount, top_up_type, top_up_reference, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
-        legacy_plan_name, benefit_mode, status, burial_place, branch, tombstone_type)
+        legacy_plan_name, benefit_mode, status, burial_place, branch, tombstone_type, collection_type, collection_note)
        VALUES (
         $1,$2,$3,
         $4,$5,$6,$7,$8,
@@ -374,7 +376,7 @@ exports.createCase = async (req, res) => {
         $33,$34,$35,$36,$37,
         $38,$39,$40,$41,$42,$43,$44,
         $45,$46,$47,
-        $48,$49,$50,$51,$52,$53)
+        $48,$49,$50,$51,$52,$53,$54,$55)
        RETURNING *`,
             [
                 finalCaseNumber, claim_date || null, policy_number || null,
@@ -388,7 +390,7 @@ exports.createCase = async (req, res) => {
                 casket_type || null, casket_colour || null, delivery_date || null, delivery_time || null, intake_day,
                 programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, top_up_type || 'cash', top_up_reference || null, !!airtime, airtime_network || null, airtime_number || null,
                 cover_amount != null ? cover_amount : 0, cashback_amount != null ? cashback_amount : 0, amount_to_bank != null ? amount_to_bank : 0,
-                legacy_plan_name || null, benefit_mode || null, status || 'confirmed', burial_place || null, branch || 'Head Office', tombstone_type || null
+                legacy_plan_name || null, benefit_mode || null, status || 'confirmed', burial_place || null, branch || 'Head Office', tombstone_type || null, collection_type || 'vehicle', collection_note || null
             ]
         );
 
@@ -1555,7 +1557,7 @@ exports.updateCaseDetails = async (req, res) => {
         delivery_date, delivery_time, intake_day,
         programs, top_up_amount, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
-        legacy_plan_name, status, burial_place, branch, tombstone_type
+        legacy_plan_name, status, burial_place, branch, tombstone_type, collection_type, collection_note
     } = req.body;
 
     // Basic validation
@@ -1587,8 +1589,9 @@ exports.updateCaseDetails = async (req, res) => {
                 cover_amount = $42, cashback_amount = $43, amount_to_bank = $44,
                 legacy_plan_name = $45, benefit_mode = $46, status = $47, burial_place = $48,
                 branch = $49, tombstone_type = $50,
+                collection_type = $51, collection_note = $52,
                 updated_at = NOW()
-            WHERE id = $51
+            WHERE id = $53
             RETURNING *
         `;
 
@@ -1607,6 +1610,8 @@ exports.updateCaseDetails = async (req, res) => {
             legacy_plan_name || null, benefit_mode || null, status || oldValues.status, burial_place || null,
             req.body.branch || oldValues.branch || 'Head Office',
             tombstone_type || oldValues.tombstone_type || null,
+            collection_type || oldValues.collection_type || 'vehicle',
+            collection_note || oldValues.collection_note || null,
             id
         ];
 
