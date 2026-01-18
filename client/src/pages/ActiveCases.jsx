@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { fetchActiveCases } from "../api/activeCases";
-import { fetchCancelledCases, assignVehicle, updateCaseStatus } from "../api/cases";
+import { fetchCancelledCases, assignVehicle, updateCaseStatus, updateCaseVenue } from "../api/cases";
 import { fetchDrivers } from "../api/drivers";
 import { fetchVehicles } from "../api/vehicles";
 import { getNextStatuses, getStatusConfig, CASE_STATUSES } from "../utils/caseStatus";
@@ -101,6 +101,15 @@ export default function ActiveCases() {
       alert("Failed to update status: " + (err.response?.data?.message || err.message));
     } finally {
       setChangingStatus(prev => ({ ...prev, [caseId]: false }));
+    }
+  };
+
+  const handleToggleYardBurial = async (caseId, currentState) => {
+    try {
+      await updateCaseVenue(caseId, { is_yard_burial: !currentState });
+      await loadData();
+    } catch (err) {
+      alert("Failed to update burial type: " + (err.response?.data?.message || err.message));
     }
   };
 
@@ -219,6 +228,24 @@ export default function ActiveCases() {
                 <span className="font-semibold text-gray-500 w-16">Burial:</span>
                 <span className="text-gray-800 truncate">{c.burial_place || "Not specified"}</span>
               </div>
+            </div>
+
+            {/* YARD BURIAL TOGGLE */}
+            <div className="bg-gray-50 p-3 rounded-lg border border-red-100 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-bold text-red-800 uppercase">Burial Type</div>
+                <div className="text-[10px] text-red-600">Yard burials only require 1 vehicle</div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={!!c.is_yard_burial}
+                  onChange={() => handleToggleYardBurial(c.id, !!c.is_yard_burial)}
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+                <span className="ml-2 text-xs font-semibold text-gray-700">{c.is_yard_burial ? 'Yard' : 'Standard'}</span>
+              </label>
             </div>
 
             {/* STATUS */}

@@ -1214,6 +1214,7 @@ exports.updateCaseVenue = async (req, res) => {
         if (venue_lng != null) { fields.push(`venue_lng = $${idx++}`); values.push(String(venue_lng)); }
         if (burial_place != null) { fields.push(`burial_place = $${idx++}`); values.push(String(burial_place)); }
         if (branch != null) { fields.push(`branch = $${idx++}`); values.push(String(branch)); }
+        if (is_yard_burial != null) { fields.push(`is_yard_burial = $${idx++}`); values.push(is_yard_burial); }
         fields.push('updated_at = NOW()');
         values.push(id);
 
