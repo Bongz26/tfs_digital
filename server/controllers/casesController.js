@@ -930,6 +930,7 @@ exports.updateCaseStatus = async (req, res) => {
     const { id } = req.params;
     const { status, notes } = req.body;
 
+    console.log(`📥 updateCaseStatus for case ${id}: to ${status}`);
     const validStatuses = ['intake', 'confirmed', 'preparation', 'scheduled', 'in_progress', 'completed', 'archived', 'cancelled'];
     if (!status || !validStatuses.includes(status)) {
         return res.status(400).json({ success: false, error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
@@ -950,7 +951,9 @@ exports.updateCaseStatus = async (req, res) => {
 
             const rosterRes = await query('SELECT COUNT(*)::int AS cnt FROM roster WHERE case_id = $1', [id]);
             const assigned = (rosterRes.rows[0] && rosterRes.rows[0].cnt) || 0;
+            console.log(`🔍 Vehicle Check: assigned=${assigned}, minNeeded=${minVehicles}, isYard=${isYardBurial}`);
             if (assigned < minVehicles) {
+                console.warn(`⚠️ Vehicle Check failed for case ${id}`);
                 return res.status(400).json({
                     success: false,
                     error: `Assign at least ${minVehicles} vehicle(s) before setting status to ${status}${isYardBurial ? ' (In-Yard Burial logic applied)' : ''}`,
