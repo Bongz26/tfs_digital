@@ -228,7 +228,8 @@ exports.createCase = async (req, res) => {
         branch,
         tombstone_type,
         collection_type,
-        collection_note
+        collection_note,
+        is_yard_burial
     } = req.body;
 
     try {
@@ -363,7 +364,7 @@ exports.createCase = async (req, res) => {
         casket_type, casket_colour, delivery_date, delivery_time, intake_day,
         programs, top_up_amount, top_up_type, top_up_reference, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
-        legacy_plan_name, benefit_mode, status, burial_place, branch, tombstone_type, collection_type, collection_note)
+        legacy_plan_name, benefit_mode, status, burial_place, branch, tombstone_type, collection_type, collection_note, is_yard_burial)
        VALUES (
         $1,$2,$3,
         $4,$5,$6,$7,$8,
@@ -376,7 +377,7 @@ exports.createCase = async (req, res) => {
         $33,$34,$35,$36,$37,
         $38,$39,$40,$41,$42,$43,$44,
         $45,$46,$47,
-        $48,$49,$50,$51,$52,$53,$54,$55)
+        $48,$49,$50,$51,$52,$53,$54,$55,$56)
        RETURNING *`,
             [
                 finalCaseNumber, claim_date || null, policy_number || null,
@@ -390,7 +391,8 @@ exports.createCase = async (req, res) => {
                 casket_type || null, casket_colour || null, delivery_date || null, delivery_time || null, intake_day,
                 programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, top_up_type || 'cash', top_up_reference || null, !!airtime, airtime_network || null, airtime_number || null,
                 cover_amount != null ? cover_amount : 0, cashback_amount != null ? cashback_amount : 0, amount_to_bank != null ? amount_to_bank : 0,
-                legacy_plan_name || null, benefit_mode || null, status || 'confirmed', burial_place || null, branch || 'Head Office', tombstone_type || null, collection_type || 'vehicle', collection_note || null
+                legacy_plan_name || null, benefit_mode || null, status || 'confirmed', burial_place || null, branch || 'Head Office', tombstone_type || null, collection_type || 'vehicle', collection_note || null,
+                !!is_yard_burial
             ]
         );
 
@@ -936,15 +938,22 @@ exports.updateCaseStatus = async (req, res) => {
     // Enforce minimum vehicles for operational statuses
     try {
         if (['scheduled', 'in_progress'].includes(status)) {
-            const caseRes = await query('SELECT plan_name FROM cases WHERE id = $1', [id]);
+            const caseRes = await query('SELECT plan_name, is_yard_burial FROM cases WHERE id = $1', [id]);
             const planName = (caseRes.rows[0] && caseRes.rows[0].plan_name) || '';
-            const minVehicles = (planName && /premium/i.test(planName)) ? 3 : 2;
+            const isYardBurial = (caseRes.rows[0] && caseRes.rows[0].is_yard_burial) || false;
+
+            // Logic: In-Yard Burial only needs 1 vehicle. Standard needs 2. Premium needs 3.
+            let minVehicles = (planName && /premium/i.test(planName)) ? 3 : 2;
+            if (isYardBurial) {
+                minVehicles = 1;
+            }
+
             const rosterRes = await query('SELECT COUNT(*)::int AS cnt FROM roster WHERE case_id = $1', [id]);
             const assigned = (rosterRes.rows[0] && rosterRes.rows[0].cnt) || 0;
             if (assigned < minVehicles) {
                 return res.status(400).json({
                     success: false,
-                    error: `Assign at least ${minVehicles} vehicle(s) before setting status to ${status}`,
+                    error: `Assign at least ${minVehicles} vehicle(s) before setting status to ${status}${isYardBurial ? ' (In-Yard Burial logic applied)' : ''}`,
                     required_min_vehicles: minVehicles,
                     assigned_vehicles: assigned
                 });
@@ -1557,7 +1566,7 @@ exports.updateCaseDetails = async (req, res) => {
         delivery_date, delivery_time, intake_day,
         programs, top_up_amount, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
-        legacy_plan_name, status, burial_place, branch, tombstone_type, collection_type, collection_note
+        legacy_plan_name, status, burial_place, branch, tombstone_type, collection_type, collection_note, is_yard_burial
     } = req.body;
 
     // Basic validation
@@ -1590,8 +1599,9 @@ exports.updateCaseDetails = async (req, res) => {
                 legacy_plan_name = $45, benefit_mode = $46, status = $47, burial_place = $48,
                 branch = $49, tombstone_type = $50,
                 collection_type = $51, collection_note = $52,
+                is_yard_burial = $53,
                 updated_at = NOW()
-            WHERE id = $53
+            WHERE id = $54
             RETURNING *
         `;
 
@@ -1612,6 +1622,7 @@ exports.updateCaseDetails = async (req, res) => {
             tombstone_type || oldValues.tombstone_type || null,
             collection_type || oldValues.collection_type || 'vehicle',
             collection_note || oldValues.collection_note || null,
+            !!is_yard_burial,
             id
         ];
 

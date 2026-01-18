@@ -395,7 +395,8 @@ export default function ConsultationForm() {
     extra_tables: 0,
     extra_toilets: 0,
     extra_tents: 0,
-    supplier_name: ''
+    supplier_name: '',
+    is_yard_burial: false
   });
 
   const [message, setMessage] = useState('');
@@ -2014,9 +2015,26 @@ export default function ConsultationForm() {
                   </div>
                   <div><label>Service Venue</label><input value={form.venue_name} onChange={e => handleInputChange('venue_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
                   <div><label>Full Address (GPS) <span className="text-red-600">*</span></label><input required value={form.venue_address} onChange={e => handleInputChange('venue_address', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
-                  <div className="md:col-span-2">
-                    <label>Burial Place</label>
-                    <input value={form.burial_place} onChange={e => handleInputChange('burial_place', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder="e.g. Avalon Cemetery" />
+                  <div className="md:col-span-2 space-y-4">
+                    <div>
+                      <label>Burial Place</label>
+                      <input value={form.burial_place} onChange={e => handleInputChange('burial_place', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder="e.g. Avalon Cemetery" />
+                    </div>
+
+                    <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                      <label className="flex items-center space-x-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={form.is_yard_burial}
+                          onChange={e => handleInputChange('is_yard_burial', e.target.checked)}
+                          className="w-6 h-6 text-red-600 rounded border-gray-300 focus:ring-red-500"
+                        />
+                        <div>
+                          <span className="font-bold text-red-800">In-Yard Burial</span>
+                          <p className="text-xs text-red-600">Check this if the burial is taking place at the family yard. (This reduces the required vehicle count to 1 hearse)</p>
+                        </div>
+                      </label>
+                    </div>
                   </div>
                 </div>
               </div>
