@@ -1,15 +1,24 @@
 const { query, getClient } = require('../config/db');
 const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 const { sendWeeklyReportLogic } = require('../cron/weeklyReport');
+
+// Initialize SendGrid
+if (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.')) {
+    sgMail.setApiKey(process.env.SMTP_PASS);
+}
 
 async function maybeNotifyLowStock(threshold = 1) {
     try {
-        const to = process.env.INVENTORY_ALERTS_TO || process.env.ALERTS_TO || process.env.AIRTIME_OPERATOR_EMAIL;
+        const to = process.env.INVENTORY_ALERTS_TO || process.env.ALERTS_TO || process.env.MANAGEMENT_EMAIL || process.env.SMTP_USER;
+        const cc = process.env.REPORT_CC_EMAIL || 'khumalo4sure@gmail.com';
+        const fromMail = process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER;
         const host = process.env.SMTP_HOST;
-        const port = parseInt(process.env.SMTP_PORT || '587', 10);
         const user = process.env.SMTP_USER;
         const pass = process.env.SMTP_PASS;
-        if (!to || !host || !user || !pass) return;
+
+        if (!to || !fromMail) return;
+
         const rows = await query(`
             SELECT id, name, category, sku, stock_quantity, COALESCE(reserved_quantity,0) AS reserved_quantity,
                    low_stock_threshold, location, model, color
@@ -20,43 +29,97 @@ async function maybeNotifyLowStock(threshold = 1) {
             ...r,
             available_quantity: (r.stock_quantity || 0) - (r.reserved_quantity || 0)
         })).filter(r => r.available_quantity <= threshold);
+
         if (items.length === 0) return;
-        const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
-        const from = process.env.ALERTS_FROM || user;
-        const subject = `Low Stock Alert: ${items.length} item(s) at qty ≤ ${threshold}`;
+
+        const subject = `⚠️ Low Stock Alert: ${items.length} item(s) at or below threshold`;
         const htmlRows = items.map(i => `
             <tr>
-              <td style="padding:6px;border:1px solid #ddd;">${i.name}${i.color ? ' • ' + i.color : ''}</td>
-              <td style="padding:6px;border:1px solid #ddd;">${i.category}</td>
-              <td style="padding:6px;border:1px solid #ddd;">${i.stock_quantity}</td>
-              <td style="padding:6px;border:1px solid #ddd;">${i.reserved_quantity}</td>
-              <td style="padding:6px;border:1px solid #ddd;">${i.available_quantity}</td>
-              <td style="padding:6px;border:1px solid #ddd;">Threshold ${i.low_stock_threshold}</td>
+              <td style="padding:8px;border:1px solid #ddd;">${i.name}${i.color ? ' • ' + i.color : ''}</td>
+              <td style="padding:8px;border:1px solid #ddd;">${i.category}</td>
+              <td style="padding:8px;border:1px solid #ddd;text-align:center;font-weight:bold;color:red;">${i.available_quantity}</td>
+              <td style="padding:8px;border:1px solid #ddd;">Threshold ${i.low_stock_threshold}</td>
             </tr>
         `).join('');
+
         const html = `
-          <div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;">
-            <p>Low stock items at or below ${threshold} available:</p>
-            <table style="border-collapse:collapse;min-width:520px;">
+          <div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;max-width:600px;">
+            <h2 style="color:#d32f2f;">Inventory Alert</h2>
+            <p>The following items are low in stock:</p>
+            <table style="border-collapse:collapse;width:100%;">
               <thead>
-                <tr>
-                  <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Item</th>
-                  <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Category</th>
-                  <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Stock</th>
-                  <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Reserved</th>
-                  <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Available</th>
-                  <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Status</th>
+                <tr style="background:#f5f5f5;">
+                  <th style="padding:8px;border:1px solid #ddd;text-align:left;">Item</th>
+                  <th style="padding:8px;border:1px solid #ddd;text-align:left;">Category</th>
+                  <th style="padding:8px;border:1px solid #ddd;text-align:center;">Available</th>
+                  <th style="padding:8px;border:1px solid #ddd;text-align:left;">Target</th>
                 </tr>
               </thead>
-              <tbody>
-                ${htmlRows}
-              </tbody>
+              <tbody>${htmlRows}</tbody>
             </table>
+            <p style="margin-top:20px;font-size:12px;color:#666;">This is an automated alert from TFS Digital.</p>
           </div>
         `;
-        const text = items.map(i => `${i.name} ${i.color || ''} | ${i.category} | stock=${i.stock_quantity} reserved=${i.reserved_quantity} available=${i.available_quantity} threshold=${i.low_stock_threshold}`).join('\n');
-        await transporter.sendMail({ from, to, subject, text, html });
-    } catch (_) { }
+
+        if (pass && pass.startsWith('SG.')) {
+            await sgMail.send({ to, cc, from: { email: fromMail, name: 'TFS Inventory' }, subject, html });
+            console.log(`✅ Low stock alert sent via SendGrid to ${to}`);
+        } else if (host && user && pass) {
+            const port = parseInt(process.env.SMTP_PORT || '587', 10);
+            const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+            await transporter.sendMail({ from: fromMail, to, cc, subject, html });
+            console.log(`✅ Low stock alert sent via SMTP to ${to}`);
+        }
+    } catch (err) {
+        console.error('❌ Failed to send low stock notification:', err.message);
+    }
+}
+
+async function notifyCasketUsage(caseId, itemId, qtyChange) {
+    try {
+        const to = process.env.MANAGEMENT_EMAIL || process.env.SMTP_USER;
+        const cc = process.env.REPORT_CC_EMAIL || 'khumalo4sure@gmail.com';
+        const fromMail = process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER;
+        const pass = process.env.SMTP_PASS;
+
+        if (!to || !fromMail) return;
+
+        const data = await query(`
+            SELECT c.case_number, c.deceased_name, i.name as item_name, i.color, i.stock_quantity as remaining
+            FROM cases c, inventory i
+            WHERE c.id = $1 AND i.id = $2
+        `, [caseId, itemId]);
+
+        if (data.rows.length === 0) return;
+        const { case_number, deceased_name, item_name, color, remaining } = data.rows[0];
+
+        const subject = `⚰️ Coffin Used: ${deceased_name} (${case_number})`;
+        const html = `
+          <div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;max-width:600px;border:1px solid #eee;padding:20px;border-radius:8px;">
+            <h2 style="color:#2c3e50;margin-top:0;">Stock Usage Notification</h2>
+            <p>A coffin has been assigned to a case and deducted from stock.</p>
+            <div style="background:#f9f9f9;padding:15px;border-radius:4px;margin:20px 0;">
+                <p><strong>Case:</strong> ${case_number} - ${deceased_name}</p>
+                <p><strong>Casket:</strong> ${item_name} ${color ? '(' + color + ')' : ''}</p>
+                <p><strong>Quantity:</strong> ${Math.abs(qtyChange)}</p>
+            </div>
+            <p><strong>Remaining Stock:</strong> <span style="font-size:18px;font-weight:bold;color:${remaining <= 1 ? 'red' : 'green'};">${remaining}</span></p>
+            <hr style="border:none;border-top:1px solid #eee;margin:20px 0;" />
+            <p style="font-size:12px;color:#666;">This is an automated notification from Thusanang Digital.</p>
+          </div>
+        `;
+
+        if (pass && pass.startsWith('SG.')) {
+            await sgMail.send({ to, cc, from: { email: fromMail, name: 'TFS Stock' }, subject, html });
+            console.log(`✅ Casket usage email sent for case ${case_number}`);
+        } else if (process.env.SMTP_HOST) {
+            const port = parseInt(process.env.SMTP_PORT || '587', 10);
+            const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port, auth: { user: process.env.SMTP_USER, pass } });
+            await transporter.sendMail({ from: fromMail, to, cc, subject, html });
+        }
+    } catch (err) {
+        console.error('❌ Failed to send casket usage email:', err.message);
+    }
 }
 
 // --- GET ALL INVENTORY ---
@@ -1426,3 +1489,6 @@ exports.sendWeeklyReportManual = async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     }
 };
+
+exports.notifyCasketUsage = notifyCasketUsage;
+exports.maybeNotifyLowStock = maybeNotifyLowStock;

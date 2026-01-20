@@ -1,4 +1,5 @@
 const { query, getClient } = require('../config/db');
+const { notifyCasketUsage, maybeNotifyLowStock } = require('./inventoryController');
 
 // --- LOOKUP CASE BY IDENTIFIERS ---
 exports.lookupCase = async (req, res) => {
@@ -1061,6 +1062,14 @@ exports.updateCaseStatus = async (req, res) => {
                                     [item.id, id, 'sale', -1, previous, nextQty, 'Auto-logged on intake exit', (req.user?.email) || 'system']
                                 );
                             } catch (_) { }
+
+                            // Send immediate notification
+                            try {
+                                await notifyCasketUsage(id, item.id, -1);
+                                await maybeNotifyLowStock(1);
+                            } catch (nErr) {
+                                console.warn('⚠️ Notification failed:', nErr.message);
+                            }
                         }
                     }
                 }
