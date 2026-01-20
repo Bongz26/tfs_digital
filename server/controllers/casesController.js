@@ -956,7 +956,7 @@ exports.updateCaseStatus = async (req, res) => {
                 console.warn(`⚠️ Vehicle Check failed for case ${id}`);
                 return res.status(400).json({
                     success: false,
-                    error: `Assign at least ${minVehicles} vehicle(s) before setting status to ${status}${isYardBurial ? ' (In-Yard Burial logic applied)' : ''}`,
+                    error: `Assign at least ${minVehicles} vehicle(s) before setting status to ${status}${isYardBurial ? ' (Small Service/Yard Burial logic applied)' : ''}`,
                     required_min_vehicles: minVehicles,
                     assigned_vehicles: assigned
                 });
@@ -984,18 +984,20 @@ exports.updateCaseStatus = async (req, res) => {
         const isYard = caseCheck.rows[0].is_yard_burial;
 
         if (oldStatus === 'intake' && status !== 'intake') {
-            const missingTime = !existingFuneralTime || String(existingFuneralTime).trim() === '';
+            // Relaxed check: Yard burials don't STRICTLY require these to move to 'confirmed'
+            const missingTime = !isYard && (!existingFuneralTime || String(existingFuneralTime).trim() === '');
             const missingBurial = !isYard && (!existingBurialPlace || String(existingBurialPlace).trim() === '');
 
             if (missingTime || missingBurial) {
                 const msg = missingTime && missingBurial
-                    ? 'Set funeral time and burial place'
-                    : missingTime ? 'Set funeral time' : 'Set burial place';
+                    ? 'funeral time and burial place'
+                    : missingTime ? 'funeral time' : 'burial place';
 
-                console.warn(`⚠️ Status update rejected for case ${id}: ${msg}`);
+                console.warn(`⚠️ Status update rejected for case ${id}: Missing ${msg}`);
                 return res.status(400).json({
                     success: false,
-                    error: `${msg} before changing status from intake`
+                    error: `Please set ${msg} before moving from intake. (Or toggle "Yard" burial type)`,
+                    details: { missingTime, missingBurial, isYard }
                 });
             }
         }

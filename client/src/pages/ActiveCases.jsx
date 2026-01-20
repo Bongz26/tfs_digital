@@ -233,8 +233,8 @@ export default function ActiveCases() {
             {/* YARD BURIAL TOGGLE */}
             <div className="bg-gray-50 p-3 rounded-lg border border-red-100 flex items-center justify-between">
               <div>
-                <div className="text-xs font-bold text-red-800 uppercase">Burial Type</div>
-                <div className="text-[10px] text-red-600">Yard burials only require 1 vehicle</div>
+                <div className="text-xs font-bold text-red-800 uppercase">Service Scale</div>
+                <div className="text-[10px] text-red-600">Yard, Stillborn or Baby funerals (Needs 1 vehicle)</div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -244,7 +244,7 @@ export default function ActiveCases() {
                   onChange={() => handleToggleYardBurial(c.id, !!c.is_yard_burial)}
                 />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
-                <span className="ml-2 text-xs font-semibold text-gray-700">{c.is_yard_burial ? 'Yard' : 'Standard'}</span>
+                <span className="ml-2 text-xs font-semibold text-gray-700">{c.is_yard_burial ? 'Small Service' : 'Standard'}</span>
               </label>
             </div>
 
