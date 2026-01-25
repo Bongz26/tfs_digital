@@ -27,6 +27,8 @@ export default function VehicleCalendar() {
   const [editBurialPlace, setEditBurialPlace] = useState({});
   const [editCaseFuneralTime, setEditCaseFuneralTime] = useState({});
   const [caseFuneralTimeValues, setCaseFuneralTimeValues] = useState({});
+  const [permissionError, setPermissionError] = useState(null);
+
 
   /* ================= FETCH ROSTER ================= */
   useEffect(() => {
@@ -46,20 +48,21 @@ export default function VehicleCalendar() {
       .finally(() => setLoading(false));
   }, []);
 
-  /* ================= FETCH ADMIN DATA ================= */
+  /* ================= FETCH DATA (Drivers/Vehicles) ================= */
   useEffect(() => {
-    if (!isAdmin()) return;
     const token = getAccessToken();
 
+    // Fetch drivers for everyone (needed for assignment)
     fetchDrivers().then(setDrivers).catch(() => setDrivers([]));
 
+    // Fetch vehicles for everyone
     fetch(`${API_HOST}/api/vehicles`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}
     })
       .then(r => r.json())
       .then(j => setVehicles(j.vehicles || []))
       .catch(() => setVehicles([]));
-  }, [isAdmin]);
+  }, []);
 
   /* ================= FILTER + SORT ================= */
   const [filterFrom, setFilterFrom] = useState("");
@@ -115,11 +118,13 @@ export default function VehicleCalendar() {
         funeral_date: i.funeral_date,
         funeral_time: i.funeral_time,
         venue_name: i.venue_name,
+        case_status: i.case_status || 'intake',
         assignments: []
       };
       existing.assignments.push({
         id: i.id,
         driver_name: i.driver_name,
+        vehicle_id: i.vehicle_id,     // Needed for edit dropdown
         vehicle_type: i.vehicle_type,
         reg_number: i.reg_number,
         status: i.status
@@ -145,6 +150,24 @@ export default function VehicleCalendar() {
           {authError} <a href="/login" className="underline ml-1">Login</a>
         </div>
       )}
+
+      {permissionError && (
+        <div className="mb-4 bg-red-50 border-l-4 border-red-600 text-red-800 px-4 py-3 rounded-lg shadow-md animate-pulse">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="font-bold text-lg">🔒 Permission Denied</p>
+              <p className="mt-1">{permissionError}</p>
+            </div>
+            <button
+              onClick={() => setPermissionError(null)}
+              className="text-red-600 hover:text-red-800 font-bold text-xl"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
 
       <div className="mb-6 flex flex-col items-center gap-4">
         {/* VIEW MODE TOGGLE */}
@@ -206,8 +229,16 @@ export default function VehicleCalendar() {
               key={group.case_id}
               className="bg-white border-l-4 border-red-600 rounded-xl shadow p-6"
             >
-              <h3 className="font-bold text-red-700">
-                {group.case_number || `CASE-${group.case_id}`}
+              <h3 className="font-bold text-red-700 flex items-center justify-between"
+                onClick={() => console.log('DEBUG CASE:', { id: group.case_id, status: group.case_status, isAdmin: isAdmin() })}>
+                <span>{group.case_number || `CASE-${group.case_id}`}</span>
+                {/* Case Status Badge */}
+                <span className={`text-xs px-2 py-1 rounded-full ${group.case_status === 'scheduled' || group.case_status === 'in_progress' || group.case_status === 'completed'
+                  ? 'bg-orange-100 text-orange-700'
+                  : 'bg-gray-100 text-gray-600'
+                  }`}>
+                  {group.case_status?.toUpperCase() || 'INTAKE'}
+                </span>
               </h3>
 
               <p className="font-semibold text-lg">
@@ -221,6 +252,21 @@ export default function VehicleCalendar() {
               <p className="text-sm text-gray-600">
                 ⏰ {group.funeral_time || "Time TBA"}
               </p>
+
+              {/* Locked Case Warning */}
+              {(group.case_status === 'scheduled' || group.case_status === 'in_progress' || group.case_status === 'completed') && (
+                <div className={`mt-2 p-2 rounded text-xs ${isAdmin()
+                  ? 'bg-yellow-50 border border-yellow-200 text-yellow-800'
+                  : 'bg-red-50 border border-red-200 text-red-700'
+                  }`}>
+                  <span className="font-semibold">🔒 Locked Assignment</span>
+                  <p className="mt-1">
+                    {isAdmin()
+                      ? '⚠️ Admin Override Active - You can modify driver/vehicle assignments'
+                      : 'This case has been submitted. Only administrators can modify assignments.'}
+                  </p>
+                </div>
+              )}
 
               {isAdmin() && (
                 <div className="mt-2">
@@ -270,15 +316,121 @@ export default function VehicleCalendar() {
                 {group.assignments.map(a => (
                   <div
                     key={a.id}
-                    className="bg-yellow-50 border rounded p-3"
+                    className={`border rounded p-3 transition-colors ${editingAssignments[a.id] ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-100' : 'bg-yellow-50 hover:bg-yellow-100 cursor-pointer'
+                      }`}
                   >
-                    <p className="font-semibold">👤 {a.driver_name || "TBA"}</p>
-                    <p className="text-sm">
-                      🚗 {a.vehicle_type || "—"} • {a.reg_number || "—"}
-                    </p>
-                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                      {a.status || "pending"}
-                    </span>
+                    {editingAssignments[a.id] ? (
+                      <div className="space-y-3">
+                        {/* Edit Mode */}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase">Driver</label>
+                          <select
+                            className="w-full border rounded p-1 text-sm bg-white"
+                            value={editDriver[a.id] !== undefined ? editDriver[a.id] : (a.driver_name || "")}
+                            onChange={(e) => setEditDriver(prev => ({ ...prev, [a.id]: e.target.value }))}
+                          >
+                            <option value="">Select Driver...</option>
+                            {drivers.map(d => (
+                              <option key={d.id} value={d.name}>{d.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase">Vehicle</label>
+                          <select
+                            className="w-full border rounded p-1 text-sm bg-white"
+                            value={editVehicle[a.id] !== undefined ? editVehicle[a.id] : (a.vehicle_id || "")}
+                            onChange={(e) => setEditVehicle(prev => ({ ...prev, [a.id]: e.target.value }))}
+                          >
+                            <option value="">Select Vehicle...</option>
+                            {vehicles.map(v => (
+                              <option key={v.id} value={v.id}>{v.type} - {v.reg_number}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingAssignments(prev => ({ ...prev, [a.id]: false }));
+                              setPermissionError(null);
+                            }}
+                            className="px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 rounded"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setSaving(prev => ({ ...prev, [a.id]: true }));
+                              setPermissionError(null);
+
+                              try {
+                                const updates = {};
+                                // Only send if changed
+                                const dName = editDriver[a.id];
+                                if (dName !== undefined && dName !== a.driver_name) updates.driver_name = dName;
+
+                                const vId = editVehicle[a.id];
+                                if (vId !== undefined && vId !== a.vehicle_id) updates.vehicle_id = vId;
+
+                                if (Object.keys(updates).length > 0) {
+                                  await updateRoster(a.id, updates);
+                                  window.location.reload();
+                                } else {
+                                  setEditingAssignments(prev => ({ ...prev, [a.id]: false }));
+                                }
+                              } catch (err) {
+                                console.error("Update failed", err);
+                                // If permission denied, backend sets error message in response
+                                if (err.response && err.response.status === 403) {
+                                  setPermissionError(err.response.data.error || "Permission Denied");
+                                } else {
+                                  alert("Failed to update: " + (err.message || "Unknown error"));
+                                }
+                              } finally {
+                                setSaving(prev => ({ ...prev, [a.id]: false }));
+                              }
+                            }}
+                            disabled={saving[a.id]}
+                            className="px-3 py-1 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 rounded shadow-sm"
+                          >
+                            {saving[a.id] ? "Saving..." : "Save Changes"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => {
+                          setEditingAssignments(prev => ({ ...prev, [a.id]: true }));
+                          // Initialize values
+                          setEditDriver(prev => ({ ...prev, [a.id]: a.driver_name }));
+                          // Find vehicle ID from reg_number/type is tricky if not in 'a'. 
+                          // But wait, 'a' usually has flattened data. We need vehicle_id.
+                          // The roster API returns vehicle_id! Let's ensure it's in the mapped object.
+                          setEditVehicle(prev => ({ ...prev, [a.id]: a.vehicle_id }));
+                        }}
+                        className="relative group-hover:scale-[1.01] transition-transform"
+                      >
+                        <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 p-1">
+                          <span className="text-xs text-blue-600 font-bold bg-white px-1 rounded shadow">✎ EDIT</span>
+                        </div>
+                        <p className="font-semibold">👤 {a.driver_name || "Assign Driver..."}</p>
+                        <p className="text-sm text-gray-700">
+                          🚗 {a.vehicle_type || "Vehicle"} • {a.reg_number || "Assign..."}
+                        </p>
+                        <div className="mt-2 flex justify-between items-center">
+                          <span className={`text-xs px-2 py-1 rounded ${a.status === 'completed' ? 'bg-green-100 text-green-700' :
+                            a.status === 'on_route' ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-600'
+                            }`}>
+                            {a.status || "pending"}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

@@ -26,7 +26,8 @@ router.get('/', async (req, res) => {
           delivery_date,
           delivery_time,
           venue_name,
-          burial_place
+          burial_place,
+          status
         ),
         vehicles:vehicle_id (
           id,
@@ -64,6 +65,7 @@ router.get('/', async (req, res) => {
         delivery_time: caseData?.delivery_time || null,
         venue_name: caseData?.venue_name || null,
         burial_place: caseData?.burial_place || null,
+        case_status: caseData?.status || null,
         // Vehicle data (flattened)
         reg_number: item.external_vehicle ? item.external_vehicle : (vehicleData?.reg_number || null),
         vehicle_type: item.external_vehicle ? 'Hired / External' : (vehicleData?.type || null)
@@ -103,6 +105,82 @@ router.patch('/:id', async (req, res) => {
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ success: false, error: 'No valid fields to update' });
     }
+
+    // ================== ADMIN-ONLY OVERRIDE CHECK ==================
+    // Check if updating driver or vehicle and if case is already submitted/scheduled
+    const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
+
+    if (driver_name != null || vehicle_id != null) {
+      // Get the case associated with this roster entry
+      let caseStatus = null;
+      let caseName = null;
+
+      console.log(`🔍 Checking constraints for roster update: id=${id}`);
+
+      if (supabase) {
+        console.log('   Using Supabase client for check...');
+        const { data: rosterData, error: rosterErr } = await supabase
+          .from('roster')
+          .select('case_id, cases:case_id (status, deceased_name, case_number)')
+          .eq('id', id)
+          .limit(1);
+
+        if (rosterErr) {
+          console.error('   Error fetching roster/case via Supabase:', rosterErr);
+          throw rosterErr;
+        }
+        const rosterEntry = Array.isArray(rosterData) ? rosterData[0] : rosterData;
+        console.log('   Roster Entry found:', rosterEntry ? 'YES' : 'NO');
+
+        if (rosterEntry && rosterEntry.cases) {
+          caseStatus = rosterEntry.cases.status;
+          caseName = rosterEntry.cases.deceased_name || rosterEntry.cases.case_number;
+          console.log(`   Case found: ${caseName}, Status: ${caseStatus}`);
+        } else {
+          console.warn('   ⚠️ Roster entry found but NO case data linked!');
+        }
+      } else {
+        // PostgreSQL path
+        console.log('   Using standard DB query for check...');
+        const caseRes = await query(
+          `SELECT c.status, c.deceased_name, c.case_number 
+           FROM cases c 
+           JOIN roster r ON r.case_id = c.id 
+           WHERE r.id = $1`,
+          [id]
+        );
+        if (caseRes.rows.length > 0) {
+          caseStatus = caseRes.rows[0].status;
+          caseName = caseRes.rows[0].deceased_name || caseRes.rows[0].case_number;
+          console.log(`   Case found: ${caseName}, Status: ${caseStatus}`);
+        } else {
+          console.warn('   ⚠️ No case found matching roster id:', id);
+        }
+      }
+
+      // Locked statuses that require admin override
+      const lockedStatuses = ['scheduled', 'in_progress', 'completed'];
+      const isLocked = caseStatus && lockedStatuses.includes(String(caseStatus).toLowerCase());
+      console.log(`   Is Locked? ${isLocked} (Status: ${caseStatus})`);
+      console.log(`   Is Admin? ${isAdmin} (Role: ${req.user ? req.user.role : 'none'})`);
+
+      if (isLocked) {
+        if (!isAdmin) {
+          console.warn(`⚠️ BLOCKED: Non-admin user attempted to modify ${driver_name != null ? 'driver' : 'vehicle'} for case ${caseName}`);
+          return res.status(403).json({
+            success: false,
+            error: `This case (${caseName}) has been submitted and scheduled. Only administrators can modify driver or vehicle assignments after submission.`,
+            case_status: caseStatus,
+            requires_admin: true
+          });
+        } else {
+          console.log(`⚠️ ADMIN OVERRIDE: Admin is modifying ${driver_name != null ? 'driver' : 'vehicle'} for case ${caseName}`);
+        }
+      } else {
+        console.log('   ✅ Modification allowed (Case not locked)');
+      }
+    }
+    // ================== END ADMIN-ONLY OVERRIDE CHECK ==================
 
     // If changing vehicle, perform conflict checks
     if (vehicle_id != null) {

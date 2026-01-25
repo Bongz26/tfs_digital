@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TFS Digital | System Presentation 2026</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-red: #8B0000;
+            --gold: #D4AF37;
+            --dark: #121212;
+            --light-gray: #f4f4f4;
+            --white: #ffffff;
+            --gold-bright: #FFD700;
+            --transition-speed: 0.8s;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        body {
+            background-color: var(--dark);
+            color: var(--white);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Slide Container */
+        .presentation-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            transition: transform var(--transition-speed) cubic-bezier(0.77, 0, 0.175, 1);
+        }
+
+        .slide {
+            min-width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 4rem;
+            position: relative;
+            overflow: hidden;
+            background-size: cover;
+            background-position: center;
+        }
+
+        /* Overlay to make text readable on image backgrounds */
+        .slide::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(18, 18, 18, 0.95) 0%, rgba(139, 0, 0, 0.4) 100%);
+            z-index: 1;
+        }
+
+        .slide-content {
+            position: relative;
+            z-index: 2;
+            max-width: 1100px;
+            width: 100%;
+            animation: fadeIn 1s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Typography */
+        h1 {
+            font-size: 5rem;
+            font-weight: 700;
+            color: var(--gold);
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: -2px;
+            line-height: 1;
+        }
+
+        h2 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            color: var(--gold);
+            margin-bottom: 2rem;
+            border-left: 8px solid var(--primary-red);
+            padding-left: 1.5rem;
+        }
+
+        .subtitle {
+            font-size: 1.8rem;
+            color: var(--light-gray);
+            font-weight: 300;
+            margin-bottom: 3rem;
+            max-width: 800px;
+        }
+
+        ul {
+            list-style: none;
+            margin-top: 2rem;
+        }
+
+        li {
+            font-size: 1.8rem;
+            margin-bottom: 1.2rem;
+            display: flex;
+            align-items: center;
+        }
+
+        li::before {
+            content: '•';
+            color: var(--gold);
+            font-size: 2.5rem;
+            margin-right: 1rem;
+        }
+
+        .badge {
+            display: inline-block;
+            background: var(--primary-red);
+            color: white;
+            padding: 0.5rem 1.5rem;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        /* Image Display */
+        .slide-image-container {
+            margin-top: 3rem;
+            border: 4px solid var(--gold);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            border-radius: 12px;
+            overflow: hidden;
+            max-height: 500px;
+        }
+
+        .slide-image-container img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Controls */
+        .controls {
+            position: fixed;
+            bottom: 30px;
+            right: 50px;
+            z-index: 10;
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            background: rgba(212, 175, 55, 0.2);
+            border: 2px solid var(--gold);
+            color: var(--gold);
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: 0.3s;
+            font-size: 1.5rem;
+        }
+
+        .btn:hover {
+            background: var(--gold);
+            color: var(--dark);
+        }
+
+        .progress-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            height: 6px;
+            background: var(--gold);
+            z-index: 11;
+            transition: width 0.3s ease;
+        }
+
+        .slide-number {
+            position: fixed;
+            bottom: 30px;
+            left: 50px;
+            color: var(--gold);
+            font-size: 1.2rem;
+            font-weight: 600;
+            z-index: 10;
+        }
+
+        /* Specific Slide Designs */
+        #slide-title {
+            background-image: url('tfs_presentation_title_slide_1768911071091.png');
+        }
+
+        #slide-dashboard {
+            background-image: url('tfs_dashboard_mockup_slide_1768911092091.png');
+        }
+
+        #slide-inventory {
+            background-image: url('tfs_inventory_mockup_slide_1768911118221.png');
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="progress-bar" id="progressBar"></div>
+    <div class="slide-number" id="slideNumber">1 / 10</div>
+
+    <div class="presentation-container" id="slider">
+
+        <!-- SLIDE 1: TITLE -->
+        <section class="slide" id="slide-title">
+            <div class="slide-content">
+                <span class="badge">Innovation 2026</span>
+                <h1>TFS Digital</h1>
+                <p class="subtitle">A Proactive, Dignified Management System for Thusanang Funeral Services.</p>
+                <p style="color: var(--gold); font-weight: 600; margin-top: 2rem;">Presented by: Bongani Khumalo</p>
+            </div>
+        </section>
+
+        <!-- SLIDE 2: THE VISION -->
+        <section class="slide">
+            <div class="slide-content">
+                <h2>The Vision</h2>
+                <p class="subtitle">Moving from manual record-keeping to proactive, data-driven excellence.</p>
+                <ul>
+                    <li>100% Real-time operational visibility.</li>
+                    <li>Automated fulfillment tracking.</li>
+                    <li>Maximum dignity through seamless efficiency.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- SLIDE 3: CLIENT INTAKE -->
+        <section class="slide">
+            <div class="slide-content">
+                <span class="badge">Module 1</span>
+                <h2>Smart Consultation</h2>
+                <p class="subtitle">Capuring every detail with professional precision.</p>
+                <ul>
+                    <li><strong>Benefit Exchange:</strong> Seamlessly swap benefits (e.g., Cow for Groceries).</li>
+                    <li><strong>Digital Plan Logic:</strong> Automatic pricing for Motjha and Special plans.</li>
+                    <li><strong>Clean Outputs:</strong> Professional printouts that show only chosen benefits.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- SLIDE 4: DASHBOARD -->
+        <section class="slide" id="slide-dashboard">
+            <div class="slide-content">
+                <span class="badge">Module 2</span>
+                <h2>Operational Command Center</h2>
+                <p class="subtitle">Everything management needs at a single glance.</p>
+                <ul>
+                    <li><strong>Live Grocery Tracker:</strong> Real-time status of benefit fulfillment.</li>
+                    <li><strong>Vehicle Availability:</strong> Visual indicators for high-demand Saturdays.</li>
+                    <li><strong>Conflict Detection:</strong> Automatic alerts for overlapping service times.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- SLIDE 5: ACTIVE CASES -->
+        <section class="slide">
+            <div class="slide-content">
+                <span class="badge">Post-Nov Update</span>
+                <h2>"Small Service" Intelligence</h2>
+                <p class="subtitle">Operational flexibility for every type of arrangement.</p>
+                <ul>
+                    <li><strong>Yard Burial Logic:</strong> Automated adjustment for smaller services.</li>
+                    <li><strong>Resource Optimization:</strong> Minimum 1 vehicle requirement instead of 3.</li>
+                    <li><strong>Bypass Validation:</strong> Ensuring Yard Burials progress without delay.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- SLIDE 6: STOCK CONTROL -->
+        <section class="slide" id="slide-inventory">
+            <div class="slide-content">
+                <span class="badge">Module 4</span>
+                <h2>Professional Stock Control</h2>
+                <p class="subtitle">Complete visibility over every asset and consumable.</p>
+                <ul>
+                    <li><strong>Instant Usage Alerts:</strong> Immediate SendGrid emails when caskets are used.</li>
+                    <li><strong>Low-Stock Guard:</strong> Individual thresholds for every item category.</li>
+                    <li><strong>Stock-Take Module:</strong> variance tracking for perfect record accuracy.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- SLIDE 7: PROCUREMENT -->
+        <section class="slide">
+            <div class="slide-content">
+                <span class="badge">Module 5</span>
+                <h2>Procurement & Tent Hiring</h2>
+                <p class="subtitle">Streamlined ordering for external resources.</p>
+                <ul>
+                    <li><strong>Supplier Integration:</strong> Direct hire for "Extra Tents" and equipment.</li>
+                    <li><strong>Digital POs:</strong> HTML orders sent directly to third-party suppliers.</li>
+                    <li><strong>GRV Tracking:</strong> Verifying every item received before it hits stock.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- SLIDE 8: ROSTER & FLEET -->
+        <section class="slide">
+            <div class="slide-content">
+                <span class="badge">Module 6</span>
+                <h2>Live Fleet Roster</h2>
+                <p class="subtitle">Maximum utilization of vehicles and drivers.</p>
+                <ul>
+                    <li><strong>Time-Based Logic:</strong> 2-hour buffers prevent service overlaps.</li>
+                    <li><strong>Independent Assignment:</strong> Assign any driver to any vehicle per case.</li>
+                    <li><strong>Conflict Prevention:</strong> Visual gaps help identify fleet availability.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- SLIDE 9: SUMMARY -->
+        <section class="slide">
+            <div class="slide-content">
+                <span class="badge">Summary</span>
+                <h2>Serving with Dignity</h2>
+                <p class="subtitle">TFS Digital ensures that every family receives the respect they deserve through
+                    flawless operational execution.</p>
+                <div style="margin-top: 4rem;">
+                    <p style="font-size: 2rem; color: var(--gold); font-weight: 700;">Dignity • Efficiency • Oversight
+                    </p>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <div class="controls">
+        <button class="btn" onclick="move(-1)">←</button>
+        <button class="btn" onclick="move(1)">→</button>
+    </div>
+
+    <script>
+        let currentSlide = 0;
+        const totalSlides = document.querySelectorAll('.slide').length;
+        const slider = document.getElementById('slider');
+        const progressBar = document.getElementById('progressBar');
+        const slideNumber = document.getElementById('slideNumber');
+
+        function move(dir) {
+            currentSlide = (currentSlide + dir + totalSlides) % totalSlides;
+            updateSlides();
+        }
+
+        function updateSlides() {
+            slider.style.transform = `translateX(-${currentSlide * 100}vw)`;
+            progressBar.style.width = `${((currentSlide + 1) / totalSlides) * 100}%`;
+            slideNumber.innerText = `${currentSlide + 1} / ${totalSlides}`;
+        }
+
+        // Keyboard support
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') move(1);
+            if (e.key === 'ArrowLeft') move(-1);
+        });
+
+        updateSlides();
+    </script>
+</body>
+
+</html>
