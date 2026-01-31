@@ -1,64 +1,48 @@
-const { query } = require('../config/db');
+// Using Supabase SDK instead of direct PostgreSQL for DNS compatibility
 
 exports.saveDraft = async (req, res) => {
   try {
+    const supabase = req.app.locals.supabase;
+    if (!supabase) {
+      return res.status(500).json({ success: false, error: 'Database not configured' });
+    }
+
     const { policy_number, data, department } = req.body;
     if (!policy_number || !data) return res.status(400).json({ success: false, error: 'policy_number and data are required' });
 
-    // Ensure table exists
-    await query(`
-      CREATE TABLE IF NOT EXISTS claim_drafts (
-        policy_number VARCHAR(100) PRIMARY KEY,
-        data JSONB,
-        department VARCHAR(50),
-        updated_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
+    // Upsert the draft
+    const { data: draft, error } = await supabase
+      .from('claim_drafts')
+      .upsert({
+        policy_number,
+        data,
+        department: department || null,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'policy_number'
+      })
+      .select()
+      .single();
 
-    const result = await query(
-      `INSERT INTO claim_drafts (policy_number, data, department)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (policy_number)
-       DO UPDATE SET data = EXCLUDED.data, department = COALESCE(EXCLUDED.department, claim_drafts.department), updated_at = NOW()
-       RETURNING *`,
-      [policy_number, data, department || null]
-    );
+    if (error) {
+      console.error('Error saving draft:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
 
+    // Handle airtime requests if applicable
     try {
-      await query(`
-        CREATE TABLE IF NOT EXISTS airtime_requests (
-          id SERIAL PRIMARY KEY,
-          case_id INT,
-          policy_number VARCHAR(100),
-          beneficiary_name VARCHAR(200),
-          network VARCHAR(50),
-          phone_number VARCHAR(20),
-          amount DECIMAL(12,2) DEFAULT 0,
-          status VARCHAR(20) DEFAULT 'pending',
-          requested_by UUID,
-          requested_by_email VARCHAR(200),
-          requested_by_role VARCHAR(50),
-          requested_at TIMESTAMP DEFAULT NOW(),
-          sent_at TIMESTAMP,
-          handled_by UUID,
-          operator_phone VARCHAR(50),
-          operator_notes TEXT
-        )
-      `);
-      await query(`ALTER TABLE airtime_requests ADD COLUMN IF NOT EXISTS requested_at TIMESTAMP DEFAULT NOW()`);
-
-      const draft = result.rows[0];
       const d = draft?.data || {};
       const hasAirtime = !!d.airtime;
       const network = (d.airtime_network || '').trim();
       const phone = (d.airtime_number || '').trim();
 
       if (hasAirtime && network && phone) {
-        // Check for ANY existing request for this policy
-        const existing = await query(
-          `SELECT id, status FROM airtime_requests WHERE policy_number = $1 LIMIT 1`,
-          [policy_number]
-        );
+        const { data: existing } = await supabase
+          .from('airtime_requests')
+          .select('id, status')
+          .eq('policy_number', policy_number)
+          .limit(1)
+          .single();
 
         const planAmounts = {
           'Plan A': 100, 'Plan B': 100, 'Plan C': 100, 'Plan D': 200, 'Plan E': 200, 'Plan F': 200,
@@ -67,44 +51,35 @@ exports.saveDraft = async (req, res) => {
         const planKey = String(d.plan_name || '').trim();
         const amount = planAmounts[planKey] || 0;
 
-        if (existing.rows.length > 0) {
-          const row = existing.rows[0];
-          if (row.status === 'pending') {
-            // Update the existing pending request
-            await query(
-              `UPDATE airtime_requests 
-                 SET phone_number = $1, network = $2, beneficiary_name = $3, amount = $4, updated_at = NOW()
-                 WHERE id = $5`,
-              [phone, network, d.nok_name || null, parseFloat(amount || 0) || 0, row.id]
-            );
+        if (existing) {
+          if (existing.status === 'pending') {
+            await supabase
+              .from('airtime_requests')
+              .update({
+                phone_number: phone,
+                network,
+                beneficiary_name: d.nok_name || null,
+                amount: parseFloat(amount || 0) || 0
+              })
+              .eq('id', existing.id);
           }
-          // If status is NOT pending (e.g. 'sent'), do nothing. Prevent duplicate.
         } else {
-          // No request exists at all, create one
-          await query(
-            `INSERT INTO airtime_requests (
-              case_id, policy_number, beneficiary_name, network, phone_number, amount,
-              status, requested_by, requested_by_email, requested_by_role, operator_notes, operator_phone
-            ) VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8,$9,$10,$11)`,
-            [
-              null,
+          await supabase
+            .from('airtime_requests')
+            .insert({
               policy_number,
-              d.nok_name || null,
+              beneficiary_name: d.nok_name || null,
               network,
-              phone,
-              parseFloat(amount || 0) || 0,
-              null,
-              null,
-              null,
-              'Auto from claim draft',
-              null
-            ]
-          );
+              phone_number: phone,
+              amount: parseFloat(amount || 0) || 0,
+              status: 'pending',
+              operator_notes: 'Auto from claim draft'
+            });
         }
       }
     } catch (_) { }
 
-    res.status(201).json({ success: true, draft: result.rows[0] });
+    res.status(201).json({ success: true, draft });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -112,10 +87,23 @@ exports.saveDraft = async (req, res) => {
 
 exports.getDraft = async (req, res) => {
   try {
+    const supabase = req.app.locals.supabase;
+    if (!supabase) {
+      return res.status(500).json({ success: false, error: 'Database not configured' });
+    }
+
     const { policy } = req.params;
-    const result = await query('SELECT * FROM claim_drafts WHERE policy_number = $1', [policy]);
-    if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Draft not found' });
-    res.json({ success: true, draft: result.rows[0] });
+    const { data, error } = await supabase
+      .from('claim_drafts')
+      .select('*')
+      .eq('policy_number', policy)
+      .single();
+
+    if (error || !data) {
+      return res.status(404).json({ success: false, error: 'Draft not found' });
+    }
+
+    res.json({ success: true, draft: data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -123,9 +111,23 @@ exports.getDraft = async (req, res) => {
 
 exports.getLastDraft = async (req, res) => {
   try {
-    const result = await query('SELECT * FROM claim_drafts ORDER BY updated_at DESC LIMIT 1');
-    if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'No drafts' });
-    res.json({ success: true, draft: result.rows[0] });
+    const supabase = req.app.locals.supabase;
+    if (!supabase) {
+      return res.status(500).json({ success: false, error: 'Database not configured' });
+    }
+
+    const { data, error } = await supabase
+      .from('claim_drafts')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !data) {
+      return res.status(404).json({ success: false, error: 'No drafts' });
+    }
+
+    res.json({ success: true, draft: data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -133,16 +135,31 @@ exports.getLastDraft = async (req, res) => {
 
 exports.listDrafts = async (req, res) => {
   try {
-    const { department } = req.query;
-    let sql = 'SELECT policy_number, updated_at, department, data FROM claim_drafts';
-    const params = [];
-    if (department) {
-      params.push(department);
-      sql += ` WHERE department = $${params.length}`;
+    const supabase = req.app.locals.supabase;
+    if (!supabase) {
+      return res.status(500).json({ success: false, error: 'Database not configured' });
     }
-    sql += ' ORDER BY updated_at DESC';
-    const result = await query(sql, params);
-    res.json({ success: true, drafts: result.rows });
+
+    const { department } = req.query;
+
+    let query = supabase
+      .from('claim_drafts')
+      .select('policy_number, updated_at, department, data');
+
+    if (department) {
+      query = query.eq('department', department);
+    }
+
+    query = query.order('updated_at', { ascending: false });
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error listing drafts:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    res.json({ success: true, drafts: data || [] });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -150,27 +167,23 @@ exports.listDrafts = async (req, res) => {
 
 exports.getDraftHistory = async (req, res) => {
   try {
-    await query(`
-      CREATE TABLE IF NOT EXISTS claim_draft_deletions (
-        id SERIAL PRIMARY KEY,
-        policy_number VARCHAR(100) NOT NULL,
-        department VARCHAR(50),
-        data JSONB,
-        deleted_by UUID,
-        deleted_by_email VARCHAR(200),
-        deleted_by_role VARCHAR(50),
-        reason TEXT,
-        deleted_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
+    const supabase = req.app.locals.supabase;
+    if (!supabase) {
+      return res.status(500).json({ success: false, error: 'Database not configured' });
+    }
 
-    const result = await query(
-      `SELECT policy_number, department, deleted_at, reason, data 
-       FROM claim_draft_deletions 
-       ORDER BY deleted_at DESC 
-       LIMIT 50`
-    );
-    res.json({ success: true, history: result.rows });
+    const { data, error } = await supabase
+      .from('claim_draft_deletions')
+      .select('policy_number, department, deleted_at, reason, data')
+      .order('deleted_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error('Error getting draft history:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    res.json({ success: true, history: data || [] });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -178,42 +191,50 @@ exports.getDraftHistory = async (req, res) => {
 
 exports.deleteDraft = async (req, res) => {
   try {
+    const supabase = req.app.locals.supabase;
+    if (!supabase) {
+      return res.status(500).json({ success: false, error: 'Database not configured' });
+    }
+
     const { policy } = req.params;
     const reason = (req.body && req.body.reason) ? String(req.body.reason).trim() : '';
 
-    const result = await query('DELETE FROM claim_drafts WHERE policy_number = $1 RETURNING *', [policy]);
-    if (result.rows.length === 0) return res.status(404).json({ success: false, error: 'Draft not found' });
+    // First get the draft to log it
+    const { data: deletedRow, error: selectError } = await supabase
+      .from('claim_drafts')
+      .select('*')
+      .eq('policy_number', policy)
+      .single();
 
-    // Ensure deletion log table exists
-    await query(`
-      CREATE TABLE IF NOT EXISTS claim_draft_deletions (
-        id SERIAL PRIMARY KEY,
-        policy_number VARCHAR(100) NOT NULL,
-        department VARCHAR(50),
-        data JSONB,
-        deleted_by UUID,
-        deleted_by_email VARCHAR(200),
-        deleted_by_role VARCHAR(50),
-        reason TEXT,
-        deleted_at TIMESTAMP DEFAULT NOW()
-      )
-    `);
+    if (selectError || !deletedRow) {
+      // Draft not found - treat as success (idempotent)
+      return res.json({ success: true, message: 'Draft not found or already deleted' });
+    }
 
-    const deletedRow = result.rows[0];
+    // Delete the draft
+    const { error: deleteError } = await supabase
+      .from('claim_drafts')
+      .delete()
+      .eq('policy_number', policy);
+
+    if (deleteError) {
+      console.error('Error deleting draft:', deleteError);
+      return res.status(500).json({ success: false, error: deleteError.message });
+    }
+
+    // Log the deletion
     const user = req.user || {};
-    await query(
-      `INSERT INTO claim_draft_deletions (policy_number, department, data, deleted_by, deleted_by_email, deleted_by_role, reason)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        deletedRow.policy_number,
-        deletedRow.department || null,
-        deletedRow.data || null,
-        user.id || null,
-        user.email || null,
-        user.role || null,
-        reason || null
-      ]
-    );
+    await supabase
+      .from('claim_draft_deletions')
+      .insert({
+        policy_number: deletedRow.policy_number,
+        department: deletedRow.department || null,
+        data: deletedRow.data || null,
+        deleted_by: user.id || null,
+        deleted_by_email: user.email || null,
+        deleted_by_role: user.role || null,
+        reason: reason || null
+      });
 
     res.json({ success: true, deleted: true });
   } catch (err) {

@@ -8,6 +8,7 @@ import { fetchRoster, updateRoster } from '../api/roster';
 import { API_HOST } from '../api/config';
 import AssignVehicleModal from '../components/AssignVehicleModal';
 import AssignedTransportList from '../components/AssignedTransportList';
+import { prepareCaseForEdit } from '../utils/caseFormatters';
 
 export default function CaseDetails() {
   const { id } = useParams();
@@ -54,14 +55,22 @@ export default function CaseDetails() {
     loadCase();
   }, [id]);
 
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = async (e) => {
+    // Prevent any default form submission behavior
+    if (e) e.preventDefault();
+
     try {
       if (!window.confirm("Are you sure you want to update the case details?")) return;
       const updated = await updateCase(id, editForm);
       setCaseData(updated);
       setIsEditing(false);
-      alert("Case updated successfully");
+
+      // Use setTimeout to avoid alert causing navigation issues
+      setTimeout(() => {
+        alert("Case updated successfully");
+      }, 100);
     } catch (err) {
+      console.error('Update error:', err);
       alert("Failed to update case: " + (err.response?.data?.error || err.message));
     }
   };
@@ -100,7 +109,8 @@ export default function CaseDetails() {
           {user?.role === 'admin' && !isEditing && (
             <button
               onClick={() => {
-                setEditForm(caseData);
+                // Transform database data to HTML input-compatible formats
+                setEditForm(prepareCaseForEdit(caseData));
                 setIsEditing(true);
               }}
               className="bg-gray-800 text-white px-3 py-1 rounded text-sm hover:bg-gray-700 transition"
@@ -231,11 +241,29 @@ export default function CaseDetails() {
             <div className="space-y-2">
               <div>
                 <label className="text-xs font-semibold text-gray-500">Date</label>
-                <input type="date" className="w-full border rounded p-1" value={editForm.funeral_date || ''} onChange={e => setEditForm({ ...editForm, funeral_date: e.target.value })} />
+                <input
+                  type="date"
+                  className="w-full border rounded p-1"
+                  value={editForm.funeral_date || editForm.service_date || ''}
+                  onChange={e => setEditForm({
+                    ...editForm,
+                    funeral_date: e.target.value,
+                    service_date: e.target.value  // Keep both in sync
+                  })}
+                />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-500">Time</label>
-                <input type="time" className="w-full border rounded p-1" value={editForm.funeral_time || ''} onChange={e => setEditForm({ ...editForm, funeral_time: e.target.value })} />
+                <input
+                  type="time"
+                  className="w-full border rounded p-1"
+                  value={editForm.funeral_time || editForm.service_time || ''}
+                  onChange={e => setEditForm({
+                    ...editForm,
+                    funeral_time: e.target.value,
+                    service_time: e.target.value  // Keep both in sync
+                  })}
+                />
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-500">Venue</label>

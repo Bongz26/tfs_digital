@@ -106,9 +106,25 @@ export default function ActiveCases() {
 
   const handleToggleYardBurial = async (caseId, currentState) => {
     try {
+      // Optimistically update UI immediately for better UX
+      setCases(prevCases =>
+        prevCases.map(c =>
+          c.id === caseId ? { ...c, is_yard_burial: !currentState } : c
+        )
+      );
+
+      // Update backend
       await updateCaseVenue(caseId, { is_yard_burial: !currentState });
+
+      // Refresh to ensure consistency
       await loadData();
     } catch (err) {
+      // Revert on error
+      setCases(prevCases =>
+        prevCases.map(c =>
+          c.id === caseId ? { ...c, is_yard_burial: currentState } : c
+        )
+      );
       alert("Failed to update burial type: " + (err.response?.data?.message || err.message));
     }
   };

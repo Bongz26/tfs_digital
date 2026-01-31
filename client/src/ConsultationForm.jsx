@@ -538,6 +538,7 @@ export default function ConsultationForm() {
     // Exchange Logic: Auto-check the required item if swapped
     const isExchange = form.benefit_exchange && form.benefit_exchange !== 'standard';
 
+    const isStillBornPlan = /still\s*born/i.test(form.plan_name || '');
     setForm(prev => ({
       ...prev,
       casket_type: shouldAutoSetCasket ? (benefits.casket || '') : prev.casket_type,
@@ -545,7 +546,7 @@ export default function ConsultationForm() {
       cover_amount: benefits.cover || 0,
       cashback_amount: nextCashbackAmount,
       benefit_mode: nextBenefitMode,
-      programs: benefits.programmes || prev.programs,
+      programs: isStillBornPlan ? 0 : (benefits.programmes || prev.programs),
       airtime: hasAirtimeBenefit ? true : false,
 
       // Auto-set requirements based on exchange
@@ -1043,6 +1044,24 @@ export default function ConsultationForm() {
   };
 
   const renderBenefitsList = (data) => {
+    // FIX: Special handling for Private Still Born cases to exclude standard plan benefits
+    // Checks for "Still Born" in plan name OR "Still Born" in casket type OR "1.9 Feet" casket (standard for stillborns)
+    const isStillBorn = /still\s*born/i.test(data.plan_name || '')
+      || /still\s*born/i.test(data.casket_type || '')
+      || (data.casket_type || '').includes('1.9 Feet');
+
+    if (data.service_type === 'private' && isStillBorn) {
+      return (
+        <div className="space-y-2">
+          <div className="font-semibold">Private Service: {data.casket_type}</div>
+          <ul className="list-disc pl-5">
+            <li>Casket: {data.casket_type}</li>
+            <li>1 Service (Incl. Hearse)</li>
+          </ul>
+        </div>
+      );
+    }
+
     const isSpecial = data.plan_category === 'specials';
     const benefits = isSpecial
       ? (SPECIAL_PLAN_BENEFITS[data.plan_name] || {})
@@ -1984,7 +2003,10 @@ export default function ConsultationForm() {
                     ) : (
                       <select
                         value={getAutoCasketType()}
-                        onChange={e => handleInputChange('casket_type', e.target.value)}
+                        onChange={e => {
+                          handleInputChange('casket_type', e.target.value);
+                          if (e.target.value.includes('1.9 Feet')) handleInputChange('programs', 0);
+                        }}
                         className="w-full px-4 py-3 border rounded-lg bg-white"
                       >
                         <option value="">-- Select Casket --</option>
@@ -2012,11 +2034,11 @@ export default function ConsultationForm() {
                       <option value="MIDBROWN">MIDBROWN</option>
                     </select>
                   </div>
-                  <div><label>Service Venue</label><input value={form.venue_name} onChange={e => handleInputChange('venue_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
-                  <div><label>Full Address (GPS) <span className="text-red-600">*</span></label><input required value={form.venue_address} onChange={e => handleInputChange('venue_address', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+                  <div><label>Service Venue</label><input value={form.venue_name || ''} onChange={e => handleInputChange('venue_name', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
+                  <div><label>Full Address (GPS) <span className="text-red-600">*</span></label><input required value={form.venue_address || ''} onChange={e => handleInputChange('venue_address', e.target.value)} className="w-full px-4 py-3 border rounded-lg" /></div>
                   <div className="md:col-span-2">
                     <label>Burial Place</label>
-                    <input value={form.burial_place} onChange={e => handleInputChange('burial_place', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder="e.g. Avalon Cemetery" />
+                    <input value={form.burial_place || ''} onChange={e => handleInputChange('burial_place', e.target.value)} className="w-full px-4 py-3 border rounded-lg" placeholder="e.g. Avalon Cemetery" />
                   </div>
                 </div>
               </div>
@@ -2220,10 +2242,19 @@ export default function ConsultationForm() {
                   <div className="print-row col-span-2"><span className="font-bold w-32">Deceased:</span> <span>{printedData.deceased_name}</span></div>
                   <div className="print-row col-span-2"><span className="font-bold w-32">Claimant:</span> <span>{printedData.nok_name}</span></div>
                   <div className="print-row col-span-2"><span className="font-bold w-32">Contact:</span> <span>{printedData.nok_contact}</span></div>
+                  <div className="print-row col-span-2"><span className="font-bold w-32">Cleansing:</span> <span>{printedData.cleansing_date} {printedData.cleansing_time}</span></div>
                 </div>
                 <div className="mt-6">
                   <h3 className="font-bold border-b border-gray-300 mb-2">Plan Benefits Included:</h3>
                   {renderBenefitsList(printedData)}
+
+                  <div className="mt-8 pt-4 border-t-2 border-gray-400 break-inside-avoid">
+                    <p className="text-[10px] italic mb-8">I acknowledge that all details above are correct and confirmed similar to what is on the case receipt.</p>
+                    <div className="flex justify-between mt-8">
+                      <div className="border-t border-black w-1/3 pt-1 text-center font-bold text-xs">Office Personnel</div>
+                      <div className="border-t border-black w-1/3 pt-1 text-center font-bold text-xs">Client Signature</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : printMode === 'supplier' ? (
@@ -2344,7 +2375,7 @@ export default function ConsultationForm() {
                     <div className="print-section-title">{printedData.benefit_exchange === 'standard' ? 'LOGISTICS' : 'BENEFIT EXCHANGE'}</div>
                     {printedData.benefit_exchange === 'standard' ? (
                       <>
-                        <div className="print-row"><div className="print-label">CLEANSING</div><div className="print-value">{printedData.cleansing_date} {printedData.cleansing_time}</div></div>
+
                         <div className="print-row"><div className="print-label">DELIVERY</div><div className="print-value">{printedData.delivery_date} {printedData.delivery_time}</div></div>
                         <div className="print-row"><div className="print-label">SERVICE</div><div className="print-value">{printedData.service_date} {printedData.service_time}</div></div>
                         <div className="print-row"><div className="print-label">CHURCH</div><div className="print-value">{printedData.church_date} {printedData.church_time}</div></div>
@@ -2427,7 +2458,17 @@ export default function ConsultationForm() {
 
                     <div className="checklist-item"><span className="checklist-label">Flower</span> <span className="checklist-val">{printedData.requires_flower ? 'YES' : 'NO'}</span></div>
                     <div className="checklist-item"><span className="checklist-label">Bus</span> <span className="checklist-val">{printedData.requires_bus ? 'YES' : 'NO'}</span></div>
-                    <div className="checklist-item"><span className="checklist-label">Programmes</span> <span className="checklist-val">{printedData.programs || 'NO'}</span></div>
+                    <div className="checklist-item">
+                      <span className="checklist-label">Programmes</span>
+                      <span className="checklist-val">
+                        {(() => {
+                          const isStillBorn = /still\s*born/i.test(printedData.plan_name || '')
+                            || /still\s*born/i.test(printedData.casket_type || '')
+                            || (printedData.casket_type || '').includes('1.9 Feet');
+                          return isStillBorn ? '0' : (printedData.programs || 'NO');
+                        })()}
+                      </span>
+                    </div>
 
                     <div className="checklist-item"><span className="checklist-label">Catering</span> <span className="checklist-val">{printedData.requires_catering ? 'YES' : 'NO'}</span></div>
                     <div className="checklist-item"><span className="checklist-label">Airtime</span> <span className="checklist-val">{printedData.airtime ? 'YES' : 'NO'}</span></div>

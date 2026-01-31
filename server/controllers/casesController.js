@@ -20,38 +20,56 @@ exports.lookupCase = async (req, res) => {
             });
         }
 
+        const supabase = req.app.locals.supabase;
+        if (!supabase) {
+            return res.status(500).json({ success: false, error: 'Database not configured' });
+        }
+
         let found = null;
 
         if (!found && idVal) {
-            const r = await query(
-                `SELECT * FROM cases WHERE deceased_id = $1 ORDER BY created_at DESC LIMIT 1`,
-                [idVal]
-            );
-            found = r.rows[0] || null;
+            const { data } = await supabase
+                .from('cases')
+                .select('*')
+                .eq('deceased_id', idVal)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+            found = data;
         }
 
         if (!found && caseNo) {
-            const r = await query(
-                `SELECT * FROM cases WHERE case_number = $1 ORDER BY created_at DESC LIMIT 1`,
-                [caseNo]
-            );
-            found = r.rows[0] || null;
+            const { data } = await supabase
+                .from('cases')
+                .select('*')
+                .eq('case_number', caseNo)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+            found = data;
         }
 
         if (!found && policyNo) {
-            const r = await query(
-                `SELECT * FROM cases WHERE policy_number = $1 ORDER BY created_at DESC LIMIT 1`,
-                [policyNo]
-            );
-            found = r.rows[0] || null;
+            const { data } = await supabase
+                .from('cases')
+                .select('*')
+                .eq('policy_number', policyNo)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+            found = data;
         }
 
         if (!found && nameVal && contactVal) {
-            const r = await query(
-                `SELECT * FROM cases WHERE LOWER(deceased_name) = LOWER($1) AND nok_contact = $2 ORDER BY created_at DESC LIMIT 1`,
-                [nameVal, contactVal]
-            );
-            found = r.rows[0] || null;
+            const { data } = await supabase
+                .from('cases')
+                .select('*')
+                .ilike('deceased_name', nameVal)
+                .eq('nok_contact', contactVal)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+            found = data;
         }
 
         if (!found) {
@@ -196,15 +214,14 @@ exports.getAllCases = async (req, res) => {
 };
 
 // --- CREATE NEW CASE ---
+// --- CREATE NEW CASE ---
 exports.createCase = async (req, res) => {
     console.log('📥 [POST /api/cases] Request received at', new Date().toISOString());
-    console.log('📦 [POST /api/cases] Request body keys:', Object.keys(req.body));
-    console.log('📦 [POST /api/cases] Date fields:', {
-        delivery_date: req.body.delivery_date,
-        service_date: req.body.service_date,
-        funeral_date: req.body.funeral_date,
-        intake_day: req.body.intake_day
-    });
+
+    const supabase = req.app.locals.supabase;
+    if (!supabase) {
+        return res.status(500).json({ success: false, error: 'Database not configured' });
+    }
 
     const {
         case_number,
@@ -224,8 +241,6 @@ exports.createCase = async (req, res) => {
         programs, top_up_amount, top_up_type, top_up_reference, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
         legacy_plan_name,
-        status,
-        burial_place,
         branch,
         tombstone_type,
         collection_type,
@@ -233,13 +248,11 @@ exports.createCase = async (req, res) => {
         is_yard_burial
     } = req.body;
 
+    let { status, burial_place } = req.body;
+
     try {
         if (!intake_day) {
-            return res.status(400).json({
-                success: false,
-                error: 'Intake day is required',
-                details: 'Intake day must be provided and must be a Wednesday'
-            });
+            return res.status(400).json({ success: false, error: 'Intake day is required' });
         }
 
         const intakeDate = new Date(intake_day);
@@ -252,37 +265,26 @@ exports.createCase = async (req, res) => {
             });
         }
 
-        if (!delivery_date) {
-            return res.status(400).json({
-                success: false,
-                error: 'Delivery date is required',
-                details: 'Delivery date must be provided'
-            });
-        }
-
-        if (!delivery_time) {
-            return res.status(400).json({
-                success: false,
-                error: 'Delivery time is required',
-                details: 'Delivery time must be provided'
-            });
+        if (!delivery_date || !delivery_time) {
+            return res.status(400).json({ success: false, error: 'Delivery date and time are required' });
         }
 
         let finalCaseNumber = case_number;
         if (!finalCaseNumber) {
             const year = new Date().getFullYear();
-            const maxCaseResult = await query(
-                `SELECT case_number FROM cases 
-         WHERE case_number LIKE $1 
-         ORDER BY case_number DESC 
-         LIMIT 1`,
-                [`THS-${year}-%`]
-            );
+            const pattern = `THS-${year}-%`;
+
+            const { data: maxCase } = await supabase
+                .from('cases')
+                .select('case_number')
+                .like('case_number', pattern)
+                .order('case_number', { ascending: false })
+                .limit(1)
+                .maybeSingle();
 
             let nextNumber = 1;
-            if (maxCaseResult.rows.length > 0) {
-                const lastCaseNumber = maxCaseResult.rows[0].case_number;
-                const match = lastCaseNumber.match(/THS-\d{4}-(\d+)/);
+            if (maxCase && maxCase.case_number) {
+                const match = maxCase.case_number.match(/THS-\d{4}-(\d+)/);
                 if (match) {
                     nextNumber = parseInt(match[1], 10) + 1;
                 }
@@ -294,6 +296,7 @@ exports.createCase = async (req, res) => {
 
         console.log('🔍 [POST /api/cases] Attempting to insert case with case_number:', finalCaseNumber);
 
+        // DUPLICATE CHECK
         try {
             const idKey = String(deceased_id || '').trim();
             const polKey = String(policy_number || '').trim();
@@ -302,41 +305,47 @@ exports.createCase = async (req, res) => {
 
             let dup = null;
 
-            // IMPORTANT: Check for COMBINATION of policy + deceased_id (not policy alone)
-            // This allows multiple deceased people on the same family policy
             if (idKey && polKey) {
-                const r = await query(
-                    `SELECT id, case_number, status, created_at FROM cases 
-                     WHERE deceased_id = $1 
-                       AND UPPER(REGEXP_REPLACE(COALESCE(policy_number,''),'\\s+','', 'g')) = UPPER(REGEXP_REPLACE($2,'\\s+','', 'g'))
-                       AND status != 'cancelled' 
-                     ORDER BY created_at DESC LIMIT 1`,
-                    [idKey, polKey]
-                );
-                dup = r.rows[0] || null;
+                const { data: candidates } = await supabase
+                    .from('cases')
+                    .select('*')
+                    .eq('deceased_id', idKey)
+                    .neq('status', 'cancelled')
+                    .order('created_at', { ascending: false });
+
+                if (candidates && candidates.length > 0) {
+                    const normPol = polKey.replace(/\s+/g, '').toUpperCase();
+                    dup = candidates.find(c => (c.policy_number || '').replace(/\s+/g, '').toUpperCase() === normPol);
+                }
+            } else if (idKey) {
+                const { data: d } = await supabase
+                    .from('cases')
+                    .select('*')
+                    .eq('deceased_id', idKey)
+                    .neq('status', 'cancelled')
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                dup = d;
             }
-            // If no policy but has ID, check by ID only
-            else if (idKey) {
-                const r = await query(
-                    `SELECT id, case_number, status, created_at FROM cases 
-                     WHERE deceased_id = $1 AND status != 'cancelled' 
-                     ORDER BY created_at DESC LIMIT 1`,
-                    [idKey]
-                );
-                dup = r.rows[0] || null;
-            }
-            // Check by name + contact (for cases without ID)
+
             if (!dup && nameKey && contactKey) {
-                const r = await query(
-                    `SELECT id, case_number, status, created_at FROM cases 
-                     WHERE LOWER(deceased_name) = LOWER($1) AND nok_contact = $2
-                       AND status != 'cancelled'
-                       AND created_at >= NOW() - INTERVAL '60 days'
-                     ORDER BY created_at DESC LIMIT 1`,
-                    [nameKey, contactKey]
-                );
-                dup = r.rows[0] || null;
+                const sixtyDaysAgo = new Date();
+                sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+                const { data: d } = await supabase
+                    .from('cases')
+                    .select('*')
+                    .ilike('deceased_name', nameKey)
+                    .eq('nok_contact', contactKey)
+                    .neq('status', 'cancelled')
+                    .gte('created_at', sixtyDaysAgo.toISOString())
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                dup = d;
             }
+
             if (dup) {
                 return res.status(409).json({
                     success: false,
@@ -349,127 +358,168 @@ exports.createCase = async (req, res) => {
             console.warn('⚠️ Duplicate-prevention check failed, proceeding with insert:', e.message);
         }
 
-        const finalFuneralDate = service_date || funeral_date; // align with frontend service_date
+        const finalFuneralDate = service_date || funeral_date;
         const finalFuneralTime = service_time || funeral_time;
 
-        const result = await query(
-            `INSERT INTO cases 
-       (case_number, claim_date, policy_number,
-        deceased_name, deceased_id, nok_name, nok_contact, nok_relation,
-        plan_category, plan_name, plan_members, plan_age_bracket,
-        funeral_date, funeral_time, service_date, service_time,
-        church_date, church_time, cleansing_date, cleansing_time,
-        venue_name, venue_address, venue_lat, venue_lng,
-        requires_cow, requires_sheep, requires_tombstone, requires_catering, requires_grocery, requires_bus,
-        service_type, total_price,
-        casket_type, casket_colour, delivery_date, delivery_time, intake_day,
-        programs, top_up_amount, top_up_type, top_up_reference, airtime, airtime_network, airtime_number,
-        cover_amount, cashback_amount, amount_to_bank,
-        legacy_plan_name, benefit_mode, status, burial_place, branch, tombstone_type, collection_type, collection_note, is_yard_burial)
-       VALUES (
-        $1,$2,$3,
-        $4,$5,$6,$7,$8,
-        $9,$10,$11,$12,
-        $13,$14,$15,$16,
-        $17,$18,$19,$20,
-        $21,$22,$23,$24,
-        $25,$26,$27,$28,$29,$30,
-        $31,$32,
-        $33,$34,$35,$36,$37,
-        $38,$39,$40,$41,$42,$43,$44,
-        $45,$46,$47,
-        $48,$49,$50,$51,$52,$53,$54,$55,$56)
-       RETURNING *`,
-            [
-                finalCaseNumber, claim_date || null, policy_number || null,
-                deceased_name, deceased_id || null, nok_name, nok_contact, nok_relation || null,
-                plan_category || null, plan_name || null, plan_members || null, plan_age_bracket || null,
-                finalFuneralDate, finalFuneralTime || null, service_date || null, service_time || null,
-                church_date || null, church_time || null, cleansing_date || null, cleansing_time || null,
-                venue_name || null, venue_address || null, venue_lat || null, venue_lng || null,
-                !!requires_cow, !!requires_sheep, !!requires_tombstone, !!requires_catering, !!requires_grocery, !!requires_bus,
-                service_type || null, total_price != null ? total_price : 0,
-                casket_type || null, casket_colour || null, delivery_date || null, delivery_time || null, intake_day,
-                programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, top_up_type || 'cash', top_up_reference || null, !!airtime, airtime_network || null, airtime_number || null,
-                cover_amount != null ? cover_amount : 0, cashback_amount != null ? cashback_amount : 0, amount_to_bank != null ? amount_to_bank : 0,
-                legacy_plan_name || null, benefit_mode || null, status || 'confirmed', burial_place || null, branch || 'Head Office', tombstone_type || null, collection_type || 'vehicle', collection_note || null,
-                !!is_yard_burial
-            ]
-        );
+        const newCase = {
+            case_number: finalCaseNumber,
+            claim_date: claim_date || null,
+            policy_number: policy_number || null,
+            deceased_name,
+            deceased_id: deceased_id || null,
+            nok_name,
+            nok_contact,
+            nok_relation: nok_relation || null,
+            plan_category: plan_category || null,
+            plan_name: plan_name || null,
+            plan_members: plan_members || null,
+            plan_age_bracket: plan_age_bracket || null,
+            funeral_date: finalFuneralDate,
+            funeral_time: finalFuneralTime || null,
+            service_date: service_date || null,
+            service_time: service_time || null,
+            church_date: church_date || null,
+            church_time: church_time || null,
+            cleansing_date: cleansing_date || null,
+            cleansing_time: cleansing_time || null,
+            venue_name: venue_name || null,
+            venue_address: venue_address || null,
+            venue_lat: venue_lat || null,
+            venue_lng: venue_lng || null,
+            requires_cow: !!requires_cow,
+            requires_sheep: !!requires_sheep,
+            requires_tombstone: !!requires_tombstone,
+            requires_catering: !!requires_catering,
+            requires_grocery: !!requires_grocery,
+            requires_bus: !!requires_bus,
+            service_type: service_type || null,
+            total_price: total_price != null ? total_price : 0,
+            casket_type: casket_type || null,
+            casket_colour: casket_colour || null,
+            delivery_date: delivery_date || null,
+            delivery_time: delivery_time || null,
+            intake_day,
+            programs: programs != null ? programs : 0,
+            top_up_amount: top_up_amount != null ? top_up_amount : 0,
+            top_up_type: top_up_type || 'cash',
+            top_up_reference: top_up_reference || null,
+            airtime: !!airtime,
+            airtime_network: airtime_network || null,
+            airtime_number: airtime_number || null,
+            cover_amount: cover_amount != null ? cover_amount : 0,
+            cashback_amount: cashback_amount != null ? cashback_amount : 0,
+            amount_to_bank: amount_to_bank != null ? amount_to_bank : 0,
+            legacy_plan_name: legacy_plan_name || null,
+            benefit_mode: benefit_mode || null,
+            status: status || 'confirmed',
+            burial_place: burial_place || null,
+            branch: branch || 'Head Office',
+            tombstone_type: tombstone_type || null,
+            collection_type: collection_type || 'vehicle',
+            collection_note: collection_note || null,
+            is_yard_burial: !!is_yard_burial
+        };
 
-        console.log('✅ [POST /api/cases] Case created successfully:', result.rows[0]?.id, result.rows[0]?.case_number);
-        const created = result.rows[0];
+        const { data: created, error: insertError } = await supabase
+            .from('cases')
+            .insert([newCase])
+            .select()
+            .single();
+
+        if (insertError) throw insertError;
+
+        console.log('✅ [POST /api/cases] Case created successfully:', created.id, created.case_number);
+
+        // STOCK DEDUCTION LOGIC - Using atomic function to prevent race conditions
         try {
             const nameStr = String(casket_type || '').trim();
             const colorStr = String(casket_colour || '').trim();
             if (nameStr) {
-                // Determine branch to check
                 const selectedBranch = (branch || 'Head Office').trim();
-
-                // Map 'Head Office' to its sub-locations for search priority
                 let locationsToCheck = [selectedBranch];
                 if (selectedBranch === 'Head Office') {
                     locationsToCheck = ['HQ Storeroom & showroom', 'Manekeng', 'Manekeng Showroom'];
                 }
 
-                let inv = { rows: [] };
-                let targetBranch = selectedBranch;
+                let invItem = null;
+                let targetLoc = selectedBranch;
 
-                // Try finding item in each potential location (in order)
+                // Try locations in preference order
                 for (const loc of locationsToCheck) {
-                    targetBranch = loc;
-                    // Query matching Name/Color AND Location
-                    if (colorStr) {
-                        inv = await query(
-                            "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) AND location = $3 LIMIT 1",
-                            [nameStr, colorStr, loc]
-                        );
-                    } else {
-                        inv = await query(
-                            "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) AND location = $2 LIMIT 1",
-                            [nameStr, loc]
-                        );
-                    }
+                    targetLoc = loc;
+                    // Find by Name + Location
+                    let query = supabase.from('inventory')
+                        .select('id, stock_quantity, name, model, color, location')
+                        .eq('category', 'coffin')
+                        .eq('location', loc)
+                        .ilike('name', nameStr)
+                        .order('stock_quantity', { ascending: false });
 
-                    if (inv.rows.length === 0) {
-                        // Fallback: Try Model Name matches in same branch
+                    const { data: matches } = await query;
+
+                    if (matches && matches.length > 0) {
                         if (colorStr) {
-                            inv = await query(
-                                "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) AND location = $3 LIMIT 1",
-                                [nameStr, colorStr, loc]
-                            );
+                            invItem = matches.find(i => !i.color || i.color.toLowerCase() === colorStr.toLowerCase());
                         } else {
-                            inv = await query(
-                                "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) AND location = $2 LIMIT 1",
-                                [nameStr, loc]
-                            );
+                            invItem = matches[0];
                         }
                     }
 
-                    if (inv.rows.length > 0) break; // Found it!
-                }
+                    if (!invItem) {
+                        // Fallback: Model + Location
+                        const { data: modelMatches } = await supabase.from('inventory')
+                            .select('id, stock_quantity, name, model, color, location')
+                            .eq('category', 'coffin')
+                            .eq('location', loc)
+                            .ilike('model', nameStr)
+                            .order('stock_quantity', { ascending: false });
 
-                if (inv.rows.length > 0) {
-                    const item = inv.rows[0];
-                    const previous = item.stock_quantity || 0;
-                    const nextQty = previous - 1; // Allow negative stock as per system behavior
-
-                    await query('UPDATE inventory SET stock_quantity=$1, updated_at=NOW() WHERE id=$2', [nextQty, item.id]);
-
-                    // Alert if stock goes negative or was already low
-                    if (nextQty < 0) {
-                        created.stock_warning = `Stock for ${nameStr} at ${targetBranch} is now negative (${nextQty}).`;
+                        if (modelMatches && modelMatches.length > 0) {
+                            if (colorStr) {
+                                invItem = modelMatches.find(i => !i.color || i.color.toLowerCase() === colorStr.toLowerCase());
+                            } else {
+                                invItem = modelMatches[0];
+                            }
+                        }
                     }
 
+                    if (invItem) break;
+                }
+
+                if (invItem) {
+                    // Use atomic decrement function to prevent race conditions
+                    const { decrementStock } = require('../utils/dbUtils');
+
                     try {
-                        await query(
-                            `INSERT INTO stock_movements (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
-                             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-                            [item.id, created.id, 'sale', -1, previous, nextQty, 'Case consumption', (req.user?.email) || 'system']
+                        const result = await decrementStock(
+                            invItem.id,
+                            1,
+                            req.user?.email || 'system',
+                            `Case consumption: ${created.case_number}`
                         );
-                    } catch (_) { }
+
+                        // Update case_id in the stock movement that was just created
+                        await supabase.from('stock_movements')
+                            .update({ case_id: created.id })
+                            .eq('inventory_id', invItem.id)
+                            .is('case_id', null)
+                            .gte('movement_date', new Date(Date.now() - 5000).toISOString())
+                            .order('movement_date', { ascending: false })
+                            .limit(1);
+
+                        // Attach warning if present
+                        if (result.message.includes('WARNING')) {
+                            created.stock_warning = result.message;
+                        }
+
+                        console.log(`✅ Stock decremented atomically: ${nameStr} at ${targetLoc}, new quantity: ${result.newQuantity}`);
+
+                    } catch (stockErr) {
+                        console.error('❌ Atomic stock decrement failed:', stockErr.message);
+                        created.stock_warning = `Failed to decrement stock: ${stockErr.message}`;
+                    }
+
                 } else {
-                    // Item not found in any valid location
                     created.stock_warning = `Stock item '${nameStr}' not found in inventory for ${selectedBranch}. Please add it to stock.`;
                     console.warn(`⚠️ Stock item '${nameStr}' not found at ${selectedBranch} for case ${created.case_number}`);
                 }
@@ -478,314 +528,237 @@ exports.createCase = async (req, res) => {
             console.warn('Error handling stock deduction:', e);
             created.stock_warning = 'Failed to process stock deduction.';
         }
+
+        // Low stock alerts
         try {
-            const to = process.env.INVENTORY_ALERTS_TO || process.env.ALERTS_TO || process.env.AIRTIME_OPERATOR_EMAIL;
-            const host = process.env.SMTP_HOST;
-            const port = parseInt(process.env.SMTP_PORT || '587', 10);
-            const user = process.env.SMTP_USER;
-            const pass = process.env.SMTP_PASS;
-            if (to && host && user && pass) {
-                const low = await query(`
-                                SELECT id, name, category, sku, stock_quantity, COALESCE(reserved_quantity,0) AS reserved_quantity,
-                                       low_stock_threshold, location, model, color
-                                FROM inventory
-                                ORDER BY category, name
-                            `);
-                const items = (low.rows || []).map(r => ({
-                    ...r,
-                    available_quantity: (r.stock_quantity || 0) - (r.reserved_quantity || 0)
-                })).filter(r => r.available_quantity <= 1);
-                if (items.length) {
-                    const nodemailer = require('nodemailer');
-                    const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
-                    const from = process.env.ALERTS_FROM || user;
-                    const subject = `Low Stock Alert: ${items.length} item(s) at qty ≤ 1`;
-                    const htmlRows = items.map(i => `
-                                    <tr>
-                                      <td style="padding:6px;border:1px solid #ddd;">${i.name}${i.color ? ' • ' + i.color : ''}</td>
-                                      <td style="padding:6px;border:1px solid #ddd;">${i.category}</td>
-                                      <td style="padding:6px;border:1px solid #ddd;">${i.stock_quantity}</td>
-                                      <td style="padding:6px;border:1px solid #ddd;">${i.reserved_quantity}</td>
-                                      <td style="padding:6px;border:1px solid #ddd;">${i.available_quantity}</td>
-                                      <td style="padding:6px;border:1px solid #ddd;">Threshold ${i.low_stock_threshold}</td>
-                                    </tr>
-                                `).join('');
-                    const html = `
-                                  <div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#222;">
-                                    <p>Low stock items at or below 1 available:</p>
-                                    <table style="border-collapse:collapse;min-width:520px;">
-                                      <thead>
-                                        <tr>
-                                          <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Item</th>
-                                          <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Category</th>
-                                          <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Stock</th>
-                                          <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Reserved</th>
-                                          <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Available</th>
-                                          <th style="padding:6px;border:1px solid #ddd;background:#f8f8f8;">Status</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        ${htmlRows}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                `;
-                    const text = items.map(i => `${i.name} ${i.color || ''} | ${i.category} | stock=${i.stock_quantity} reserved=${i.reserved_quantity} available=${i.available_quantity} threshold=${i.low_stock_threshold}`).join('\n');
-                    await transporter.sendMail({ from, to, subject, text, html });
-                }
-            }
+            await maybeNotifyLowStock(1, supabase);
         } catch (_) { }
 
+        // Delete draft
         try {
             if (policy_number) {
-                await query('DELETE FROM claim_drafts WHERE policy_number = $1', [policy_number]);
+                await supabase.from('claim_drafts').delete().eq('policy_number', policy_number);
             }
         } catch (_) { }
 
-        // Audit Log for Creation
+        // Audit Log
         try {
-            await query(
-                `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-                [
-                    req.user?.id || null,
-                    req.user?.email || null,
-                    'case_create',
-                    'case',
-                    created.id,
-                    null,
-                    JSON.stringify(req.body),
-                    req.ip,
-                    req.headers['user-agent']
-                ]
-            );
+            await supabase.from('audit_log').insert({
+                user_id: req.user?.id || null,
+                user_email: req.user?.email || null,
+                action: 'case_create',
+                resource_type: 'case',
+                resource_id: created.id,
+                old_values: null,
+                new_values: req.body,
+                ip_address: req.ip,
+                user_agent: req.headers['user-agent']
+            });
         } catch (e) { console.warn('Audit log create failed:', e.message); }
 
         res.json({ success: true, case: created });
+
     } catch (err) {
         console.error('❌ [POST /api/cases] Error creating case:', err);
         res.status(500).json({
             success: false,
             error: 'Failed to create case',
             details: err.message,
-            code: err.code,
-            hint: err.code === '42703'
-                ? 'Missing column in database. Run migration: ALTER TABLE cases ADD COLUMN delivery_date DATE; ALTER TABLE cases ADD COLUMN delivery_time TIME;'
-                : err.code === '23502'
-                    ? 'Missing required field value'
-                    : undefined
+            code: err.code
         });
     }
 };
 
 // --- ASSIGN VEHICLE TO CASE ---
+// --- ASSIGN VEHICLE TO CASE ---
 exports.assignVehicle = async (req, res) => {
-    const { caseId } = req.params;
-    let { vehicle_id, driver_name, pickup_time, assignment_role, is_hired, external_vehicle } = req.body;
+    let { caseId } = req.params;
+    const {
+        vehicle_id, vehicle_name,
+        driver_name, pickup_time,
+        is_hired, external_vehicle, assignment_role
+    } = req.body;
 
-    // Normalize driver name
-    if (typeof driver_name === 'string') {
-        driver_name = driver_name.trim();
+    // Fallback if caseId is not in params but in body
+    if (!caseId && req.body.caseId) {
+        caseId = req.body.caseId;
     }
-    if (!driver_name) driver_name = null;
+
+    console.log(`📥 assignVehicle for case ${caseId}:`, req.body);
+
+    if (!caseId) {
+        return res.status(400).json({ success: false, error: 'Case ID is required' });
+    }
 
     if (!is_hired && !vehicle_id) {
-        return res.status(400).json({ success: false, error: 'vehicle_id is required for internal vehicles' });
+        return res.status(400).json({ success: false, error: 'Vehicle ID is required for fleet vehicles' });
     }
-
     if (is_hired && !external_vehicle) {
         return res.status(400).json({ success: false, error: 'Vehicle details required for hired transport' });
     }
 
-    const client = await getClient();
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
 
     try {
-        await client.query('BEGIN');
+        // Fetch case details
+        const { data: currentCase, error: caseErr } = await supabase
+            .from('cases')
+            .select('id, case_number, funeral_date, funeral_time, delivery_date, delivery_time')
+            .eq('id', caseId)
+            .single();
 
-        // Ensure roster has assignment_role and external_vehicle columns
-        try {
-            await client.query(`
-                DO $$ 
-                BEGIN 
-                    BEGIN
-                        ALTER TABLE roster ADD COLUMN assignment_role VARCHAR(20);
-                    EXCEPTION
-                        WHEN duplicate_column THEN NULL;
-                    END;
-                    BEGIN
-                        ALTER TABLE roster ADD COLUMN external_vehicle TEXT;
-                    EXCEPTION
-                        WHEN duplicate_column THEN NULL;
-                    END;
-                    BEGIN
-                         ALTER TABLE roster ALTER COLUMN vehicle_id DROP NOT NULL;
-                    EXCEPTION
-                        WHEN OTHERS THEN NULL; -- Might fail if there are constraints, but usually works
-                    END;
-                END $$;
-            `);
-        } catch (e) {
-            console.warn('Schema migration in assignVehicle failed:', e.message);
-        }
-
-        const caseResult = await client.query(
-            'SELECT id, case_number, funeral_date, funeral_time, delivery_date, delivery_time FROM cases WHERE id = $1',
-            [caseId]
-        );
-        if (caseResult.rows.length === 0) {
-            await client.query('ROLLBACK');
+        if (caseErr || !currentCase) {
             return res.status(404).json({ success: false, error: 'Case not found' });
         }
 
+        const { funeral_date, funeral_time, delivery_date, delivery_time } = currentCase;
+        const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
+
         // Prevent multiple hearses
         if (assignment_role && assignment_role.toLowerCase() === 'hearse') {
-            const dupHearse = await client.query(
-                `SELECT 1 FROM roster WHERE case_id = $1 AND LOWER(assignment_role) = 'hearse' AND status != 'completed'`,
-                [caseId]
-            );
-            if (dupHearse.rows.length > 0) {
-                await client.query('ROLLBACK');
+            const { count } = await supabase
+                .from('roster')
+                .select('*', { count: 'exact', head: true })
+                .eq('case_id', caseId)
+                .ilike('assignment_role', 'hearse')
+                .neq('status', 'completed');
+
+            if (count > 0) {
                 return res.status(400).json({ success: false, error: 'A hearse is already assigned to this case. Please delete the existing hearse assignment if you wish to change it.' });
             }
         }
 
-        const currentCase = caseResult.rows[0];
-        const currentFuneralDate = currentCase.funeral_date;
-        const currentFuneralTime = currentCase.funeral_time;
-        const deliveryDate = currentCase.delivery_date;
-        const deliveryTime = currentCase.delivery_time;
-
-        // Check if user is admin
-        const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
-
         let calculatedPickupTime = pickup_time;
 
-        if (deliveryDate && deliveryTime) {
+        if (delivery_date && delivery_time) {
             try {
-                calculatedPickupTime = new Date(`${deliveryDate}T${deliveryTime}`).toISOString();
-                console.log(`📅 Using delivery_time from case: ${calculatedPickupTime} (${deliveryDate} ${deliveryTime})`);
+                calculatedPickupTime = new Date(`${delivery_date}T${delivery_time}`).toISOString();
+                console.log(`📅 Using delivery_time from case: ${calculatedPickupTime}`);
             } catch (err) {
-                console.warn('⚠️  Could not parse delivery_time, falling back to calculation');
                 calculatedPickupTime = null;
             }
         }
 
-        if (!calculatedPickupTime && currentFuneralDate && currentFuneralTime) {
+        if (!calculatedPickupTime && funeral_date && funeral_time) {
             try {
-                const funeralDateTime = new Date(`${currentFuneralDate}T${currentFuneralTime}`);
+                const funeralDateTime = new Date(`${funeral_date}T${funeral_time}`);
                 calculatedPickupTime = new Date(funeralDateTime.getTime() - (1.5 * 60 * 60 * 1000)).toISOString();
-                console.log(`📅 Calculated pickup_time: ${calculatedPickupTime} (1.5 hours before funeral at ${currentFuneralTime})`);
+                console.log(`📅 Calculated pickup_time: ${calculatedPickupTime}`);
             } catch (err) {
-                console.warn('⚠️  Could not calculate pickup_time from funeral time, using provided or current time');
                 calculatedPickupTime = pickup_time || new Date().toISOString();
             }
         } else if (!calculatedPickupTime) {
             calculatedPickupTime = pickup_time || new Date().toISOString();
         }
 
-        let dupVehicle = { rows: [] };
+        // Check for existing assignment for this vehicle on this case
+        let existingRoster = null;
         if (!is_hired) {
-            dupVehicle = await client.query(
-                `SELECT id, driver_name FROM roster WHERE case_id = $1 AND vehicle_id = $2 AND status != 'completed'`,
-                [caseId, vehicle_id]
-            );
+            const { data: dup } = await supabase
+                .from('roster')
+                .select('id, driver_name')
+                .eq('case_id', caseId)
+                .eq('vehicle_id', vehicle_id)
+                .neq('status', 'completed')
+                .maybeSingle();
+            existingRoster = dup;
         }
 
-        if (dupVehicle.rows.length > 0) {
-            // Found existing assignment for this vehicle on this case
+        if (existingRoster) {
+            // Updating existing assignment
             if (driver_name && driver_name !== 'TBD') {
-                const existingRosterId = dupVehicle.rows[0].id;
+                // Check if this NEW driver is assigned to another vehicle on THIS case
+                const { data: driverCheck } = await supabase
+                    .from('roster')
+                    .select('id')
+                    .eq('case_id', caseId)
+                    .ilike('driver_name', driver_name.trim())
+                    .neq('id', existingRoster.id)
+                    .neq('status', 'completed');
 
-                // Check if this NEW driver is already assigned to ANOTHER vehicle on this case
-                const driverCheck = await client.query(
-                    `SELECT 1 FROM roster 
-                     WHERE case_id = $1 
-                       AND LOWER(TRIM(driver_name)) = LOWER($2) 
-                       AND id != $3
-                       AND status != 'completed'`,
-                    [caseId, driver_name, existingRosterId]
-                );
-
-                if (driverCheck.rows.length > 0) {
-                    await client.query('ROLLBACK');
+                if (driverCheck && driverCheck.length > 0) {
                     return res.status(400).json({ success: false, error: 'This driver is already assigned to another vehicle on this case' });
                 }
 
                 // Get driver ID
                 let driverId = null;
-                const drv = await client.query('SELECT id FROM drivers WHERE LOWER(name) = LOWER($1)', [driver_name]);
-                if (drv.rows.length > 0) driverId = drv.rows[0].id;
+                const { data: drv } = await supabase.from('drivers').select('id').ilike('name', driver_name.trim()).maybeSingle();
+                if (drv) driverId = drv.id;
 
-                const updatedRow = await client.query(
-                    `UPDATE roster 
-                      SET driver_name = $1, driver_id = $2, assignment_role = COALESCE($3, assignment_role)
-                      WHERE id = $4
-                      RETURNING *`,
-                    [driver_name, driverId, assignment_role || null, existingRosterId]
-                );
+                const updates = {
+                    driver_name,
+                    driver_id: driverId,
+                    updated_at: new Date()
+                };
+                if (assignment_role) updates.assignment_role = assignment_role;
 
-                await client.query('COMMIT');
+                const { data: updatedRow, error: upErr } = await supabase
+                    .from('roster')
+                    .update(updates)
+                    .eq('id', existingRoster.id)
+                    .select()
+                    .single();
+
+                if (upErr) throw upErr;
+
                 return res.json({
                     success: true,
                     message: 'Updated existing vehicle assignment with new driver',
-                    roster: updatedRow.rows[0]
+                    roster: updatedRow
                 });
+
             } else {
-                await client.query('ROLLBACK');
                 return res.json({
                     success: true,
                     message: 'Vehicle already assigned',
-                    roster: dupVehicle.rows[0]
+                    roster: existingRoster
                 });
             }
         }
 
-        // Prevent duplicate driver assignment to the same case
+        // New Assignment Checks
         if (driver_name && driver_name !== 'TBD') {
-            const dupDriver = await client.query(
-                `SELECT 1 FROM roster 
-                 WHERE case_id = $1 
-                 AND LOWER(TRIM(driver_name)) = LOWER($2) 
-                 AND status != 'completed'`,
-                [caseId, driver_name]
-            );
-            if (dupDriver.rows.length > 0) {
-                await client.query('ROLLBACK');
+            // 1. Check if driver is already on this case
+            const { count: dupDriver } = await supabase
+                .from('roster')
+                .select('*', { count: 'exact', head: true })
+                .eq('case_id', caseId)
+                .ilike('driver_name', driver_name.trim())
+                .neq('status', 'completed');
+
+            if (dupDriver > 0) {
                 return res.status(400).json({ success: false, error: 'This driver is already assigned to this case' });
             }
 
-            // Also check for time-based conflicts with driver assignments on OTHER cases
-            if (currentFuneralDate && currentFuneralTime) {
-                const driverConflicts = await client.query(`
-                    SELECT 
-                      r.case_id,
-                      c.funeral_date,
-                      c.funeral_time,
-                      c.case_number,
-                      c.deceased_name
-                    FROM roster r
-                    JOIN cases c ON r.case_id = c.id
-                    WHERE LOWER(TRIM(r.driver_name)) = LOWER($1)
-                      AND r.case_id != $2
-                      AND r.status != 'completed'
-                      AND c.funeral_date = $3
-                `, [driver_name, caseId, currentFuneralDate]);
+            // 2. Cross-case time conflicts for Driver
+            if (funeral_date && funeral_time) {
+                // Fetch other assignments for this driver on the same day via join
+                const { data: driverConflicts } = await supabase
+                    .from('roster')
+                    .select(`
+                        case_id,
+                        cases!inner (case_number, deceased_name, funeral_date, funeral_time)
+                    `)
+                    .ilike('driver_name', driver_name.trim())
+                    .neq('case_id', caseId)
+                    .neq('status', 'completed')
+                    .eq('cases.funeral_date', funeral_date);
 
-                if (driverConflicts.rows.length > 0) {
+                if (driverConflicts && driverConflicts.length > 0) {
                     const MIN_GAP_HOURS = 1.5;
-                    const currentTime = new Date(`${currentFuneralDate}T${currentFuneralTime}`);
+                    const currentTime = new Date(`${funeral_date}T${funeral_time}`);
 
-                    for (const conflict of driverConflicts.rows) {
-                        if (conflict.funeral_time) {
-                            const conflictTime = new Date(`${conflict.funeral_date}T${conflict.funeral_time}`);
-                            const timeDiffMs = Math.abs(currentTime - conflictTime);
-                            const timeDiffHours = timeDiffMs / (1000 * 60 * 60);
+                    for (const item of driverConflicts) {
+                        const c = item.cases;
+                        if (c && c.funeral_time) {
+                            const conflictTime = new Date(`${c.funeral_date}T${c.funeral_time}`);
+                            const diffHrs = Math.abs(currentTime - conflictTime) / (1000 * 60 * 60);
 
-                            if (timeDiffHours < MIN_GAP_HOURS && !isAdmin) {
-                                await client.query('ROLLBACK');
+                            if (diffHrs < MIN_GAP_HOURS && !isAdmin) {
                                 return res.status(400).json({
                                     success: false,
-                                    error: `Driver time conflict: ${driver_name} is already assigned to ${conflict.case_number} (${conflict.deceased_name}) at ${conflict.funeral_time}. Services must be at least 1.5 hours apart.`
+                                    error: `Driver time conflict: ${driver_name} is already assigned to ${c.case_number} (${c.deceased_name}) at ${c.funeral_time}. Services must be at least 1.5 hours apart.`
                                 });
                             }
                         }
@@ -794,135 +767,107 @@ exports.assignVehicle = async (req, res) => {
             }
         }
 
-        if (currentFuneralDate) {
-            const conflictingAssignments = await client.query(`
-        SELECT 
-          r.case_id,
-          c.funeral_date,
-          c.funeral_time,
-          c.case_number,
-          c.deceased_name
-        FROM roster r
-        JOIN cases c ON r.case_id = c.id
-        WHERE r.vehicle_id = $1 
-          AND r.case_id != $2
-          AND r.status != 'completed'
-          AND c.funeral_date = $3
-      `, [vehicle_id, caseId, currentFuneralDate]);
+        // Vehicle Cross-case Time Conflict
+        if (funeral_date && !is_hired && vehicle_id) {
+            const { data: vehicleConflicts } = await supabase
+                .from('roster')
+                .select(`
+                    case_id,
+                    cases!inner (case_number, deceased_name, funeral_date, funeral_time)
+                `)
+                .eq('vehicle_id', vehicle_id)
+                .neq('case_id', caseId)
+                .neq('status', 'completed')
+                .eq('cases.funeral_date', funeral_date);
 
-            if (conflictingAssignments.rows.length > 0) {
-                // BUFFER_HOURS: Minimum time gap required between services for same vehicle/driver
-                // Services must be AT LEAST 1.5 hours apart to allow same vehicle/driver
+            if (vehicleConflicts && vehicleConflicts.length > 0) {
                 const MIN_GAP_HOURS = 1.5;
 
-                if (currentFuneralTime) {
-                    const currentTime = new Date(`${currentFuneralDate}T${currentFuneralTime}`);
-
-                    for (const assignment of conflictingAssignments.rows) {
-                        // Check if time conflict actually exists
+                if (funeral_time) {
+                    const currentTime = new Date(`${funeral_date}T${funeral_time}`);
+                    for (const item of vehicleConflicts) {
+                        const c = item.cases;
                         let isConflict = false;
-
-                        if (assignment.funeral_time) {
-                            const assignmentTime = new Date(`${assignment.funeral_date}T${assignment.funeral_time}`);
-
-                            // Calculate time gap between services (in hours)
-                            const timeDiffMs = Math.abs(currentTime - assignmentTime);
-                            const timeDiffHours = timeDiffMs / (1000 * 60 * 60);
-
-                            // Conflict if services are LESS than 1.5 hours apart
-                            if (timeDiffHours < MIN_GAP_HOURS) {
-                                isConflict = true;
-                            }
+                        if (c.funeral_time) {
+                            const otherTime = new Date(`${c.funeral_date}T${c.funeral_time}`);
+                            const diffHrs = Math.abs(currentTime - otherTime) / (1000 * 60 * 60);
+                            if (diffHrs < MIN_GAP_HOURS) isConflict = true;
                         } else {
-                            // If other assignment has no time, assume conflict for the whole day
-                            isConflict = true;
+                            isConflict = true; // All day block
                         }
 
                         if (isConflict && !isAdmin) {
-                            await client.query('ROLLBACK');
                             return res.status(400).json({
                                 success: false,
-                                error: `Time conflict: Vehicle is already assigned to ${assignment.case_number} (${assignment.deceased_name}) on the same day.`,
+                                error: `Time conflict: Vehicle is already assigned to ${c.case_number} (${c.deceased_name}).`,
                                 conflict: {
-                                    case_number: assignment.case_number,
-                                    deceased_name: assignment.deceased_name,
-                                    time: assignment.funeral_time
+                                    case_number: c.case_number,
+                                    deceased_name: c.deceased_name,
+                                    time: c.funeral_time
                                 }
                             });
                         }
                     }
                 } else {
-                    // Current case has no time set
-                    const hasTimedAssignment = conflictingAssignments.rows.some(a => a.funeral_time);
-                    if (hasTimedAssignment && !isAdmin) {
-                        await client.query('ROLLBACK');
+                    // No time on current case -> conflict if any other assignment exists involving specific time or not
+                    const hasTimed = vehicleConflicts.some(v => v.cases && v.cases.funeral_time);
+                    if (hasTimed && !isAdmin) {
                         return res.status(400).json({
                             success: false,
-                            error: `Vehicle is assigned to other case(s) on the same day with specific times. Please set a funeral time for this case first to check for availability.`,
-                            conflicts: conflictingAssignments.rows.map(a => ({
-                                case_number: a.case_number,
-                                deceased_name: a.deceased_name,
-                                time: a.funeral_time
-                            }))
+                            error: `Vehicle is assigned to other case(s) on the same day. Please set a funeral time first.`
                         });
                     }
                 }
             }
         }
 
-        const assignedDriver = driver_name && driver_name.trim() !== ''
-            ? driver_name.trim()
-            : 'TBD';
-
+        // Insert Roster Entry
+        const assignedDriver = (driver_name && driver_name.trim()) || 'TBD';
         let driverId = null;
         if (!is_hired && assignedDriver !== 'TBD') {
-            const drv = await client.query('SELECT id FROM drivers WHERE LOWER(name) = LOWER($1)', [assignedDriver]);
-            if (drv.rows.length > 0) driverId = drv.rows[0].id;
+            const { data: drv } = await supabase.from('drivers').select('id').ilike('name', assignedDriver).maybeSingle();
+            if (drv) driverId = drv.id;
         }
 
-        const rosterEntry = await client.query(
-            `INSERT INTO roster (case_id, vehicle_id, driver_name, driver_id, pickup_time, status, assignment_role, external_vehicle)
-             VALUES ($1, $2, $3, $4, $5, 'scheduled', $6, $7)
-             RETURNING *`,
-            [
-                caseId,
-                is_hired ? null : vehicle_id,
-                assignedDriver,
-                driverId,
-                calculatedPickupTime,
-                (assignment_role || null),
-                is_hired ? external_vehicle : null
-            ]
-        );
+        const newRoster = {
+            case_id: caseId,
+            vehicle_id: is_hired ? null : vehicle_id,
+            driver_name: assignedDriver,
+            driver_id: driverId,
+            pickup_time: calculatedPickupTime,
+            status: 'scheduled',
+            assignment_role: assignment_role || null,
+            external_vehicle: is_hired ? external_vehicle : null
+        };
 
-        if (!is_hired) {
-            await client.query(
-                'UPDATE vehicles SET available = false WHERE id = $1',
-                [vehicle_id]
-            );
+        const { data: rosterEntry, error: insertErr } = await supabase
+            .from('roster')
+            .insert(newRoster)
+            .select()
+            .single();
+
+        if (insertErr) throw insertErr;
+
+        if (!is_hired && vehicle_id) {
+            try {
+                await supabase.from('vehicles').update({ available: false }).eq('id', vehicle_id);
+            } catch (_) { }
         }
-        console.log(`🚗 Vehicle ${vehicle_id} marked as unavailable`);
 
-        await client.query('COMMIT');
-
-        console.log(`✅ Vehicle ${vehicle_id} assigned to case ${caseId}`);
-
+        console.log(`✅ Vehicle ${vehicle_id || 'External'} assigned to case ${caseId}`);
         res.json({
             success: true,
             message: 'Vehicle assigned successfully',
-            roster: rosterEntry.rows[0]
+            roster: rosterEntry
         });
 
     } catch (err) {
-        await client.query('ROLLBACK');
         console.error('❌ Error assigning vehicle:', err);
         res.status(500).json({
             success: false,
             error: 'Failed to assign vehicle',
             details: err.message
         });
-    } finally {
-        client.release();
     }
 };
 
@@ -937,12 +882,22 @@ exports.updateCaseStatus = async (req, res) => {
         return res.status(400).json({ success: false, error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
     }
 
+    const supabase = req.app.locals.supabase;
+    if (!supabase) {
+        return res.status(500).json({ success: false, error: 'Database not configured' });
+    }
+
     // Enforce minimum vehicles for operational statuses
     try {
         if (['scheduled', 'in_progress'].includes(status)) {
-            const caseRes = await query('SELECT plan_name, is_yard_burial FROM cases WHERE id = $1', [id]);
-            const planName = (caseRes.rows[0] && caseRes.rows[0].plan_name) || '';
-            const isYardBurial = (caseRes.rows[0] && caseRes.rows[0].is_yard_burial) || false;
+            const { data: caseRes } = await supabase
+                .from('cases')
+                .select('plan_name, is_yard_burial')
+                .eq('id', id)
+                .single();
+
+            const planName = (caseRes && caseRes.plan_name) || '';
+            const isYardBurial = (caseRes && caseRes.is_yard_burial) || false;
 
             // Logic: In-Yard Burial only needs 1 vehicle. Standard needs 2. Premium needs 3.
             let minVehicles = (planName && /premium/i.test(planName)) ? 3 : 2;
@@ -950,10 +905,14 @@ exports.updateCaseStatus = async (req, res) => {
                 minVehicles = 1;
             }
 
-            const rosterRes = await query('SELECT COUNT(*)::int AS cnt FROM roster WHERE case_id = $1', [id]);
-            const assigned = (rosterRes.rows[0] && rosterRes.rows[0].cnt) || 0;
+            const { count: assigned, error: countErr } = await supabase
+                .from('roster')
+                .select('*', { count: 'exact', head: true })
+                .eq('case_id', id);
+
             console.log(`🔍 Vehicle Check: assigned=${assigned}, minNeeded=${minVehicles}, isYard=${isYardBurial}`);
-            if (assigned < minVehicles) {
+
+            if (!countErr && assigned < minVehicles) {
                 console.warn(`⚠️ Vehicle Check failed for case ${id}`);
                 return res.status(400).json({
                     success: false,
@@ -974,15 +933,21 @@ exports.updateCaseStatus = async (req, res) => {
                 return res.status(400).json({ success: false, error: 'Cancellation reason is required' });
             }
         }
-        const caseCheck = await query('SELECT id, status, funeral_time, burial_place, is_yard_burial FROM cases WHERE id = $1', [id]);
-        if (caseCheck.rows.length === 0) {
+
+        const { data: caseCheck, error: fetchErr } = await supabase
+            .from('cases')
+            .select('id, status, funeral_time, burial_place, is_yard_burial, casket_type, casket_colour')
+            .eq('id', id)
+            .single();
+
+        if (fetchErr || !caseCheck) {
             return res.status(404).json({ success: false, error: 'Case not found' });
         }
 
-        const oldStatus = caseCheck.rows[0].status;
-        const existingFuneralTime = caseCheck.rows[0].funeral_time;
-        const existingBurialPlace = caseCheck.rows[0].burial_place;
-        const isYard = caseCheck.rows[0].is_yard_burial;
+        const oldStatus = caseCheck.status;
+        const existingFuneralTime = caseCheck.funeral_time;
+        const existingBurialPlace = caseCheck.burial_place;
+        const isYard = caseCheck.is_yard_burial;
 
         if (oldStatus === 'intake' && status !== 'intake') {
             // Relaxed check: Yard burials don't STRICTLY require these to move to 'confirmed'
@@ -1003,70 +968,90 @@ exports.updateCaseStatus = async (req, res) => {
             }
         }
 
-        const result = await query(
-            `UPDATE cases 
-      SET status = $1, updated_at = NOW()
-      WHERE id = $2
-      RETURNING *`,
-            [status, id]
-        );
+        const { data: updatedCase, error: updateErr } = await supabase
+            .from('cases')
+            .update({ status, updated_at: new Date() })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateErr) throw updateErr;
 
         console.log(`✅ Case ${id} status changed: ${oldStatus} → ${status}`);
 
         try {
             if (oldStatus === 'intake' && status !== 'intake') {
-                const already = await query(
-                    "SELECT 1 FROM stock_movements WHERE case_id = $1 AND movement_type = 'sale' LIMIT 1",
-                    [id]
-                );
-                if (already.rows.length === 0) {
-                    const nameStr = String(result.rows[0]?.casket_type || '').trim();
-                    const colorStr = String(result.rows[0]?.casket_colour || '').trim();
+                const { count: already } = await supabase
+                    .from('stock_movements')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('case_id', id)
+                    .eq('movement_type', 'sale');
+
+                if (already === 0) {
+                    const nameStr = String(updatedCase.casket_type || '').trim();
+                    const colorStr = String(updatedCase.casket_colour || '').trim();
                     if (nameStr) {
-                        let inv;
-                        if (colorStr) {
-                            inv = await query(
-                                "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) ORDER BY stock_quantity DESC LIMIT 1",
-                                [nameStr, colorStr]
-                            );
-                        } else {
-                            inv = await query(
-                                "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) ORDER BY stock_quantity DESC LIMIT 1",
-                                [nameStr]
-                            );
-                        }
-                        if (inv.rows.length === 0) {
-                            let fallback;
+                        let invData = null;
+
+                        // Try finding by name first
+                        const { data: nameMatches } = await supabase
+                            .from('inventory')
+                            .select('id, stock_quantity, name, model, color')
+                            .eq('category', 'coffin')
+                            .ilike('name', nameStr)
+                            .order('stock_quantity', { ascending: false });
+
+                        if (nameMatches && nameMatches.length > 0) {
                             if (colorStr) {
-                                fallback = await query(
-                                    "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) ORDER BY stock_quantity DESC LIMIT 1",
-                                    [nameStr, colorStr]
-                                );
+                                invData = nameMatches.find(i => !i.color || i.color.toLowerCase() === colorStr.toLowerCase());
                             } else {
-                                fallback = await query(
-                                    "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) ORDER BY stock_quantity DESC LIMIT 1",
-                                    [nameStr]
-                                );
+                                invData = nameMatches[0];
                             }
-                            inv = fallback;
                         }
-                        if (inv.rows.length) {
-                            const item = inv.rows[0];
-                            const previous = item.stock_quantity || 0;
+
+                        // Fallback to model if not found
+                        if (!invData) {
+                            const { data: modelMatches } = await supabase
+                                .from('inventory')
+                                .select('id, stock_quantity, name, model, color')
+                                .eq('category', 'coffin')
+                                .ilike('model', nameStr)
+                                .order('stock_quantity', { ascending: false });
+
+                            if (modelMatches && modelMatches.length > 0) {
+                                if (colorStr) {
+                                    invData = modelMatches.find(i => !i.color || i.color.toLowerCase() === colorStr.toLowerCase());
+                                } else {
+                                    invData = modelMatches[0];
+                                }
+                            }
+                        }
+
+                        if (invData) {
+                            const previous = invData.stock_quantity || 0;
                             const nextQty = previous > 0 ? previous - 1 : 0;
-                            await query('UPDATE inventory SET stock_quantity=$1, updated_at=NOW() WHERE id=$2', [nextQty, item.id]);
+
+                            await supabase.from('inventory')
+                                .update({ stock_quantity: nextQty, updated_at: new Date() })
+                                .eq('id', invData.id);
+
                             try {
-                                await query(
-                                    `INSERT INTO stock_movements (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
-                                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-                                    [item.id, id, 'sale', -1, previous, nextQty, 'Auto-logged on intake exit', (req.user?.email) || 'system']
-                                );
+                                await supabase.from('stock_movements').insert({
+                                    inventory_id: invData.id,
+                                    case_id: id,
+                                    movement_type: 'sale',
+                                    quantity_change: -1,
+                                    previous_quantity: previous,
+                                    new_quantity: nextQty,
+                                    reason: 'Auto-logged on intake exit',
+                                    recorded_by: (req.user?.email) || 'system'
+                                });
                             } catch (_) { }
 
                             // Send immediate notification
                             try {
-                                await notifyCasketUsage(id, item.id, -1);
-                                await maybeNotifyLowStock(1);
+                                await notifyCasketUsage(id, invData.id, -1, supabase);
+                                await maybeNotifyLowStock(1, supabase);
                             } catch (nErr) {
                                 console.warn('⚠️ Notification failed:', nErr.message);
                             }
@@ -1074,35 +1059,47 @@ exports.updateCaseStatus = async (req, res) => {
                     }
                 }
             } else if (status === 'cancelled' && oldStatus !== 'cancelled') {
-                // Determine if we need to refund stock (e.g. if it was deducted previously)
-                // We check if there was a 'sale' movement for this case
-                const sales = await query(
-                    "SELECT inventory_id, ABS(quantity_change) as qty FROM stock_movements WHERE case_id = $1 AND movement_type = 'sale'",
-                    [id]
-                );
+                // Determine if we need to refund stock
+                const { data: sales } = await supabase
+                    .from('stock_movements')
+                    .select('inventory_id, quantity_change')
+                    .eq('case_id', id)
+                    .eq('movement_type', 'sale');
 
-                if (sales.rows.length > 0) {
-                    console.log(`Processing refunds for cancelled case ${id} - ${sales.rows.length} items`);
-                    for (const sale of sales.rows) {
+                if (sales && sales.length > 0) {
+                    console.log(`Processing refunds for cancelled case ${id} - ${sales.length} items`);
+                    for (const sale of sales) {
                         const invId = sale.inventory_id;
-                        const qtyToReturn = sale.qty;
+                        const qtyToReturn = Math.abs(sale.quantity_change);
 
                         // 1. Get current stock
-                        const invItem = await query("SELECT stock_quantity FROM inventory WHERE id = $1", [invId]);
-                        if (invItem.rows.length > 0) {
-                            const currentQty = invItem.rows[0].stock_quantity || 0;
+                        const { data: invItem } = await supabase
+                            .from('inventory')
+                            .select('stock_quantity')
+                            .eq('id', invId)
+                            .single();
+
+                        if (invItem) {
+                            const currentQty = invItem.stock_quantity || 0;
                             const newQty = currentQty + qtyToReturn;
 
                             // 2. Update inventory
-                            await query("UPDATE inventory SET stock_quantity = $1, updated_at = NOW() WHERE id = $2", [newQty, invId]);
+                            await supabase.from('inventory')
+                                .update({ stock_quantity: newQty, updated_at: new Date() })
+                                .eq('id', invId);
 
                             // 3. Log 'return' movement
                             try {
-                                await query(
-                                    `INSERT INTO stock_movements (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
-                                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-                                    [invId, id, 'return', qtyToReturn, currentQty, newQty, `Case Cancelled: ${notes || ''}`, (req.user?.email) || 'system']
-                                );
+                                await supabase.from('stock_movements').insert({
+                                    inventory_id: invId,
+                                    case_id: id,
+                                    movement_type: 'return',
+                                    quantity_change: qtyToReturn,
+                                    previous_quantity: currentQty,
+                                    new_quantity: newQty,
+                                    reason: `Case Cancelled: ${notes || ''}`,
+                                    recorded_by: (req.user?.email) || 'system'
+                                });
                             } catch (_) { }
                         }
                     }
@@ -1111,21 +1108,17 @@ exports.updateCaseStatus = async (req, res) => {
         } catch (_) { }
 
         try {
-            await query(
-                `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-                [
-                    req.user?.id || null,
-                    req.user?.email || null,
-                    'case_status_change',
-                    'case',
-                    id,
-                    JSON.stringify({ status: oldStatus }),
-                    JSON.stringify({ status, notes: notes || null }),
-                    req.ip,
-                    req.headers['user-agent']
-                ]
-            );
+            await supabase.from('audit_log').insert({
+                user_id: req.user?.id || null,
+                user_email: req.user?.email || null,
+                action: 'case_status_change',
+                resource_type: 'case',
+                resource_id: id,
+                old_values: { status: oldStatus },
+                new_values: { status, notes: notes || null },
+                ip_address: req.ip,
+                user_agent: req.headers['user-agent']
+            });
         } catch (e) {
             console.warn('Audit log failed (case status):', e.message);
         }
@@ -1133,7 +1126,7 @@ exports.updateCaseStatus = async (req, res) => {
         res.json({
             success: true,
             message: `Status updated from ${oldStatus} to ${status}`,
-            case: result.rows[0]
+            case: updatedCase
         });
 
     } catch (err) {
@@ -1147,6 +1140,7 @@ exports.updateCaseStatus = async (req, res) => {
 };
 
 // --- UPDATE FUNERAL TIME ---
+// --- UPDATE FUNERAL TIME ---
 exports.updateFuneralTime = async (req, res) => {
     const { id } = req.params;
     const { funeral_time, funeral_date } = req.body;
@@ -1158,13 +1152,21 @@ exports.updateFuneralTime = async (req, res) => {
         });
     }
 
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
+
     try {
-        const caseCheck = await query('SELECT id, status FROM cases WHERE id = $1', [id]);
-        if (caseCheck.rows.length === 0) {
+        const { data: caseCheck } = await supabase
+            .from('cases')
+            .select('id, status')
+            .eq('id', id)
+            .single();
+
+        if (!caseCheck) {
             return res.status(404).json({ success: false, error: 'Case not found' });
         }
 
-        const currentStatus = caseCheck.rows[0].status;
+        const currentStatus = caseCheck.status;
         const isAdmin = req.user && String(req.user.role).toLowerCase() === 'admin';
         if (currentStatus !== 'intake' && !isAdmin) {
             return res.status(400).json({
@@ -1173,35 +1175,30 @@ exports.updateFuneralTime = async (req, res) => {
             });
         }
 
-        const updateFields = [];
-        const updateValues = [];
-        let paramIndex = 1;
+        const updateData = {
+            funeral_time,
+            updated_at: new Date()
+        };
 
         if (funeral_date) {
-            updateFields.push(`funeral_date = $${paramIndex++}`);
-            updateValues.push(funeral_date);
+            updateData.funeral_date = funeral_date;
         }
 
-        updateFields.push(`funeral_time = $${paramIndex++}`);
-        updateValues.push(funeral_time);
+        const { data: updated, error } = await supabase
+            .from('cases')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
 
-        updateFields.push(`updated_at = NOW()`);
-        updateValues.push(id);
-
-        const result = await query(
-            `UPDATE cases 
-       SET ${updateFields.join(', ')}
-       WHERE id = $${paramIndex}
-       RETURNING *`,
-            updateValues
-        );
+        if (error) throw error;
 
         console.log(`✅ Case ${id} funeral time updated: ${funeral_time}`);
 
         res.json({
             success: true,
             message: 'Funeral time updated successfully',
-            case: result.rows[0]
+            case: updated
         });
 
     } catch (err) {
@@ -1219,56 +1216,59 @@ exports.updateCaseVenue = async (req, res) => {
     const { venue_name, venue_address, venue_lat, venue_lng, burial_place, branch, is_yard_burial } = req.body || {};
 
     console.log(`📥 updateCaseVenue for case ${id}:`, req.body);
+
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
+
     try {
-        const caseCheck = await query('SELECT id, venue_name, venue_address, venue_lat, venue_lng, burial_place, is_yard_burial FROM cases WHERE id = $1', [id]);
-        if (caseCheck.rows.length === 0) {
+        const { data: oldValues, error: fetchErr } = await supabase
+            .from('cases')
+            .select('venue_name, venue_address, venue_lat, venue_lng, burial_place, is_yard_burial')
+            .eq('id', id)
+            .single();
+
+        if (fetchErr || !oldValues) {
             return res.status(404).json({ success: false, error: 'Case not found' });
         }
 
-        const oldValues = caseCheck.rows[0];
+        const updates = { updated_at: new Date() };
+        if (venue_name !== undefined) updates.venue_name = String(venue_name);
+        if (venue_address !== undefined) updates.venue_address = String(venue_address);
+        if (venue_lat !== undefined) updates.venue_lat = String(venue_lat);
+        if (venue_lng !== undefined) updates.venue_lng = String(venue_lng);
+        if (burial_place !== undefined) updates.burial_place = String(burial_place);
+        if (branch !== undefined) updates.branch = String(branch);
+        if (is_yard_burial !== undefined) updates.is_yard_burial = is_yard_burial;
 
-        const fields = [];
-        const values = [];
-        let idx = 1;
-        if (venue_name != null) { fields.push(`venue_name = $${idx++}`); values.push(String(venue_name)); }
-        if (venue_address != null) { fields.push(`venue_address = $${idx++}`); values.push(String(venue_address)); }
-        if (venue_lat != null) { fields.push(`venue_lat = $${idx++}`); values.push(String(venue_lat)); }
-        if (venue_lng != null) { fields.push(`venue_lng = $${idx++}`); values.push(String(venue_lng)); }
-        if (burial_place != null) { fields.push(`burial_place = $${idx++}`); values.push(String(burial_place)); }
-        if (branch != null) { fields.push(`branch = $${idx++}`); values.push(String(branch)); }
-        if (is_yard_burial != null) { fields.push(`is_yard_burial = $${idx++}`); values.push(is_yard_burial); }
-        fields.push('updated_at = NOW()');
-        values.push(id);
-
-        if (values.length <= 1) {
-            console.warn('⚠️ updateCaseVenue: No fields to update', { body: req.body, fields, values });
-            return res.status(400).json({ success: false, error: 'No valid fields provided for update', received: req.body });
+        if (Object.keys(updates).length <= 1) {
+            console.warn('⚠️ updateCaseVenue: No fields to update', { body: req.body });
+            return res.status(400).json({ success: false, error: 'No valid fields provided for update' });
         }
 
-        const result = await query(
-            `UPDATE cases SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
-            values
-        );
+        const { data: updated, error: updateErr } = await supabase
+            .from('cases')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateErr) throw updateErr;
 
         try {
-            await query(
-                `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-                [
-                    req.user?.id || null,
-                    req.user?.email || null,
-                    'case_venue_update',
-                    'case',
-                    id,
-                    JSON.stringify(oldValues),
-                    JSON.stringify({ venue_name, venue_address, venue_lat, venue_lng, burial_place }),
-                    req.ip,
-                    req.headers['user-agent']
-                ]
-            );
+            await supabase.from('audit_log').insert({
+                user_id: req.user?.id || null,
+                user_email: req.user?.email || null,
+                action: 'case_venue_update',
+                resource_type: 'case',
+                resource_id: id,
+                old_values: oldValues,
+                new_values: updates,
+                ip_address: req.ip,
+                user_agent: req.headers['user-agent']
+            });
         } catch (e) { }
 
-        res.json({ success: true, case: result.rows[0] });
+        res.json({ success: true, case: updated });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -1501,20 +1501,31 @@ exports.autoMergeDuplicates = async (req, res) => {
 };
 
 // --- GET SINGLE CASE ---
+// --- GET SINGLE CASE ---
 exports.getCaseById = async (req, res) => {
     const { id } = req.params;
 
     try {
-        const result = await query('SELECT * FROM cases WHERE id = $1', [id]);
+        const supabase = req.app.locals.supabase;
+        if (!supabase) {
+            return res.status(500).json({ success: false, error: 'Database not configured' });
+        }
 
-        if (result.rows.length === 0) {
+        const { data, error } = await supabase
+            .from('cases')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error || !data) {
+            console.warn('Case lookup failed:', error?.message);
             return res.status(404).json({
                 success: false,
                 error: 'Case not found'
             });
         }
 
-        res.json({ success: true, case: result.rows[0] });
+        res.json({ success: true, case: data });
     } catch (err) {
         console.error('Error fetching case:', err);
         res.status(500).json({
@@ -1528,18 +1539,35 @@ exports.getCaseById = async (req, res) => {
 exports.getCaseAuditLog = async (req, res) => {
     const { id } = req.params;
     try {
-        const caseCheck = await query('SELECT id FROM cases WHERE id = $1', [id]);
-        if (caseCheck.rows.length === 0) {
+        const supabase = req.app.locals.supabase;
+        if (!supabase) {
+            return res.status(500).json({ success: false, error: 'Database not configured' });
+        }
+
+        // First check if case exists
+        const { data: caseCheck, error: caseError } = await supabase
+            .from('cases')
+            .select('id')
+            .eq('id', id)
+            .single();
+
+        if (caseError || !caseCheck) {
             return res.status(404).json({ success: false, error: 'Case not found' });
         }
-        const result = await query(
-            `SELECT id, user_id, user_email, action, old_values, new_values, ip_address, user_agent
-       FROM audit_log
-       WHERE resource_type = 'case' AND resource_id = $1 AND action = 'case_status_change'
-       ORDER BY id DESC`,
-            [id]
-        );
-        const logs = result.rows.map(row => {
+
+        const { data: logs, error } = await supabase
+            .from('audit_log')
+            .select('id, user_id, user_email, action, old_values, new_values, ip_address, user_agent')
+            .eq('resource_type', 'case')
+            .eq('resource_id', id)
+            .eq('action', 'case_status_change')
+            .order('id', { ascending: false });
+
+        if (error) {
+            throw error;
+        }
+
+        const formattedLogs = (logs || []).map(row => {
             let notes = null;
             try {
                 const nv = typeof row.new_values === 'string' ? JSON.parse(row.new_values) : row.new_values;
@@ -1547,7 +1575,7 @@ exports.getCaseAuditLog = async (req, res) => {
             } catch (e) { }
             return { id: row.id, user_id: row.user_id, user_email: row.user_email, action: row.action, old_values: row.old_values, new_values: row.new_values, notes };
         });
-        res.json({ success: true, logs });
+        res.json({ success: true, logs: formattedLogs });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Failed to fetch audit log' });
     }
@@ -1590,143 +1618,206 @@ exports.updateCaseDetails = async (req, res) => {
         delivery_date, delivery_time, intake_day,
         programs, top_up_amount, airtime, airtime_network, airtime_number,
         cover_amount, cashback_amount, amount_to_bank,
-        legacy_plan_name, status, burial_place, branch, tombstone_type, collection_type, collection_note, is_yard_burial
+        legacy_plan_name, status, burial_place, tombstone_type, collection_type, collection_note, is_yard_burial
     } = req.body;
 
     // Basic validation
     if (!id) return res.status(400).json({ success: false, error: 'Case ID is required' });
 
     try {
-        const caseCheck = await query('SELECT * FROM cases WHERE id = $1', [id]);
-        if (caseCheck.rows.length === 0) {
+        const supabase = req.app.locals.supabase;
+        if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
+
+        // 1. Get Old Values
+        const { data: oldValues, error: checkError } = await supabase.from('cases').select('*').eq('id', id).single();
+        if (checkError || !oldValues) {
             return res.status(404).json({ success: false, error: 'Case not found' });
         }
-        const oldValues = caseCheck.rows[0];
 
         const finalFuneralDate = service_date || funeral_date;
         const finalFuneralTime = service_time || funeral_time;
 
-        const updateQuery = `
-            UPDATE cases SET
-                claim_date = $1, policy_number = $2, deceased_name = $3, deceased_id = $4,
-                nok_name = $5, nok_contact = $6, nok_relation = $7,
-                plan_category = $8, plan_name = $9, plan_members = $10, plan_age_bracket = $11,
-                funeral_date = $12, funeral_time = $13, service_date = $14, service_time = $15,
-                church_date = $16, church_time = $17, cleansing_date = $18, cleansing_time = $19,
-                venue_name = $20, venue_address = $21, venue_lat = $22, venue_lng = $23,
-                requires_cow = $24, requires_sheep = $25, requires_tombstone = $26,
-                requires_catering = $27, requires_grocery = $28, requires_bus = $29,
-                service_type = $30, total_price = $31,
-                casket_type = $32, casket_colour = $33, delivery_date = $34, delivery_time = $35, intake_day = $36,
-                programs = $37, top_up_amount = $38, airtime = $39, airtime_network = $40, airtime_number = $41,
-                cover_amount = $42, cashback_amount = $43, amount_to_bank = $44,
-                legacy_plan_name = $45, benefit_mode = $46, status = $47, burial_place = $48,
-                branch = $49, tombstone_type = $50,
-                collection_type = $51, collection_note = $52,
-                is_yard_burial = $53,
-                updated_at = NOW()
-            WHERE id = $54
-            RETURNING *
-        `;
+        // 2. Prepare Update Object
+        const updateData = {
+            claim_date: claim_date || null,
+            policy_number: policy_number || null,
+            deceased_name,
+            deceased_id: deceased_id || null,
+            nok_name,
+            nok_contact,
+            nok_relation: nok_relation || null,
+            plan_category: plan_category || null,
+            plan_name: plan_name || null,
+            plan_members: plan_members || null,
+            plan_age_bracket: plan_age_bracket || null,
+            funeral_date: finalFuneralDate || null,
+            funeral_time: finalFuneralTime || null,
+            service_date: service_date || null,
+            service_time: service_time || null,
+            church_date: church_date || null,
+            church_time: church_time || null,
+            cleansing_date: cleansing_date || null,
+            cleansing_time: cleansing_time || null,
+            venue_name: venue_name || null,
+            venue_address: venue_address || null,
+            venue_lat: venue_lat || null,
+            venue_lng: venue_lng || null,
+            requires_cow: !!requires_cow,
+            requires_sheep: !!requires_sheep,
+            requires_tombstone: !!requires_tombstone,
+            requires_catering: !!requires_catering,
+            requires_grocery: !!requires_grocery,
+            requires_bus: !!requires_bus,
+            service_type: service_type || null,
+            total_price: total_price != null ? total_price : 0,
+            casket_type: casket_type || null,
+            casket_colour: casket_colour || null,
+            delivery_date: delivery_date || null,
+            delivery_time: delivery_time || null,
+            intake_day: intake_day || null,
+            programs: programs != null ? programs : 0,
+            top_up_amount: top_up_amount != null ? top_up_amount : 0,
+            airtime: !!airtime,
+            airtime_network: airtime_network || null,
+            airtime_number: airtime_number || null,
+            cover_amount: cover_amount != null ? cover_amount : 0,
+            cashback_amount: cashback_amount != null ? cashback_amount : 0,
+            amount_to_bank: amount_to_bank != null ? amount_to_bank : 0,
+            legacy_plan_name: legacy_plan_name || null,
+            benefit_mode: benefit_mode || null,
+            status: status || oldValues.status,
+            burial_place: burial_place || null,
+            branch: req.body.branch || oldValues.branch || 'Head Office',
+            tombstone_type: tombstone_type || oldValues.tombstone_type || null,
+            collection_type: collection_type || oldValues.collection_type || 'vehicle',
+            collection_note: collection_note || oldValues.collection_note || null,
+            is_yard_burial: !!is_yard_burial,
+            updated_at: new Date().toISOString()
+        };
 
-        const values = [
-            claim_date || null, policy_number || null, deceased_name, deceased_id || null,
-            nok_name, nok_contact, nok_relation || null,
-            plan_category || null, plan_name || null, plan_members || null, plan_age_bracket || null,
-            finalFuneralDate || null, finalFuneralTime || null, service_date || null, service_time || null,
-            church_date || null, church_time || null, cleansing_date || null, cleansing_time || null,
-            venue_name || null, venue_address || null, venue_lat || null, venue_lng || null,
-            !!requires_cow, !!requires_sheep, !!requires_tombstone, !!requires_catering, !!requires_grocery, !!requires_bus,
-            service_type || null, total_price != null ? total_price : 0,
-            casket_type || null, casket_colour || null, delivery_date || null, delivery_time || null, intake_day || null,
-            programs != null ? programs : 0, top_up_amount != null ? top_up_amount : 0, !!airtime, airtime_network || null, airtime_number || null,
-            cover_amount != null ? cover_amount : 0, cashback_amount != null ? cashback_amount : 0, amount_to_bank != null ? amount_to_bank : 0,
-            legacy_plan_name || null, benefit_mode || null, status || oldValues.status, burial_place || null,
-            req.body.branch || oldValues.branch || 'Head Office',
-            tombstone_type || oldValues.tombstone_type || null,
-            collection_type || oldValues.collection_type || 'vehicle',
-            collection_note || oldValues.collection_note || null,
-            !!is_yard_burial,
-            id
-        ];
+        // 3. Perform Update
+        const { data: updatedCase, error: updateError } = await supabase
+            .from('cases')
+            .update(updateData)
+            .eq('id', id)
+            .select()
+            .single();
 
-        const result = await query(updateQuery, values);
-        const updatedCase = result.rows[0];
+        if (updateError) throw updateError;
 
-        // Stock Deduction Logic (if moving from intake -> confirmed/etc)
+        // 4. Stock Deduction Logic
         try {
             if (oldValues.status === 'intake' && updatedCase.status !== 'intake') {
-                const already = await query(
-                    "SELECT 1 FROM stock_movements WHERE case_id = $1 AND movement_type = 'sale' LIMIT 1",
-                    [id]
-                );
-                if (already.rows.length === 0) {
+                const { data: already } = await supabase
+                    .from('stock_movements')
+                    .select('id')
+                    .eq('case_id', id)
+                    .eq('movement_type', 'sale')
+                    .limit(1);
+
+                if (!already || already.length === 0) {
                     const nameStr = String(updatedCase.casket_type || '').trim();
                     const colorStr = String(updatedCase.casket_colour || '').trim();
                     if (nameStr) {
-                        let inv;
+                        let invItem = null;
+
+                        // Try exact match with color
                         if (colorStr) {
-                            inv = await query(
-                                "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) ORDER BY stock_quantity DESC LIMIT 1",
-                                [nameStr, colorStr]
-                            );
-                        } else {
-                            inv = await query(
-                                "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(name) = UPPER($1) ORDER BY stock_quantity DESC LIMIT 1",
-                                [nameStr]
-                            );
+                            const { data: exact } = await supabase
+                                .from('inventory')
+                                .select('id, stock_quantity')
+                                .eq('category', 'coffin')
+                                .ilike('name', nameStr)
+                                .ilike('color', colorStr)
+                                .order('stock_quantity', { ascending: false })
+                                .limit(1)
+                                .maybeSingle();
+                            invItem = exact;
                         }
-                        if (inv.rows.length === 0) {
-                            let fallback;
+
+                        // Try name match only if no color match or no color specified
+                        if (!invItem) {
+                            const { data: nameMatch } = await supabase
+                                .from('inventory')
+                                .select('id, stock_quantity')
+                                .eq('category', 'coffin')
+                                .ilike('name', nameStr)
+                                .order('stock_quantity', { ascending: false })
+                                .limit(1)
+                                .maybeSingle();
+                            invItem = nameMatch;
+                        }
+
+                        // Fallback to model match
+                        if (!invItem) {
                             if (colorStr) {
-                                fallback = await query(
-                                    "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) AND (color IS NULL OR UPPER(color) = UPPER($2)) ORDER BY stock_quantity DESC LIMIT 1",
-                                    [nameStr, colorStr]
-                                );
-                            } else {
-                                fallback = await query(
-                                    "SELECT id, stock_quantity FROM inventory WHERE category='coffin' AND UPPER(model) = UPPER($1) ORDER BY stock_quantity DESC LIMIT 1",
-                                    [nameStr]
-                                );
+                                const { data: exactModel } = await supabase
+                                    .from('inventory')
+                                    .select('id, stock_quantity')
+                                    .eq('category', 'coffin')
+                                    .ilike('model', nameStr)
+                                    .ilike('color', colorStr)
+                                    .order('stock_quantity', { ascending: false })
+                                    .limit(1)
+                                    .maybeSingle();
+                                invItem = exactModel;
                             }
-                            inv = fallback;
+                            if (!invItem) {
+                                const { data: modelMatch } = await supabase
+                                    .from('inventory')
+                                    .select('id, stock_quantity')
+                                    .eq('category', 'coffin')
+                                    .ilike('model', nameStr)
+                                    .order('stock_quantity', { ascending: false })
+                                    .limit(1)
+                                    .maybeSingle();
+                                invItem = modelMatch;
+                            }
                         }
-                        if (inv.rows.length) {
-                            const item = inv.rows[0];
-                            const previous = item.stock_quantity || 0;
+
+                        if (invItem) {
+                            const previous = invItem.stock_quantity || 0;
                             const nextQty = previous > 0 ? previous - 1 : 0;
-                            await query('UPDATE inventory SET stock_quantity=$1, updated_at=NOW() WHERE id=$2', [nextQty, item.id]);
-                            try {
-                                await query(
-                                    `INSERT INTO stock_movements (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
-                                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-                                    [item.id, id, 'sale', -1, previous, nextQty, 'Auto-logged on intake exit', (req.user?.email) || 'system']
-                                );
-                            } catch (_) { }
+
+                            // Update inventory
+                            await supabase
+                                .from('inventory')
+                                .update({ stock_quantity: nextQty, updated_at: new Date() })
+                                .eq('id', invItem.id);
+
+                            // Insert movement
+                            await supabase.from('stock_movements').insert({
+                                inventory_id: invItem.id,
+                                case_id: id,
+                                movement_type: 'sale',
+                                quantity_change: -1,
+                                previous_quantity: previous,
+                                new_quantity: nextQty,
+                                reason: 'Auto-logged on intake exit',
+                                recorded_by: req.user?.email || 'system'
+                            });
                         }
                     }
                 }
             }
-        } catch (_) { }
+        } catch (stockErr) {
+            console.warn('Stock logic error:', stockErr.message);
+        }
 
-        // Audit Log
+        // 5. Audit Log
         try {
-            await query(
-                `INSERT INTO audit_log (user_id, user_email, action, resource_type, resource_id, old_values, new_values, ip_address, user_agent)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-                [
-                    req.user?.id || null,
-                    req.user?.email || null,
-                    'case_full_update',
-                    'case',
-                    id,
-                    JSON.stringify(oldValues),
-                    JSON.stringify(req.body),
-                    req.ip,
-                    req.headers['user-agent']
-                ]
-            );
-        } catch (e) { console.warn('Audit log failed:', e.message); }
+            await supabase.from('audit_log').insert({
+                user_id: req.user?.id || null,
+                user_email: req.user?.email || null,
+                action: 'case_full_update',
+                resource_type: 'case',
+                resource_id: id,
+                old_values: oldValues,
+                new_values: req.body,
+                ip_address: req.ip,
+                user_agent: req.headers['user-agent']
+            });
+        } catch (auditErr) { console.warn('Audit log failed:', auditErr.message); }
 
         res.json({ success: true, case: updatedCase });
 

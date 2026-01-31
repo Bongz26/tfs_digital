@@ -11,6 +11,11 @@ const ACTIVE_TTL_MS = 5000; // 5 seconds
 // GET /api/activeCases - Optimized
 router.get('/', async (req, res) => {
   try {
+    // Prevent browser caching to ensure fresh data after updates
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
     const now = Date.now();
     const page = parseInt(req.query.page || '1', 10);
     const limit = parseInt(req.query.limit || '20', 10);
@@ -23,17 +28,13 @@ router.get('/', async (req, res) => {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    // Disable cache if filters are active
-    if (!fromDate && !toDate && !search && !ageFilter && activeCasesCache.data && (now - activeCasesCache.time) < ACTIVE_TTL_MS) {
-      return res.json(activeCasesCache.data);
-    }
-
+    // Disable server-side cache completely since we're updating data frequently
     const supabase = req.app.locals.supabase;
     const activeStatuses = ['intake', 'preparation', 'confirmed', 'in_progress'];
 
     let qb = supabase
       .from('cases')
-      .select('id,case_number,deceased_name,status,funeral_date,funeral_time,venue_name,venue_address,burial_place,policy_number,requires_grocery,branch,created_at', { count: 'exact' })
+      .select('id,case_number,deceased_name,status,funeral_date,funeral_time,venue_name,venue_address,burial_place,policy_number,requires_grocery,branch,is_yard_burial,created_at', { count: 'exact' })
       .order('funeral_date', { ascending: true, nullsFirst: false });
 
     // Apply Filters

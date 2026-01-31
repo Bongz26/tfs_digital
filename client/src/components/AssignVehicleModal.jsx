@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { sanitizeDrivers, sanitizeVehicles } from "../utils/caseFormatters";
 
 export default function AssignVehicleModal({
     isOpen,
@@ -99,7 +100,7 @@ export default function AssignVehicleModal({
                                 }}
                             >
                                 <option value="">Select Vehicle</option>
-                                {vehicles.map(v => (
+                                {sanitizeVehicles(vehicles).map(v => (
                                     <option key={v.id} value={v.id}>
                                         {formatVehicleType(v.type)} - {v.reg_number}
                                     </option>
@@ -148,7 +149,7 @@ export default function AssignVehicleModal({
                                 }}
                             >
                                 <option value="">Select Driver</option>
-                                {drivers.map(d => (
+                                {sanitizeDrivers(drivers).map(d => (
                                     <option key={d.id} value={d.id}>
                                         {d.name}
                                     </option>
