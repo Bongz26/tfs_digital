@@ -25,7 +25,7 @@ const getSupabase = () => {
 const requireAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
@@ -95,7 +95,7 @@ const requireAuth = async (req, res, next) => {
  */
 const requireRole = (roles) => {
   const allowedRoles = Array.isArray(roles) ? roles : [roles];
-  
+
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({
@@ -122,7 +122,7 @@ const requireRole = (roles) => {
 const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       req.user = null;
       return next();
@@ -169,6 +169,7 @@ const optionalAuth = async (req, res, next) => {
 const ROLES = {
   ADMIN: 'admin',
   MANAGER: 'manager',
+  STOCK_MANAGER: 'stock_manager',
   STAFF: 'staff',
   DRIVER: 'driver'
 };
@@ -177,6 +178,7 @@ const ROLES = {
 const ROLE_HIERARCHY = {
   admin: 4,
   manager: 3,
+  stock_manager: 2,
   staff: 2,
   driver: 1
 };

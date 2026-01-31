@@ -53,7 +53,9 @@ export default function StockManagement() {
     unit_price: 0,
     low_stock_threshold: 1,
     location: 'Manekeng Showroom',
-    notes: ''
+    notes: '',
+    model: '',
+    color: ''
   });
   const [editItem, setEditItem] = useState(null);
   const [showEditForm, setShowEditForm] = useState(false);
@@ -327,7 +329,9 @@ export default function StockManagement() {
           unit_price: 0,
           low_stock_threshold: 1,
           location: 'Manekeng Showroom',
-          notes: ''
+          notes: '',
+          model: '',
+          color: ''
         });
         await fetchInventory(activeTab === 'low' ? 'all' : activeTab);
         await fetchStats();
@@ -398,7 +402,9 @@ export default function StockManagement() {
       unit_price: item.unit_price || 0,
       low_stock_threshold: item.low_stock_threshold ?? 1,
       location: item.location || 'Manekeng',
-      notes: item.notes || ''
+      notes: item.notes || '',
+      model: item.model || '',
+      color: item.color || ''
     });
     setShowEditForm(true);
   };
@@ -600,6 +606,29 @@ export default function StockManagement() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Model (Optional)</label>
+                  <input
+                    type="text"
+                    value={newItem.model}
+                    onChange={(e) => setNewItem({ ...newItem, model: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                    placeholder="e.g 5 Feet"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Color (Optional)</label>
+                  <input
+                    type="text"
+                    value={newItem.color}
+                    onChange={(e) => setNewItem({ ...newItem, color: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                    placeholder="e.g Kiaat"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">SKU</label>
                   <input
                     type="text"
@@ -653,7 +682,10 @@ export default function StockManagement() {
                 Cancel
               </button>
               <button
-                onClick={addNewItem}
+                onClick={async () => {
+                  const res = await addNewItem();
+                  if (!res.success) alert(res.error || 'Failed to add item');
+                }}
                 className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 font-semibold"
               >
                 Add Item
@@ -694,6 +726,27 @@ export default function StockManagement() {
                   <option value="livestock">Livestock</option>
                   <option value="other">Other</option>
                 </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Model</label>
+                  <input
+                    type="text"
+                    value={editItem.model}
+                    onChange={(e) => setEditItem({ ...editItem, model: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Color</label>
+                  <input
+                    type="text"
+                    value={editItem.color}
+                    onChange={(e) => setEditItem({ ...editItem, color: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -923,8 +976,10 @@ export default function StockManagement() {
                       <td className="p-3">
                         <div className="font-semibold text-gray-800">{item.name}</div>
                         <div className="text-sm text-gray-600 flex items-center space-x-2 mt-1">
-                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs capitalize">{item.category}</span>
                           <span>{item.sku && `SKU: ${item.sku}`}</span>
+                          {item.model && (
+                            <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">Model: {item.model}</span>
+                          )}
                           {item.color && (
                             <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs">Color: {item.color}</span>
                           )}

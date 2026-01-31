@@ -1,4 +1,3 @@
-const { query, getClient } = require('../config/db');
 const nodemailer = require('nodemailer');
 const sgMail = require('@sendgrid/mail');
 const { sendWeeklyReportLogic } = require('../cron/weeklyReport');
@@ -8,32 +7,55 @@ if (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.')) {
     sgMail.setApiKey(process.env.SMTP_PASS);
 }
 
-async function maybeNotifyLowStock(threshold = 1) {
+// Helper: Send Email (shared logic)
+async function sendEmail(to, subject, html, cc) {
+    const fromMail = process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    const host = process.env.SMTP_HOST;
+    const user = process.env.SMTP_USER;
+
     try {
+        if (pass && pass.startsWith('SG.')) {
+            await sgMail.send({ to, cc, from: { email: fromMail, name: 'TFS Inventory' }, subject, html });
+            console.log(`✅ Email sent via SendGrid to ${to}`);
+        } else if (host && user && pass) {
+            const port = parseInt(process.env.SMTP_PORT || '587', 10);
+            const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+            await transporter.sendMail({ from: fromMail, to, cc, subject, html });
+            console.log(`✅ Email sent via SMTP to ${to}`);
+        }
+    } catch (e) {
+        console.error('Email send failed:', e.message);
+    }
+}
+
+async function maybeNotifyLowStock(threshold = 1, supabaseClient = null) {
+    try {
+        if (!supabaseClient) {
+            console.warn('⚠️ maybeNotifyLowStock needs supabaseClient');
+            return;
+        }
+
         const to = process.env.INVENTORY_ALERTS_TO || process.env.ALERTS_TO || process.env.MANAGEMENT_EMAIL || process.env.SMTP_USER;
-        const cc = process.env.REPORT_CC_EMAIL || 'khumalo4sure@gmail.com';
-        const fromMail = process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER;
-        const host = process.env.SMTP_HOST;
-        const user = process.env.SMTP_USER;
-        const pass = process.env.SMTP_PASS;
+        if (!to) return;
 
-        if (!to || !fromMail) return;
+        const { data: items, error } = await supabaseClient
+            .from('inventory')
+            .select('id, name, category, sku, stock_quantity, reserved_quantity, low_stock_threshold, location, model, color')
+            .order('category')
+            .order('name');
 
-        const rows = await query(`
-            SELECT id, name, category, sku, stock_quantity, COALESCE(reserved_quantity,0) AS reserved_quantity,
-                   low_stock_threshold, location, model, color
-            FROM inventory
-            ORDER BY category, name
-        `);
-        const items = (rows.rows || []).map(r => ({
+        if (error) throw error;
+
+        const lowItems = items.map(r => ({
             ...r,
             available_quantity: (r.stock_quantity || 0) - (r.reserved_quantity || 0)
-        })).filter(r => r.available_quantity <= threshold);
+        })).filter(r => r.available_quantity <= (r.low_stock_threshold !== null ? r.low_stock_threshold : threshold));
 
-        if (items.length === 0) return;
+        if (lowItems.length === 0) return;
 
-        const subject = `⚠️ Low Stock Alert: ${items.length} item(s) at or below threshold`;
-        const htmlRows = items.map(i => `
+        const subject = `⚠️ Low Stock Alert: ${lowItems.length} item(s) at or below threshold`;
+        const htmlRows = lowItems.map(i => `
             <tr>
               <td style="padding:8px;border:1px solid #ddd;">${i.name}${i.color ? ' • ' + i.color : ''}</td>
               <td style="padding:8px;border:1px solid #ddd;">${i.category}</td>
@@ -61,37 +83,38 @@ async function maybeNotifyLowStock(threshold = 1) {
           </div>
         `;
 
-        if (pass && pass.startsWith('SG.')) {
-            await sgMail.send({ to, cc, from: { email: fromMail, name: 'TFS Inventory' }, subject, html });
-            console.log(`✅ Low stock alert sent via SendGrid to ${to}`);
-        } else if (host && user && pass) {
-            const port = parseInt(process.env.SMTP_PORT || '587', 10);
-            const transporter = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
-            await transporter.sendMail({ from: fromMail, to, cc, subject, html });
-            console.log(`✅ Low stock alert sent via SMTP to ${to}`);
-        }
+        await sendEmail(to, subject, html, process.env.REPORT_CC_EMAIL || 'khumalo4sure@gmail.com');
     } catch (err) {
         console.error('❌ Failed to send low stock notification:', err.message);
     }
 }
 
-async function notifyCasketUsage(caseId, itemId, qtyChange) {
+async function notifyCasketUsage(caseId, itemId, qtyChange, supabaseClient = null) {
     try {
+        if (!supabaseClient) {
+            console.warn('⚠️ notifyCasketUsage needs supabaseClient');
+            return;
+        }
+
         const to = process.env.MANAGEMENT_EMAIL || process.env.SMTP_USER;
-        const cc = process.env.REPORT_CC_EMAIL || 'khumalo4sure@gmail.com';
-        const fromMail = process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER;
-        const pass = process.env.SMTP_PASS;
+        if (!to) return;
 
-        if (!to || !fromMail) return;
+        const { data: caseData, error: caseErr } = await supabaseClient
+            .from('cases')
+            .select('case_number, deceased_name')
+            .eq('id', caseId)
+            .single();
 
-        const data = await query(`
-            SELECT c.case_number, c.deceased_name, i.name as item_name, i.color, i.stock_quantity as remaining
-            FROM cases c, inventory i
-            WHERE c.id = $1 AND i.id = $2
-        `, [caseId, itemId]);
+        const { data: itemData, error: itemErr } = await supabaseClient
+            .from('inventory')
+            .select('name, color, stock_quantity')
+            .eq('id', itemId)
+            .single();
 
-        if (data.rows.length === 0) return;
-        const { case_number, deceased_name, item_name, color, remaining } = data.rows[0];
+        if (caseErr || itemErr || !caseData || !itemData) return;
+
+        const { case_number, deceased_name } = caseData;
+        const { name: item_name, color, stock_quantity: remaining } = itemData;
 
         const subject = `⚰️ Coffin Used: ${deceased_name} (${case_number})`;
         const html = `
@@ -109,14 +132,7 @@ async function notifyCasketUsage(caseId, itemId, qtyChange) {
           </div>
         `;
 
-        if (pass && pass.startsWith('SG.')) {
-            await sgMail.send({ to, cc, from: { email: fromMail, name: 'TFS Stock' }, subject, html });
-            console.log(`✅ Casket usage email sent for case ${case_number}`);
-        } else if (process.env.SMTP_HOST) {
-            const port = parseInt(process.env.SMTP_PORT || '587', 10);
-            const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port, auth: { user: process.env.SMTP_USER, pass } });
-            await transporter.sendMail({ from: fromMail, to, cc, subject, html });
-        }
+        await sendEmail(to, subject, html, process.env.REPORT_CC_EMAIL || 'khumalo4sure@gmail.com');
     } catch (err) {
         console.error('❌ Failed to send casket usage email:', err.message);
     }
@@ -125,35 +141,36 @@ async function notifyCasketUsage(caseId, itemId, qtyChange) {
 // --- GET ALL INVENTORY ---
 exports.getAllInventory = async (req, res) => {
     try {
-        const tableCheck = await query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'inventory'
-      );
-    `);
+        const supabase = req.app.locals.supabase;
 
-        if (!tableCheck.rows[0].exists) {
+        if (!supabase) {
             return res.status(500).json({
                 success: false,
-                error: 'Database table not found',
-                message: 'The inventory table does not exist.'
+                error: 'Database not configured',
+                message: 'Supabase client is not initialized.'
             });
         }
 
         const { category } = req.query;
-        let sql = 'SELECT * FROM inventory';
-        const params = [];
+
+        let query = supabase
+            .from('inventory')
+            .select('*');
 
         if (category && category !== 'all') {
-            sql += ' WHERE category = $1';
-            params.push(category);
+            query = query.eq('category', category);
         }
 
-        sql += ' ORDER BY category, name';
+        query = query.order('category').order('name');
 
-        const result = await query(sql, params);
-        res.json({ success: true, inventory: result.rows || [] });
+        const { data, error } = await query;
+
+        if (error) {
+            console.error('❌ Error fetching inventory:', error);
+            return res.status(500).json({ success: false, error: 'Failed to fetch inventory', details: error.message });
+        }
+
+        res.json({ success: true, inventory: data || [] });
     } catch (err) {
         console.error('❌ Error fetching inventory:', err);
         res.status(500).json({ success: false, error: 'Failed to fetch inventory', details: err.message });
@@ -161,38 +178,30 @@ exports.getAllInventory = async (req, res) => {
 };
 
 // --- GET INVENTORY STATS ---
+// --- GET INVENTORY STATS ---
 exports.getInventoryStats = async (req, res) => {
     try {
-        const tableCheck = await query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'inventory'
-      );
-    `);
+        const supabase = req.app.locals.supabase;
+        if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
 
-        if (!tableCheck.rows[0].exists) {
-            return res.status(500).json({
-                success: false,
-                error: 'Database table not found',
-                message: 'The inventory table does not exist.'
-            });
-        }
+        const { data, error } = await supabase
+            .from('inventory')
+            .select('category, stock_quantity, low_stock_threshold');
 
-        const statsResult = await query(`
-      SELECT 
-        COUNT(*) as total_items,
-        SUM(CASE WHEN stock_quantity <= low_stock_threshold THEN 1 ELSE 0 END) as low_stock_count,
-        SUM(stock_quantity) as total_stock,
-        COUNT(DISTINCT category) as categories
-      FROM inventory
-    `);
+        if (error) throw error;
 
-        const stats = statsResult.rows[0] || {
-            total_items: 0,
-            low_stock_count: 0,
-            total_stock: 0,
-            categories: 0
+        const total_items = data.length;
+        const total_stock = data.reduce((sum, item) => sum + (item.stock_quantity || 0), 0);
+        const low_stock_count = data.filter(item =>
+            (item.stock_quantity || 0) <= (item.low_stock_threshold !== null ? item.low_stock_threshold : 0)
+        ).length;
+        const categories = new Set(data.map(i => i.category)).size;
+
+        const stats = {
+            total_items,
+            low_stock_count,
+            total_stock,
+            categories
         };
 
         res.json({ success: true, stats });
@@ -204,32 +213,31 @@ exports.getInventoryStats = async (req, res) => {
 
 exports.getLowStockDetailed = async (req, res) => {
     try {
-        const tableCheck = await query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'inventory'
-      );
-    `);
-        if (!tableCheck.rows[0].exists) {
-            return res.status(500).json({ success: false, error: 'Database table not found' });
-        }
+        const supabase = req.app.locals.supabase;
+        if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
+
         const { category } = req.query;
-        const params = [];
-        let sql = `SELECT id, name, category, sku, stock_quantity, reserved_quantity, low_stock_threshold, location, notes, model, color
-                   FROM inventory`;
+
+        let query = supabase
+            .from('inventory')
+            .select('id, name, category, sku, stock_quantity, reserved_quantity, low_stock_threshold, location, notes, model, color')
+            .order('category')
+            .order('name');
+
         if (category && category !== 'all') {
-            sql += ` WHERE category = $1`;
-            params.push(category);
+            query = query.eq('category', category);
         }
-        sql += ` ORDER BY category, name`;
-        const result = await query(sql, params);
-        const rows = (result.rows || []).map(r => ({
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        const lowItems = data.map(r => ({
             ...r,
             available_quantity: (r.stock_quantity || 0) - (r.reserved_quantity || 0),
-            is_low_stock: ((r.stock_quantity || 0) - (r.reserved_quantity || 0)) <= (r.low_stock_threshold || 0)
+            is_low_stock: ((r.stock_quantity || 0) - (r.reserved_quantity || 0)) <= (r.low_stock_threshold !== null ? r.low_stock_threshold : 0)
         })).filter(r => r.is_low_stock);
-        res.json({ success: true, items: rows });
+
+        res.json({ success: true, items: lowItems });
     } catch (err) {
         res.status(500).json({ success: false, error: 'Failed to fetch low stock', details: err.message });
     }
@@ -240,29 +248,49 @@ exports.updateStockQuantity = async (req, res) => {
     const { id } = req.params;
     const { stock_quantity } = req.body;
 
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
+
     try {
-        const itemResult = await query('SELECT stock_quantity, low_stock_threshold FROM inventory WHERE id=$1', [id]);
-        if (!itemResult.rows.length) {
+        const { data: item, error: fetchErr } = await supabase
+            .from('inventory')
+            .select('stock_quantity, low_stock_threshold')
+            .eq('id', id)
+            .single();
+
+        if (fetchErr || !item) {
             return res.status(404).json({ success: false, error: 'Item not found' });
         }
 
-        const previous = itemResult.rows[0].stock_quantity;
-        await query('UPDATE inventory SET stock_quantity=$1, updated_at=NOW() WHERE id=$2', [stock_quantity, id]);
+        const previous = item.stock_quantity;
+
+        const { error: updateErr } = await supabase
+            .from('inventory')
+            .update({ stock_quantity, updated_at: new Date() })
+            .eq('id', id);
+
+        if (updateErr) throw updateErr;
 
         try {
             const change = (parseInt(stock_quantity, 10) || 0) - (parseInt(previous, 10) || 0);
-            await query(
-                `INSERT INTO stock_movements 
-                 (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-                [id, null, 'adjustment', change, previous, stock_quantity, 'Manual update', (req.user?.email) || 'system']
-            );
+            if (change !== 0) {
+                await supabase.from('stock_movements').insert({
+                    inventory_id: id,
+                    movement_type: 'adjustment',
+                    quantity_change: change,
+                    previous_quantity: previous,
+                    new_quantity: stock_quantity,
+                    reason: 'Manual update',
+                    recorded_by: (req.user?.email) || 'system'
+                });
+            }
         } catch (movementErr) {
             console.warn('⚠️  Could not log stock movement (updateStockQuantity):', movementErr.message);
         }
 
-        const is_low_stock = stock_quantity <= itemResult.rows[0].low_stock_threshold;
-        try { await maybeNotifyLowStock(1); } catch (_) { }
+        const is_low_stock = stock_quantity <= (item.low_stock_threshold !== null ? item.low_stock_threshold : 0);
+        try { await maybeNotifyLowStock(1, supabase); } catch (_) { }
+
         res.json({ success: true, stock_quantity, is_low_stock });
     } catch (err) {
         console.error('❌ Error updating stock:', err);
@@ -275,33 +303,52 @@ exports.adjustStock = async (req, res) => {
     const { id } = req.params;
     const { quantity_change, reason, case_id, recorded_by, movement_type } = req.body;
 
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
+
     try {
-        const itemResult = await query('SELECT stock_quantity, low_stock_threshold FROM inventory WHERE id=$1', [id]);
-        if (!itemResult.rows.length) {
+        const { data: item, error: fetchErr } = await supabase
+            .from('inventory')
+            .select('stock_quantity, low_stock_threshold')
+            .eq('id', id)
+            .single();
+
+        if (fetchErr || !item) {
             return res.status(404).json({ success: false, error: 'Item not found' });
         }
 
-        const previous_quantity = itemResult.rows[0].stock_quantity;
+        const previous_quantity = item.stock_quantity;
         const new_quantity = previous_quantity + quantity_change;
 
-        await query('UPDATE inventory SET stock_quantity=$1, updated_at=NOW() WHERE id=$2', [new_quantity, id]);
+        const { error: updateErr } = await supabase
+            .from('inventory')
+            .update({ stock_quantity: new_quantity, updated_at: new Date() })
+            .eq('id', id);
+
+        if (updateErr) throw updateErr;
 
         try {
             const mType = (String(movement_type || '').toLowerCase() === 'sale') ? 'sale' : 'adjustment';
             const logDate = req.body.created_at || new Date(); // Allow backdating
 
-            await query(
-                `INSERT INTO stock_movements 
-         (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-                [id, case_id || null, mType, quantity_change, previous_quantity, new_quantity, reason || 'Manual adjustment', recorded_by || 'system', logDate]
-            );
+            await supabase.from('stock_movements').insert({
+                inventory_id: id,
+                case_id: case_id || null,
+                movement_type: mType,
+                quantity_change,
+                previous_quantity,
+                new_quantity,
+                reason: reason || 'Manual adjustment',
+                recorded_by: recorded_by || 'system',
+                created_at: logDate
+            });
         } catch (movementErr) {
             console.warn('⚠️  Could not log stock movement:', movementErr.message);
         }
 
-        const is_low_stock = new_quantity <= itemResult.rows[0].low_stock_threshold;
-        try { await maybeNotifyLowStock(1); } catch (_) { }
+        const is_low_stock = new_quantity <= (item.low_stock_threshold !== null ? item.low_stock_threshold : 0);
+        try { await maybeNotifyLowStock(1, supabase); } catch (_) { }
+
         res.json({ success: true, new_quantity, is_low_stock });
     } catch (err) {
         console.error('❌ Error adjusting stock:', err);
@@ -376,635 +423,42 @@ exports.getStockMovements = async (req, res) => {
     }
 };
 
+// --- REPORTING STUBS (Legacy SQL Removed) ---
 exports.getCoffinUsageByCase = async (req, res) => {
-    try {
-        let hasMovementsTable = true;
-        try {
-            const t = await query(`
-              SELECT EXISTS (
-                SELECT FROM pg_tables
-                WHERE schemaname = 'public' AND tablename = 'stock_movements'
-              ) AS exists
-            `);
-            hasMovementsTable = !!(t.rows[0] && t.rows[0].exists);
-            if (!hasMovementsTable) {
-                try {
-                    await query(`
-                      CREATE TABLE IF NOT EXISTS stock_movements (
-                        id SERIAL PRIMARY KEY,
-                        inventory_id INT NOT NULL REFERENCES inventory(id),
-                        case_id INT REFERENCES cases(id),
-                        movement_type TEXT NOT NULL,
-                        quantity_change INT NOT NULL,
-                        previous_quantity INT,
-                        new_quantity INT,
-                        reason TEXT,
-                        recorded_by TEXT,
-                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                      )
-                    `);
-                    hasMovementsTable = true;
-                } catch (_) { }
-            }
-        } catch (_) { }
-
-        if (!hasMovementsTable) {
-            return res.json({ success: true, cases: [] });
-        }
-
-        let hasCaseId = true;
-        try {
-            const col = await query(`
-              SELECT EXISTS (
-                SELECT FROM information_schema.columns 
-                WHERE table_schema = 'public' 
-                  AND table_name = 'stock_movements' 
-                  AND column_name = 'case_id'
-              ) AS exists
-            `);
-            hasCaseId = !!(col.rows[0] && col.rows[0].exists);
-            if (!hasCaseId) {
-                try {
-                    await query(`ALTER TABLE stock_movements ADD COLUMN case_id INT REFERENCES cases(id)`);
-                    hasCaseId = true;
-                } catch (_) { }
-            }
-        } catch (_) { }
-
-        if (!hasCaseId) {
-            return res.json({ success: true, cases: [] });
-        }
-
-        const { from, to, limit = 200, includeArchived } = req.query;
-        const params = [];
-        const dateWhere = [];
-        if (String(includeArchived).toLowerCase() !== 'true') {
-            dateWhere.push("c.status NOT IN ('archived','cancelled')");
-        }
-        if (from) { params.push(from); dateWhere.push(`c.funeral_date >= $${params.length}`); }
-        if (to) { params.push(to); dateWhere.push(`c.funeral_date <= $${params.length}`); }
-        const sql = `
-            WITH movements AS (
-              SELECT 
-                sm.case_id, 
-                sm.inventory_id, 
-                SUM(ABS(CASE WHEN sm.quantity_change IS NOT NULL THEN sm.quantity_change ELSE 0 END)) AS qty_sum
-              FROM stock_movements sm
-              JOIN inventory inv2 ON inv2.id = sm.inventory_id
-              WHERE inv2.category = 'coffin'
-                AND sm.case_id IS NOT NULL
-                AND (
-                  sm.movement_type = 'sale' 
-                  OR (sm.movement_type = 'adjustment' AND sm.quantity_change < 0)
-                )
-              GROUP BY sm.case_id, sm.inventory_id
-            ),
-            inferred AS (
-              SELECT 
-                c.id AS case_id,
-                invMatch.id AS inventory_id,
-                1 AS qty_sum
-              FROM cases c
-              LEFT JOIN LATERAL (
-                SELECT inv2.id
-                FROM inventory inv2
-                WHERE inv2.category = 'coffin'
-                  AND (
-                    c.casket_type IS NOT NULL AND (
-                      UPPER(TRIM(inv2.name)) = UPPER(TRIM(c.casket_type))
-                      OR UPPER(TRIM(inv2.model)) = UPPER(TRIM(c.casket_type))
-                      OR UPPER(REGEXP_REPLACE(inv2.name,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE(c.casket_type,'\\s+','', 'g'))
-                      OR UPPER(REGEXP_REPLACE(inv2.model,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE(c.casket_type,'\\s+','', 'g'))
-                      OR UPPER(inv2.name) LIKE '%' || UPPER(TRIM(c.casket_type)) || '%'
-                      OR UPPER(TRIM(c.casket_type)) LIKE '%' || UPPER(inv2.name) || '%'
-                      OR UPPER(inv2.model) LIKE '%' || UPPER(TRIM(c.casket_type)) || '%'
-                      OR UPPER(TRIM(c.casket_type)) LIKE '%' || UPPER(inv2.model) || '%'
-                    )
-                  )
-                  AND (
-                    c.casket_colour IS NULL
-                    OR inv2.color IS NULL
-                    OR UPPER(TRIM(inv2.color)) = UPPER(TRIM(c.casket_colour))
-                    OR UPPER(REGEXP_REPLACE(inv2.color,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE(c.casket_colour,'\\s+','', 'g'))
-                    OR UPPER(inv2.color) LIKE '%' || UPPER(TRIM(c.casket_colour)) || '%'
-                    OR UPPER(TRIM(c.casket_colour)) LIKE '%' || UPPER(inv2.color) || '%'
-                  )
-                ORDER BY inv2.stock_quantity DESC NULLS LAST
-                LIMIT 1
-              ) AS invMatch ON TRUE
-              WHERE invMatch.id IS NOT NULL
-                AND NOT EXISTS (SELECT 1 FROM movements m WHERE m.case_id = c.id)
-            ),
-            usage AS (
-              SELECT * FROM movements
-              UNION ALL
-              SELECT * FROM inferred
-            )
-            SELECT 
-              c.id AS case_id,
-              c.case_number,
-              c.deceased_name,
-              (COALESCE(SUM(u.qty_sum),0) + CASE WHEN COALESCE(SUM(u.qty_sum),0) = 0 AND c.casket_type IS NOT NULL THEN 1 ELSE 0 END) AS total_coffins,
-              CASE 
-                WHEN COALESCE(SUM(u.qty_sum),0) = 0 AND c.casket_type IS NOT NULL THEN json_build_array(json_build_object('name', c.casket_type, 'color', c.casket_colour, 'quantity', 1))
-                ELSE COALESCE(json_agg(json_build_object('name', i.name, 'color', i.color, 'quantity', u.qty_sum)) FILTER (WHERE i.id IS NOT NULL), '[]'::json)
-              END AS items
-            FROM cases c
-            LEFT JOIN usage u ON u.case_id = c.id
-            LEFT JOIN inventory i ON i.id = u.inventory_id
-            ${dateWhere.length ? 'WHERE ' + dateWhere.join(' AND ') : ''}
-            GROUP BY c.id, c.case_number, c.deceased_name, c.casket_type, c.casket_colour
-            ORDER BY c.funeral_date DESC NULLS LAST, c.created_at DESC
-            LIMIT ${Math.max(1, Math.min(parseInt(limit, 10) || 200, 1000))}
-        `;
-        const result = await query(sql, params);
-        const rows = result.rows || [];
-        const grandTotal = rows.reduce((acc, r) => acc + (parseInt(r.total_coffins, 10) || 0), 0);
-        res.json({ success: true, cases: rows, totals: { grand_total: grandTotal, case_count: rows.length } });
-    } catch (err) {
-        res.status(500).json({ success: false, error: 'Failed to summarize coffin usage by case', details: err.message });
-    }
+    res.json({ success: true, cases: [], note: 'Reporting temporarily unavailable during migration' });
 };
 
-module.exports.getCoffinUsageRaw = async (req, res) => {
-    try {
-        let hasMovementsTable = true;
-        try {
-            const t = await query(`
-              SELECT EXISTS (
-                SELECT FROM pg_tables
-                WHERE schemaname = 'public' AND tablename = 'stock_movements'
-              ) AS exists
-            `);
-            hasMovementsTable = !!(t.rows[0] && t.rows[0].exists);
-            if (!hasMovementsTable) {
-                try {
-                    await query(`
-                      CREATE TABLE IF NOT EXISTS stock_movements (
-                        id SERIAL PRIMARY KEY,
-                        inventory_id INT NOT NULL REFERENCES inventory(id),
-                        case_id INT REFERENCES cases(id),
-                        movement_type TEXT NOT NULL,
-                        quantity_change INT NOT NULL,
-                        previous_quantity INT,
-                        new_quantity INT,
-                        reason TEXT,
-                        recorded_by TEXT,
-                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                      )
-                    `);
-                    hasMovementsTable = true;
-                } catch (_) { }
-            }
-        } catch (_) { }
-
-        if (!hasMovementsTable) {
-            return res.json({ success: true, items: [] });
-        }
-
-        let hasCaseId = true;
-        try {
-            const col = await query(`
-              SELECT EXISTS (
-                SELECT FROM information_schema.columns 
-                WHERE table_schema = 'public' 
-                  AND table_name = 'stock_movements' 
-                  AND column_name = 'case_id'
-              ) AS exists
-            `);
-            hasCaseId = !!(col.rows[0] && col.rows[0].exists);
-            if (!hasCaseId) {
-                try {
-                    await query(`ALTER TABLE stock_movements ADD COLUMN case_id INT REFERENCES cases(id)`);
-                    hasCaseId = true;
-                } catch (_) { }
-            }
-        } catch (_) { }
-
-        const { from, to, case_id, case_number, limit = 500 } = req.query;
-        const params = [];
-        const whereMov = [];
-        const whereInf = [];
-
-        whereMov.push("inv.category = 'coffin'");
-        if (hasCaseId) whereMov.push('sm.case_id IS NOT NULL');
-        whereMov.push("(sm.movement_type = 'sale' OR (sm.movement_type = 'adjustment' AND sm.quantity_change < 0))");
-        if (from) { params.push(from); whereMov.push(`sm.created_at >= $${params.length}`); }
-        if (to) { params.push(to); whereMov.push(`sm.created_at <= $${params.length}`); }
-        if (case_id) { params.push(case_id); whereMov.push(`sm.case_id = $${params.length}`); }
-        if (case_number) { params.push(case_number); whereMov.push(`c.case_number = $${params.length}`); }
-
-        if (from) { whereInf.push(`c.funeral_date >= $${params.length - (!!case_number) - (!!case_id)}`); }
-        if (to) { whereInf.push(`c.funeral_date <= $${params.length - (!!case_number) - (!!case_id)}`); }
-        if (case_id) { whereInf.push(`c.id = ${case_id}`); }
-        if (case_number) { whereInf.push(`c.case_number = '${case_number}'`); }
-
-        const sql = `
-            WITH movements AS (
-              SELECT 
-                sm.case_id,
-                c.case_number,
-                c.deceased_name,
-                sm.inventory_id,
-                inv.name,
-                inv.model,
-                inv.color,
-                sm.movement_type,
-                sm.quantity_change,
-                sm.previous_quantity,
-                sm.new_quantity,
-                sm.reason,
-                sm.recorded_by,
-                sm.created_at,
-                'movement' AS source
-              FROM stock_movements sm
-              JOIN inventory inv ON inv.id = sm.inventory_id
-              ${hasCaseId ? 'LEFT JOIN cases c ON sm.case_id = c.id' : 'LEFT JOIN cases c ON FALSE'}
-              WHERE ${whereMov.join(' AND ')}
-            ),
-            inferred AS (
-              SELECT 
-                c.id AS case_id,
-                c.case_number,
-                c.deceased_name,
-                invMatch.id AS inventory_id,
-                invMatch.name,
-                invMatch.model,
-                invMatch.color,
-                'inferred' AS movement_type,
-                -1 AS quantity_change,
-                NULL AS previous_quantity,
-                NULL AS new_quantity,
-                'Inferred from case fields' AS reason,
-                NULL AS recorded_by,
-                c.updated_at AS created_at,
-                'inferred' AS source
-              FROM cases c
-              LEFT JOIN LATERAL (
-                SELECT inv2.id, inv2.name, inv2.model, inv2.color
-                FROM inventory inv2
-                WHERE inv2.category = 'coffin'
-                  AND (
-                    c.casket_type IS NOT NULL AND (
-                      UPPER(inv2.name) = UPPER(c.casket_type) OR UPPER(inv2.model) = UPPER(c.casket_type)
-                      OR UPPER(inv2.name) LIKE '%' || UPPER(c.casket_type) || '%'
-                      OR UPPER(c.casket_type) LIKE '%' || UPPER(inv2.name) || '%'
-                      OR UPPER(inv2.model) LIKE '%' || UPPER(c.casket_type) || '%'
-                      OR UPPER(c.casket_type) LIKE '%' || UPPER(inv2.model) || '%'
-                    )
-                  )
-                  AND (
-                    c.casket_colour IS NULL
-                    OR inv2.color IS NULL
-                    OR UPPER(inv2.color) = UPPER(c.casket_colour)
-                    OR UPPER(inv2.color) LIKE '%' || UPPER(c.casket_colour) || '%'
-                    OR UPPER(c.casket_colour) LIKE '%' || UPPER(inv2.color) || '%'
-                  )
-                ORDER BY inv2.stock_quantity DESC NULLS LAST
-                LIMIT 1
-              ) AS invMatch ON TRUE
-              WHERE invMatch.id IS NOT NULL
-                AND NOT EXISTS (SELECT 1 FROM movements m WHERE m.case_id = c.id)
-                ${whereInf.length ? 'AND ' + whereInf.join(' AND ') : ''}
-            )
-            SELECT * FROM movements
-            UNION ALL
-            SELECT * FROM inferred
-            ORDER BY created_at DESC
-            LIMIT ${Math.max(1, Math.min(parseInt(limit, 10) || 500, 2000))}
-        `;
-        const result = await query(sql, params);
-        res.json({ success: true, items: result.rows || [] });
-    } catch (err) {
-        res.status(500).json({ success: false, error: 'Failed to fetch coffin usage raw data', details: err.message });
-    }
+exports.getCoffinUsageRaw = async (req, res) => {
+    res.json({ success: true, items: [], note: 'Reporting temporarily unavailable during migration' });
 };
 
 exports.getPublicCoffinUsageRaw = async (req, res) => {
-    try {
-        let hasMovementsTable = true;
-        try {
-            const t = await query(`
-              SELECT EXISTS (
-                SELECT FROM pg_tables
-                WHERE schemaname = 'public' AND tablename = 'stock_movements'
-              ) AS exists
-            `);
-            hasMovementsTable = !!(t.rows[0] && t.rows[0].exists);
-        } catch (_) { }
-
-        const { from, to, case_number, limit = 500, includeArchived } = req.query;
-        const params = [];
-        const whereMov = ["inv.category = 'coffin'"];
-        if (String(includeArchived).toLowerCase() !== 'true') {
-            whereMov.push("(c.status IS NULL OR c.status NOT IN ('archived','cancelled'))");
-        }
-        if (hasMovementsTable) {
-            whereMov.push("(sm.movement_type = 'sale' OR (sm.movement_type = 'adjustment' AND sm.quantity_change < 0))");
-            if (from) { params.push(from); whereMov.push(`sm.created_at >= $${params.length}`); }
-            if (to) { params.push(to); whereMov.push(`sm.created_at <= $${params.length}`); }
-            if (case_number) { params.push(case_number); whereMov.push(`c.case_number = $${params.length}`); }
-        }
-
-        const whereInf = [];
-        if (String(includeArchived).toLowerCase() !== 'true') {
-            whereInf.push("c.status NOT IN ('archived','cancelled')");
-        }
-        if (from) { params.push(from); whereInf.push(`c.funeral_date >= $${params.length}`); }
-        if (to) { params.push(to); whereInf.push(`c.funeral_date <= $${params.length}`); }
-        if (case_number) { params.push(case_number); whereInf.push(`c.case_number = $${params.length}`); }
-
-        const sql = `
-            WITH movements AS (
-              ${hasMovementsTable ? `
-              SELECT 
-                c.case_number,
-                c.deceased_name,
-                inv.name,
-                inv.color,
-                ABS(sm.quantity_change) AS quantity,
-                sm.created_at,
-                'movement' AS source
-              FROM stock_movements sm
-              JOIN inventory inv ON inv.id = sm.inventory_id
-              LEFT JOIN cases c ON sm.case_id = c.id
-              WHERE ${whereMov.join(' AND ')}
-              ` : `
-              SELECT NULL::text AS case_number, NULL::text AS deceased_name, NULL::text AS name, NULL::text AS color, NULL::int AS quantity, NOW() AS created_at, 'movement' AS source
-              WHERE FALSE
-              `}
-            ),
-            inferred AS (
-              SELECT 
-                c.case_number,
-                c.deceased_name,
-                invMatch.name,
-                invMatch.color,
-                1 AS quantity,
-                c.updated_at AS created_at,
-                'inferred' AS source
-              FROM cases c
-              LEFT JOIN LATERAL (
-                SELECT inv2.name, inv2.color
-                FROM inventory inv2
-                WHERE inv2.category = 'coffin'
-                  AND (
-                    c.casket_type IS NOT NULL AND (
-                      UPPER(TRIM(inv2.name)) = UPPER(TRIM(c.casket_type))
-                      OR UPPER(TRIM(inv2.model)) = UPPER(TRIM(c.casket_type))
-                      OR UPPER(REGEXP_REPLACE(inv2.name,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE(c.casket_type,'\\s+','', 'g'))
-                      OR UPPER(REGEXP_REPLACE(inv2.model,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE(c.casket_type,'\\s+','', 'g'))
-                      OR UPPER(inv2.name) LIKE '%' || UPPER(TRIM(c.casket_type)) || '%'
-                      OR UPPER(TRIM(c.casket_type)) LIKE '%' || UPPER(inv2.name) || '%'
-                      OR UPPER(inv2.model) LIKE '%' || UPPER(TRIM(c.casket_type)) || '%'
-                      OR UPPER(TRIM(c.casket_type)) LIKE '%' || UPPER(inv2.model) || '%'
-                    )
-                  )
-                  AND (
-                    c.casket_colour IS NULL
-                    OR inv2.color IS NULL
-                    OR UPPER(TRIM(inv2.color)) = UPPER(TRIM(c.casket_colour))
-                    OR UPPER(REGEXP_REPLACE(inv2.color,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE(c.casket_colour,'\\s+','', 'g'))
-                    OR UPPER(inv2.color) LIKE '%' || UPPER(TRIM(c.casket_colour)) || '%'
-                    OR UPPER(TRIM(c.casket_colour)) LIKE '%' || UPPER(inv2.color) || '%'
-                  )
-                ORDER BY inv2.stock_quantity DESC NULLS LAST
-                LIMIT 1
-              ) AS invMatch ON TRUE
-              WHERE invMatch.name IS NOT NULL
-                AND NOT EXISTS (
-                  SELECT 1 FROM stock_movements sm
-                  WHERE sm.case_id = c.id
-                )
-                ${whereInf.length ? 'AND ' + whereInf.join(' AND ') : ''}
-            )
-            SELECT * FROM movements
-            UNION ALL
-            SELECT * FROM inferred
-            ORDER BY created_at DESC
-            LIMIT ${Math.max(1, Math.min(parseInt(limit, 10) || 500, 2000))}
-        `;
-        const result = await query(sql, params);
-        const rows = (result.rows || []).map(r => ({
-            case_number: r.case_number || null,
-            deceased_name: r.deceased_name || null,
-            item_name: r.name || null,
-            color: r.color || null,
-            quantity: r.quantity || 0,
-            source: r.source,
-            created_at: r.created_at
-        }));
-        res.json({ success: true, items: rows });
-    } catch (err) {
-        res.status(500).json({ success: false, error: 'Failed to fetch public coffin usage data', details: err.message });
-    }
+    res.json({ success: true, items: [], note: 'Reporting temporarily unavailable during migration' });
 };
 
 exports.backfillCoffinMovementsToCases = async (req, res) => {
-    try {
-        let hasMovementsTable = true;
-        try {
-            const t = await query(`
-              SELECT EXISTS (
-                SELECT FROM pg_tables
-                WHERE schemaname = 'public' AND tablename = 'stock_movements'
-              ) AS exists
-            `);
-            hasMovementsTable = !!(t.rows[0] && t.rows[0].exists);
-            if (!hasMovementsTable) {
-                try {
-                    await query(`
-                      CREATE TABLE IF NOT EXISTS stock_movements (
-                        id SERIAL PRIMARY KEY,
-                        inventory_id INT NOT NULL REFERENCES inventory(id),
-                        case_id INT REFERENCES cases(id),
-                        movement_type TEXT NOT NULL,
-                        quantity_change INT NOT NULL,
-                        previous_quantity INT,
-                        new_quantity INT,
-                        reason TEXT,
-                        recorded_by TEXT,
-                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                      )
-                    `);
-                    hasMovementsTable = true;
-                } catch (_) { }
-            }
-        } catch (_) { }
-
-        if (!hasMovementsTable) {
-            return res.json({ success: false, error: 'Missing stock_movements table' });
-        }
-
-        let hasCaseId = true;
-        try {
-            const col = await query(`
-              SELECT EXISTS (
-                SELECT FROM information_schema.columns 
-                WHERE table_schema = 'public' 
-                  AND table_name = 'stock_movements' 
-                  AND column_name = 'case_id'
-              ) AS exists
-            `);
-            hasCaseId = !!(col.rows[0] && col.rows[0].exists);
-            if (!hasCaseId) {
-                try {
-                    await query(`ALTER TABLE stock_movements ADD COLUMN case_id INT REFERENCES cases(id)`);
-                    hasCaseId = true;
-                } catch (_) { }
-            }
-        } catch (_) { }
-
-        const { limit = 500, dry_run } = req.query;
-        const movs = await query(`
-          SELECT 
-            sm.id,
-            sm.inventory_id,
-            sm.created_at,
-            sm.movement_type,
-            sm.quantity_change,
-            inv.name,
-            inv.model,
-            inv.color
-          FROM stock_movements sm
-          JOIN inventory inv ON inv.id = sm.inventory_id
-          WHERE inv.category = 'coffin'
-            AND ${hasCaseId ? 'sm.case_id IS NULL' : '1=1'}
-            AND (
-              sm.movement_type = 'sale' OR (sm.movement_type = 'adjustment' AND sm.quantity_change < 0)
-            )
-          ORDER BY sm.created_at DESC
-          LIMIT ${Math.max(1, Math.min(parseInt(limit, 10) || 500, 2000))}
-        `);
-
-        const updated = [];
-        const unmatched = [];
-
-        for (const m of (movs.rows || [])) {
-            const params = [m.name || '', m.model || '', m.color || null, m.created_at];
-            const cands = await query(`
-              SELECT 
-                c.id,
-                c.case_number,
-                c.deceased_name,
-                c.casket_type,
-                c.casket_colour,
-                c.funeral_date,
-                (
-                  CASE WHEN $1 <> '' AND c.casket_type IS NOT NULL AND (UPPER($1) = UPPER(c.casket_type) OR UPPER($2) = UPPER(c.casket_type)) THEN 70
-                       WHEN $1 <> '' AND c.casket_type IS NOT NULL AND (
-                         UPPER($1) LIKE '%' || UPPER(c.casket_type) || '%' OR UPPER(c.casket_type) LIKE '%' || UPPER($1) || '%'
-                         OR UPPER($2) LIKE '%' || UPPER(c.casket_type) || '%' OR UPPER(c.casket_type) LIKE '%' || UPPER($2) || '%'
-                       ) THEN 40
-                       ELSE 0 END
-                )
-                + (
-                  CASE WHEN $3 IS NULL OR c.casket_colour IS NULL THEN 0
-                       WHEN UPPER($3) = UPPER(c.casket_colour) THEN 30
-                       WHEN UPPER($3) LIKE '%' || UPPER(c.casket_colour) || '%' OR UPPER(c.casket_colour) LIKE '%' || UPPER($3) || '%' THEN 10
-                       ELSE 0 END
-                )
-                + (
-                  CASE WHEN c.funeral_date IS NOT NULL THEN GREATEST(0, 30 - ABS(CAST(DATE_PART('day', c.funeral_date::timestamp - $4)::int AS int))) ELSE 0 END
-                ) AS score
-              FROM cases c
-              WHERE c.casket_type IS NOT NULL OR c.casket_colour IS NOT NULL
-              ORDER BY score DESC, c.updated_at DESC NULLS LAST
-              LIMIT 3
-            `, params);
-
-            const best = (cands.rows || [])[0];
-            if (best && best.score >= 60) {
-                if (String(dry_run).toLowerCase() === 'true') {
-                    updated.push({ movement_id: m.id, case_id: best.id, score: best.score, dry_run: true });
-                } else {
-                    await query('UPDATE stock_movements SET case_id=$1 WHERE id=$2', [best.id, m.id]);
-                    updated.push({ movement_id: m.id, case_id: best.id, score: best.score });
-                }
-            } else {
-                unmatched.push({ movement_id: m.id, name: m.name, model: m.model, color: m.color, created_at: m.created_at, candidates: cands.rows || [] });
-            }
-        }
-
-        res.json({ success: true, processed: (movs.rows || []).length, updated_count: updated.length, updated, unmatched_count: unmatched.length, unmatched });
-    } catch (err) {
-        res.status(500).json({ success: false, error: 'Failed to backfill coffin movements', details: err.message });
-    }
+    res.status(501).json({ success: false, error: 'Not implemented in Supabase version' });
 };
 
 exports.createCoffinMovementsForCases = async (req, res) => {
-    try {
-        const { case_number, dry_run, limit = 200 } = req.body || {};
-        const params = [];
-        const where = ["(c.casket_type IS NOT NULL OR c.casket_colour IS NOT NULL)"];
-        if (case_number) { params.push(case_number); where.push(`c.case_number = $${params.length}`); }
-        where.push(`NOT EXISTS (SELECT 1 FROM stock_movements sm WHERE sm.case_id = c.id AND (sm.movement_type = 'sale' OR (sm.movement_type = 'adjustment' AND sm.quantity_change < 0)))`);
-
-        const casesRes = await query(`
-            SELECT c.id, c.case_number, c.deceased_name, c.casket_type, c.casket_colour
-            FROM cases c
-            WHERE ${where.join(' AND ')}
-            ORDER BY c.updated_at DESC NULLS LAST, c.created_at DESC
-            LIMIT ${Math.max(1, Math.min(parseInt(limit, 10) || 200, 1000))}
-        `, params);
-
-        const processed = [];
-        const unmatched = [];
-
-        for (const c of (casesRes.rows || [])) {
-            const nameStr = String(c.casket_type || '').trim();
-            const colorStr = String(c.casket_colour || '').trim();
-            if (!nameStr) { unmatched.push({ case_id: c.id, case_number: c.case_number, reason: 'Missing casket_type' }); continue; }
-            let inv = await query(
-                `SELECT id, name, model, color FROM inventory WHERE category='coffin' AND (
-                    UPPER(TRIM(name)) = UPPER(TRIM($1))
-                    OR UPPER(TRIM(model)) = UPPER(TRIM($1))
-                    OR UPPER(REGEXP_REPLACE(name,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE($1,'\\s+','', 'g'))
-                    OR UPPER(REGEXP_REPLACE(model,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE($1,'\\s+','', 'g'))
-                    OR UPPER(name) LIKE '%' || UPPER(TRIM($1)) || '%'
-                    OR UPPER(TRIM($1)) LIKE '%' || UPPER(name) || '%'
-                    OR UPPER(model) LIKE '%' || UPPER(TRIM($1)) || '%'
-                    OR UPPER(TRIM($1)) LIKE '%' || UPPER(model) || '%'
-                )
-                AND (
-                    $2 IS NULL OR color IS NULL OR UPPER(TRIM(color)) = UPPER(TRIM($2))
-                    OR UPPER(REGEXP_REPLACE(color,'\\s+','', 'g')) = UPPER(REGEXP_REPLACE($2,'\\s+','', 'g'))
-                    OR UPPER(color) LIKE '%' || UPPER(TRIM($2)) || '%'
-                    OR UPPER(TRIM($2)) LIKE '%' || UPPER(color) || '%'
-                )
-                ORDER BY id DESC LIMIT 1`,
-                [nameStr, colorStr || null]
-            );
-            const item = inv.rows[0];
-            if (!item) { unmatched.push({ case_id: c.id, case_number: c.case_number, reason: 'No inventory match', casket_type: nameStr, casket_colour: colorStr || null }); continue; }
-            if (String(dry_run).toLowerCase() === 'true') {
-                processed.push({ case_id: c.id, case_number: c.case_number, inventory_id: item.id, dry_run: true });
-            } else {
-                await query(
-                    `INSERT INTO stock_movements (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
-                     VALUES ($1,$2,'sale',-1,NULL,NULL,'Backfill from case fields', $3)`,
-                    [item.id, c.id, (req.user?.email) || 'system']
-                );
-                processed.push({ case_id: c.id, case_number: c.case_number, inventory_id: item.id });
-            }
-        }
-
-        res.json({ success: true, processed_count: processed.length, processed, unmatched_count: unmatched.length, unmatched });
-    } catch (err) {
-        res.status(500).json({ success: false, error: 'Failed to create backfill movements', details: err.message });
-    }
+    res.status(501).json({ success: false, error: 'Not implemented in Supabase version' });
 };
 
 // --- GET OPEN STOCK TAKES ---
 exports.getOpenStockTakes = async (req, res) => {
     try {
-        const openTakes = await query(
-            `SELECT id, taken_by, created_at, status 
-       FROM stock_takes 
-       WHERE status = 'in_progress' 
-       ORDER BY created_at DESC`
-        );
-        res.json({ success: true, stock_takes: openTakes.rows });
+        const supabase = req.app.locals.supabase;
+        if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
+
+        const { data: openTakes, error } = await supabase
+            .from('stock_takes')
+            .select('id, taken_by, created_at, status')
+            .eq('status', 'in_progress')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        res.json({ success: true, stock_takes: openTakes });
     } catch (err) {
         console.error('❌ Error fetching open stock takes:', err);
         res.status(500).json({ success: false, error: 'Failed to fetch open stock takes', details: err.message });
@@ -1014,12 +468,16 @@ exports.getOpenStockTakes = async (req, res) => {
 // --- START STOCK TAKE ---
 exports.startStockTake = async (req, res) => {
     const { taken_by } = req.body;
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
 
     try {
-        const openCount = await query(
-            `SELECT COUNT(*) as count FROM stock_takes WHERE status = 'in_progress'`
-        );
-        const count = parseInt(openCount.rows[0].count);
+        const { count, error: countErr } = await supabase
+            .from('stock_takes')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'in_progress');
+
+        if (countErr) throw countErr;
 
         if (count >= 2) {
             return res.status(400).json({
@@ -1029,40 +487,55 @@ exports.startStockTake = async (req, res) => {
             });
         }
 
-        const take = await query(
-            `INSERT INTO stock_takes (taken_by) VALUES ($1) RETURNING id, created_at`,
-            [taken_by]
-        );
+        const { data: take, error: createErr } = await supabase
+            .from('stock_takes')
+            .insert({ taken_by, status: 'in_progress' })
+            .select('id, created_at')
+            .single();
 
-        await query(
-            `INSERT INTO stock_take_items (stock_take_id, inventory_id, system_quantity)
-       SELECT $1, i.id, i.stock_quantity 
-       FROM inventory i
-       RETURNING stock_take_items.*`,
-            [take.rows[0].id]
-        );
+        if (createErr) throw createErr;
 
-        const itemsWithDetails = await query(
-            `SELECT 
-         sti.id,
-         sti.stock_take_id,
-         sti.inventory_id,
-         sti.system_quantity,
-         sti.physical_quantity,
-         sti.difference,
-         sti.notes,
-         sti.created_at,
-         i.name,
-         i.category,
-         i.sku
-       FROM stock_take_items sti
-       INNER JOIN inventory i ON sti.inventory_id = i.id
-       WHERE sti.stock_take_id = $1
-       ORDER BY i.category, i.name`,
-            [take.rows[0].id]
-        );
+        const { data: inventory, error: invErr } = await supabase
+            .from('inventory')
+            .select('id, stock_quantity');
 
-        res.json({ success: true, stock_take_id: take.rows[0].id, items: itemsWithDetails.rows });
+        if (invErr) throw invErr;
+
+        const takeItems = inventory.map(i => ({
+            stock_take_id: take.id,
+            inventory_id: i.id,
+            system_quantity: i.stock_quantity || 0
+        }));
+
+        const { error: itemsErr } = await supabase
+            .from('stock_take_items')
+            .insert(takeItems);
+
+        if (itemsErr) throw itemsErr;
+
+        const { data: itemsWithDetails, error: fetchItemsErr } = await supabase
+            .from('stock_take_items')
+            .select(`
+                id, stock_take_id, inventory_id, system_quantity, physical_quantity, difference, notes, created_at,
+                inventory ( name, category, sku )
+            `)
+            .eq('stock_take_id', take.id)
+            .order('inventory(category)')
+            .order('inventory(name)');
+
+        if (fetchItemsErr) throw fetchItemsErr;
+
+        // Flatten for frontend compatibility if needed, or frontend adapts. 
+        // Assuming frontend expects flat structure based on previous SQL:
+        const flatItems = itemsWithDetails.map(i => ({
+            ...i,
+            name: i.inventory?.name,
+            category: i.inventory?.category,
+            sku: i.inventory?.sku,
+            inventory: undefined
+        }));
+
+        res.json({ success: true, stock_take_id: take.id, items: flatItems });
     } catch (err) {
         console.error('❌ Error starting stock take:', err);
         res.status(500).json({ success: false, error: 'Failed to start stock take', details: err.message });
@@ -1073,46 +546,48 @@ exports.startStockTake = async (req, res) => {
 exports.updateStockTakeItem = async (req, res) => {
     const { id, itemId } = req.params;
     const { physical_quantity, notes } = req.body;
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
 
     try {
-        const result = await query(
-            `UPDATE stock_take_items
-       SET physical_quantity = $1,
-           difference = $1 - system_quantity,
-           notes = $2
-       WHERE stock_take_id = $3 AND inventory_id = $4
-       RETURNING *`,
-            [physical_quantity, notes, id, itemId]
-        );
+        // Need to fetch system_quantity to calculate difference (unless passed from FE, but safer from DB)
+        const { data: currentItem, error: fetchErr } = await supabase
+            .from('stock_take_items')
+            .select('system_quantity')
+            .eq('stock_take_id', id)
+            .eq('inventory_id', itemId)
+            .single();
 
-        if (!result.rows.length) {
-            return res.status(404).json({ success: false, error: 'Stock take item not found' });
-        }
+        if (fetchErr || !currentItem) return res.status(404).json({ success: false, error: 'Stock take item not found' });
 
-        const itemWithDetails = await query(
-            `SELECT 
-         sti.id,
-         sti.stock_take_id,
-         sti.inventory_id,
-         sti.system_quantity,
-         sti.physical_quantity,
-         sti.difference,
-         sti.notes,
-         sti.created_at,
-         i.name,
-         i.category,
-         i.sku
-       FROM stock_take_items sti
-       INNER JOIN inventory i ON sti.inventory_id = i.id
-       WHERE sti.stock_take_id = $1 AND sti.inventory_id = $2`,
-            [id, itemId]
-        );
+        const difference = (physical_quantity !== null) ? (physical_quantity - currentItem.system_quantity) : null;
 
-        if (!itemWithDetails.rows.length) {
-            return res.status(404).json({ success: false, error: 'Stock take item not found' });
-        }
+        const { data: updated, error: updateErr } = await supabase
+            .from('stock_take_items')
+            .update({
+                physical_quantity,
+                difference,
+                notes
+            })
+            .eq('stock_take_id', id)
+            .eq('inventory_id', itemId)
+            .select(`
+                id, stock_take_id, inventory_id, system_quantity, physical_quantity, difference, notes, created_at,
+                inventory ( name, category, sku )
+            `)
+            .single();
 
-        res.json({ success: true, item: itemWithDetails.rows[0] });
+        if (updateErr) throw updateErr;
+
+        const flatItem = {
+            ...updated,
+            name: updated.inventory?.name,
+            category: updated.inventory?.category,
+            sku: updated.inventory?.sku,
+            inventory: undefined
+        };
+
+        res.json({ success: true, item: flatItem });
     } catch (err) {
         console.error('❌ Error updating stock take item:', err);
         res.status(500).json({ success: false, error: 'Failed to update count', details: err.message });
@@ -1122,41 +597,51 @@ exports.updateStockTakeItem = async (req, res) => {
 // --- GET SPECIFIC STOCK TAKE ---
 exports.getStockTake = async (req, res) => {
     const { id } = req.params;
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
 
     try {
-        const takeResult = await query(
-            `SELECT id, taken_by, created_at, status FROM stock_takes WHERE id = $1`,
-            [id]
-        );
+        const { data: take, error: takeErr } = await supabase
+            .from('stock_takes')
+            .select('id, taken_by, created_at, status')
+            .eq('id', id)
+            .single();
 
-        if (takeResult.rows.length === 0) {
+        if (takeErr || !take) {
             return res.status(404).json({ success: false, error: 'Stock take not found' });
         }
 
-        const itemsWithDetails = await query(
-            `SELECT 
-         sti.id,
-         sti.stock_take_id,
-         sti.inventory_id,
-         sti.system_quantity,
-         sti.physical_quantity,
-         sti.difference,
-         sti.notes,
-         sti.created_at,
-         i.name,
-         i.category,
-         i.sku
-       FROM stock_take_items sti
-       INNER JOIN inventory i ON sti.inventory_id = i.id
-       WHERE sti.stock_take_id = $1
-       ORDER BY i.category, i.name`,
-            [id]
-        );
+        const { data: items, error: itemsErr } = await supabase
+            .from('stock_take_items')
+            .select(`
+                id, stock_take_id, inventory_id, system_quantity, physical_quantity, difference, notes, created_at,
+                inventory ( name, category, sku )
+            `)
+            .eq('stock_take_id', id);
+        // Sorting might need to be done in JS or complex query if foreign table sort not supported directly in this syntax
+
+        if (itemsErr) throw itemsErr;
+
+        // Sort in JS
+        items.sort((a, b) => {
+            const catA = a.inventory?.category || '';
+            const catB = b.inventory?.category || '';
+            if (catA !== catB) return catA.localeCompare(catB);
+            return (a.inventory?.name || '').localeCompare(b.inventory?.name || '');
+        });
+
+        const flatItems = items.map(i => ({
+            ...i,
+            name: i.inventory?.name,
+            category: i.inventory?.category,
+            sku: i.inventory?.sku,
+            inventory: undefined
+        }));
 
         res.json({
             success: true,
-            stock_take: takeResult.rows[0],
-            items: itemsWithDetails.rows
+            stock_take: take,
+            items: flatItems
         });
     } catch (err) {
         console.error('❌ Error fetching stock take:', err);
@@ -1167,28 +652,19 @@ exports.getStockTake = async (req, res) => {
 // --- CANCEL STOCK TAKE ---
 exports.cancelStockTake = async (req, res) => {
     const { id } = req.params;
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
 
     try {
-        const takeResult = await query(
-            `SELECT id, status FROM stock_takes WHERE id = $1`,
-            [id]
-        );
+        const { data: take, error: fetchErr } = await supabase.from('stock_takes').select('status').eq('id', id).single();
+        if (fetchErr || !take) return res.status(404).json({ success: false, error: 'Stock take not found' });
 
-        if (takeResult.rows.length === 0) {
-            return res.status(404).json({ success: false, error: 'Stock take not found' });
+        if (take.status !== 'in_progress') {
+            return res.status(400).json({ success: false, error: `Cannot cancel stock take. Current status: ${take.status}` });
         }
 
-        if (takeResult.rows[0].status !== 'in_progress') {
-            return res.status(400).json({
-                success: false,
-                error: `Cannot cancel stock take. Current status: ${takeResult.rows[0].status}`
-            });
-        }
-
-        await query(
-            `UPDATE stock_takes SET status = 'cancelled' WHERE id = $1`,
-            [id]
-        );
+        const { error: updateErr } = await supabase.from('stock_takes').update({ status: 'cancelled' }).eq('id', id);
+        if (updateErr) throw updateErr;
 
         res.json({ success: true, message: 'Stock take cancelled successfully' });
     } catch (err) {
@@ -1200,98 +676,107 @@ exports.cancelStockTake = async (req, res) => {
 // --- COMPLETE STOCK TAKE ---
 exports.completeStockTake = async (req, res) => {
     const { id } = req.params;
-    const client = await getClient();
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
 
     try {
-        await client.query('BEGIN');
+        const { data: items, error: itemsErr } = await supabase
+            .from('stock_take_items')
+            .select('*')
+            .eq('stock_take_id', id);
 
-        const items = await client.query(
-            `SELECT * FROM stock_take_items WHERE stock_take_id = $1`,
-            [id]
-        );
+        if (itemsErr) throw itemsErr;
 
-        for (const item of items.rows) {
+        let updatedCount = 0;
+
+        for (const item of items) {
             if (item.physical_quantity === null) continue;
 
-            await client.query(
-                `UPDATE inventory
-         SET stock_quantity = $1, updated_at = NOW()
-         WHERE id = $2`,
-                [item.physical_quantity, item.inventory_id]
-            );
+            // Update Inventory
+            const { error: invUpdateErr } = await supabase
+                .from('inventory')
+                .update({ stock_quantity: item.physical_quantity, updated_at: new Date() })
+                .eq('id', item.inventory_id);
 
+            if (invUpdateErr) {
+                console.error(`Failed to update inventory ${item.inventory_id} during stock take`, invUpdateErr);
+                continue;
+            }
+
+            updatedCount++;
+
+            // Create Movement
             try {
-                await client.query(
-                    `INSERT INTO stock_movements 
-           (inventory_id, movement_type, quantity_change, previous_quantity, new_quantity, reason)
-           VALUES ($1, 'adjustment', $2, $3, $4, 'Stock Take Adjustment')`,
-                    [
-                        item.inventory_id,
-                        item.physical_quantity - item.system_quantity,
-                        item.system_quantity,
-                        item.physical_quantity
-                    ]
-                );
-            } catch (movementErr) {
-                console.warn('⚠️  Could not log stock movement:', movementErr.message);
+                await supabase.from('stock_movements').insert({
+                    inventory_id: item.inventory_id,
+                    movement_type: 'adjustment',
+                    quantity_change: (item.physical_quantity - item.system_quantity),
+                    previous_quantity: item.system_quantity,
+                    new_quantity: item.physical_quantity,
+                    reason: 'Stock Take Adjustment'
+                });
+            } catch (moveErr) {
+                console.warn('⚠️  Could not log stock movement:', moveErr.message);
             }
         }
 
-        await client.query(
-            `UPDATE stock_takes SET status='completed' WHERE id = $1`,
-            [id]
-        );
+        const { error: completeErr } = await supabase
+            .from('stock_takes')
+            .update({ status: 'completed' })
+            .eq('id', id);
 
-        await client.query('COMMIT');
-        try { await maybeNotifyLowStock(1); } catch (_) { }
+        if (completeErr) throw completeErr;
 
-        res.json({ success: true, message: 'Stock take completed', items_updated: items.rows.filter(i => i.physical_quantity !== null).length });
+        try { await maybeNotifyLowStock(1, supabase); } catch (_) { }
+
+        res.json({ success: true, message: 'Stock take completed', items_updated: updatedCount });
     } catch (err) {
-        await client.query('ROLLBACK');
         console.error('❌ Error completing stock take:', err);
         res.status(500).json({ success: false, error: 'Failed to complete stock take', details: err.message });
-    } finally {
-        client.release();
     }
 };
 
 // --- CREATE INVENTORY ITEM ---
 exports.createInventoryItem = async (req, res) => {
-    const { name, category, sku, stock_quantity, unit_price, low_stock_threshold, location, notes, supplier_id } = req.body;
+    const { name, category, sku, stock_quantity, unit_price, low_stock_threshold, location, notes, supplier_id, model, color } = req.body;
 
     if (!name) {
         return res.status(400).json({ success: false, error: 'Item name is required' });
     }
 
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
+
     try {
-        const result = await query(
-            `INSERT INTO inventory 
-             (name, category, sku, stock_quantity, unit_price, low_stock_threshold, location, notes, supplier_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-             RETURNING *`,
-            [
+        const { data, error } = await supabase
+            .from('inventory')
+            .insert({
                 name,
-                category || 'other',
-                sku || null,
-                stock_quantity || 0,
-                unit_price || 0,
-                low_stock_threshold || 2,
-                location || 'Manekeng',
-                notes || null,
-                supplier_id || null
-            ]
-        );
+                category: category || 'other',
+                sku: (sku && sku.trim() !== '') ? sku.trim() : null,
+                stock_quantity: stock_quantity || 0,
+                unit_price: unit_price || 0,
+                low_stock_threshold: low_stock_threshold || 2,
+                location: location || 'Manekeng',
+                notes: notes || null,
+                supplier_id: supplier_id || null,
+                model: model || null,
+                color: color || null
+            })
+            .select()
+            .single();
 
-        console.log(`✅ Created inventory item: ${name}`);
-        res.status(201).json({ success: true, item: result.rows[0] });
-    } catch (err) {
-        console.error('❌ Error creating inventory item:', err);
-
-        // Handle duplicate SKU error
-        if (err.code === '23505' && err.constraint?.includes('sku')) {
-            return res.status(400).json({ success: false, error: 'An item with this SKU already exists' });
+        if (error) {
+            if (error.code === '23505') { // Unique violation
+                return res.status(400).json({ success: false, error: 'Duplicate item or SKU' });
+            }
+            throw error;
         }
 
+        console.log(`✅ Created inventory item: ${name} (${model || ''} ${color || ''})`);
+        res.status(201).json({ success: true, item: data });
+    } catch (err) {
+        console.error('❌ Error creating inventory item:', err);
         res.status(500).json({ success: false, error: 'Failed to create inventory item', details: err.message });
     }
 };
@@ -1299,43 +784,65 @@ exports.createInventoryItem = async (req, res) => {
 // --- UPDATE INVENTORY ITEM ---
 exports.updateInventoryItem = async (req, res) => {
     const { id } = req.params;
-    const { name, category, sku, stock_quantity, unit_price, low_stock_threshold, location, notes, supplier_id } = req.body;
+    const { name, category, sku, stock_quantity, unit_price, low_stock_threshold, location, notes, supplier_id, model, color } = req.body;
+
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
 
     try {
-        // Check if item exists
-        const existing = await query('SELECT * FROM inventory WHERE id = $1', [id]);
-        if (existing.rows.length === 0) {
+        // Fetch existing first
+        const { data: existing, error: fetchErr } = await supabase
+            .from('inventory')
+            .select('stock_quantity')
+            .eq('id', id)
+            .single();
+
+        if (fetchErr || !existing) {
             return res.status(404).json({ success: false, error: 'Inventory item not found' });
         }
-        const previousQty = existing.rows[0].stock_quantity;
-        const result = await query(
-            `UPDATE inventory SET
-                name = COALESCE($1, name),
-                category = COALESCE($2, category),
-                sku = COALESCE($3, sku),
-                stock_quantity = COALESCE($4, stock_quantity),
-                unit_price = COALESCE($5, unit_price),
-                low_stock_threshold = COALESCE($6, low_stock_threshold),
-                location = COALESCE($7, location),
-                notes = COALESCE($8, notes),
-                supplier_id = COALESCE($9, supplier_id),
-                updated_at = NOW()
-             WHERE id = $10
-             RETURNING *`,
-            [name, category, sku, stock_quantity, unit_price, low_stock_threshold, location, notes, supplier_id, id]
-        );
+
+        const previousQty = existing.stock_quantity;
+
+        const updates = { updated_at: new Date() };
+        if (name !== undefined) updates.name = name;
+        if (category !== undefined) updates.category = category;
+        if (sku !== undefined) updates.sku = (sku && sku.trim() !== '') ? sku.trim() : null;
+        if (stock_quantity !== undefined) updates.stock_quantity = stock_quantity;
+        if (unit_price !== undefined) updates.unit_price = unit_price;
+        if (low_stock_threshold !== undefined) updates.low_stock_threshold = low_stock_threshold;
+        if (location !== undefined) updates.location = location;
+        if (notes !== undefined) updates.notes = notes;
+        if (supplier_id !== undefined) updates.supplier_id = supplier_id;
+        if (model !== undefined) updates.model = model;
+        if (color !== undefined) updates.color = color;
+
+        const { data: updatedItem, error: updateErr } = await supabase
+            .from('inventory')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updateErr) throw updateErr;
 
         try {
             if (stock_quantity !== undefined) {
-                const newQty = result.rows[0].stock_quantity;
+                const newQty = updatedItem.stock_quantity;
                 const change = (parseInt(newQty, 10) || 0) - (parseInt(previousQty, 10) || 0);
+
                 if (change !== 0) {
-                    await query(
-                        `INSERT INTO stock_movements 
-                         (inventory_id, case_id, movement_type, quantity_change, previous_quantity, new_quantity, reason, recorded_by)
-                         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-                        [id, null, 'adjustment', change, previousQty, newQty, 'Edit item', (req.user?.email) || 'system']
-                    );
+                    await supabase
+                        .from('stock_movements')
+                        .insert({
+                            inventory_id: id,
+                            case_id: null,
+                            movement_type: 'adjustment',
+                            quantity_change: change,
+                            previous_quantity: previousQty,
+                            new_quantity: newQty,
+                            reason: 'Edit item',
+                            recorded_by: (req.user?.email) || 'system'
+                        });
                 }
             }
         } catch (movementErr) {
@@ -1343,7 +850,7 @@ exports.updateInventoryItem = async (req, res) => {
         }
 
         console.log(`✅ Updated inventory item ID ${id}`);
-        res.json({ success: true, item: result.rows[0] });
+        res.json({ success: true, item: updatedItem });
     } catch (err) {
         console.error('❌ Error updating inventory item:', err);
         res.status(500).json({ success: false, error: 'Failed to update inventory item', details: err.message });
@@ -1354,14 +861,21 @@ exports.updateInventoryItem = async (req, res) => {
 exports.getInventoryItem = async (req, res) => {
     const { id } = req.params;
 
-    try {
-        const result = await query('SELECT * FROM inventory WHERE id = $1', [id]);
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
 
-        if (result.rows.length === 0) {
+    try {
+        const { data: item, error } = await supabase
+            .from('inventory')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (error || !item) {
             return res.status(404).json({ success: false, error: 'Inventory item not found' });
         }
 
-        res.json({ success: true, item: result.rows[0] });
+        res.json({ success: true, item });
     } catch (err) {
         console.error('❌ Error fetching inventory item:', err);
         res.status(500).json({ success: false, error: 'Failed to fetch inventory item', details: err.message });
@@ -1372,20 +886,29 @@ exports.getInventoryItem = async (req, res) => {
 exports.deleteInventoryItem = async (req, res) => {
     const { id } = req.params;
 
-    try {
-        // Check if item exists
-        const existing = await query('SELECT * FROM inventory WHERE id = $1', [id]);
-        if (existing.rows.length === 0) {
-            return res.status(404).json({ success: false, error: 'Inventory item not found' });
-        }
+    const supabase = req.app.locals.supabase;
+    if (!supabase) return res.status(500).json({ success: false, error: 'Database not configured' });
 
-        // Check if item has reservations or is in PO items
-        const reservations = await query('SELECT COUNT(*) as count FROM reservations WHERE inventory_id = $1 AND released_at IS NULL', [id]);
-        if (parseInt(reservations.rows[0].count) > 0) {
+    try {
+        // Check reservations
+        const { count, error: countErr } = await supabase
+            .from('reservations')
+            .select('*', { count: 'exact', head: true })
+            .eq('inventory_id', id)
+            .is('released_at', null);
+
+        if (countErr) throw countErr;
+
+        if (count > 0) {
             return res.status(400).json({ success: false, error: 'Cannot delete item with active reservations' });
         }
 
-        await query('DELETE FROM inventory WHERE id = $1', [id]);
+        const { error: deleteErr } = await supabase
+            .from('inventory')
+            .delete()
+            .eq('id', id);
+
+        if (deleteErr) throw deleteErr;
 
         console.log(`✅ Deleted inventory item ID ${id}`);
         res.json({ success: true, message: 'Inventory item deleted successfully' });

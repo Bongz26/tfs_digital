@@ -5,10 +5,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth, ROLES } from '../context/AuthContext';
-import { 
-  getAllUsers, 
-  createUser, 
-  updateUserRole, 
+import {
+  getAllUsers,
+  createUser,
+  updateUserRole,
   updateUserStatus,
   deleteUser
 } from '../api/auth';
@@ -19,7 +19,7 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  
+
   // New user form state
   const [showAddForm, setShowAddForm] = useState(false);
   const [newUser, setNewUser] = useState({
@@ -146,6 +146,7 @@ export default function UserManagement() {
     switch (role) {
       case 'admin': return 'bg-purple-100 text-purple-800';
       case 'manager': return 'bg-blue-100 text-blue-800';
+      case 'stock_manager': return 'bg-teal-100 text-teal-800';
       case 'staff': return 'bg-green-100 text-green-800';
       case 'driver': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -292,6 +293,7 @@ export default function UserManagement() {
                   >
                     <option value="staff">Staff</option>
                     <option value="driver">Driver</option>
+                    <option value="stock_manager">Stock Manager</option>
                     <option value="manager">Manager</option>
                     <option value="admin">Admin</option>
                   </select>
@@ -398,28 +400,28 @@ export default function UserManagement() {
                         >
                           <option value="admin">Admin</option>
                           <option value="manager">Manager</option>
+                          <option value="stock_manager">Stock Manager</option>
                           <option value="staff">Staff</option>
                           <option value="driver">Driver</option>
                         </select>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          user.active 
-                            ? 'bg-green-100 text-green-800' 
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${user.active
+                            ? 'bg-green-100 text-green-800'
                             : 'bg-red-100 text-red-800'
-                        }`}>
+                          }`}>
                           {user.active ? 'Active' : 'Inactive'}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {user.last_login 
+                        {user.last_login
                           ? new Date(user.last_login).toLocaleDateString('en-ZA', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
                           : 'Never'
                         }
                       </td>
@@ -428,11 +430,10 @@ export default function UserManagement() {
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => handleStatusToggle(user.user_id, user.active)}
-                              className={`px-3 py-1 rounded text-sm font-medium transition ${
-                                user.active
+                              className={`px-3 py-1 rounded text-sm font-medium transition ${user.active
                                   ? 'text-red-600 hover:bg-red-50'
                                   : 'text-green-600 hover:bg-green-50'
-                              }`}
+                                }`}
                             >
                               {user.active ? 'Deactivate' : 'Activate'}
                             </button>
@@ -474,6 +475,12 @@ export default function UserManagement() {
                 <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm font-medium">Staff</span>
               </div>
               <p className="text-sm text-gray-600">Create cases, update inventory, basic operations.</p>
+            </div>
+            <div className="p-4 bg-teal-50 rounded-lg">
+              <div className="flex items-center mb-2">
+                <span className="px-2 py-1 bg-teal-100 text-teal-800 rounded text-sm font-medium">Stock Manager</span>
+              </div>
+              <p className="text-sm text-gray-600">Dedicated access to manage inventory and stock levels.</p>
             </div>
             <div className="p-4 bg-yellow-50 rounded-lg">
               <div className="flex items-center mb-2">
