@@ -1,0 +1,26 @@
+{
+  "name": "tfs-digital",
+  "version": "1.0.0",
+  "description": "TFS Digital - Full Stack Application",
+  "private": true,
+  "scripts": {
+    "start": "cd server && npm start",
+    "install:server": "cd server && npm install",
+    "install:client": "cd client && npm install",
+    "install:all": "npm run install:server && npm run install:client",
+    "start:server": "cd server && npm start",
+    "start:client": "cd client && npm start",
+    "build:client": "cd client && npm run build"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Bongz26/tfs_digital.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
+

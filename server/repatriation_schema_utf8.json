@@ -1,0 +1,62 @@
+[
+  {
+    "column_name": "id",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "case_id",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "vehicle_id",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "driver_id",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "from_location",
+    "data_type": "character varying"
+  },
+  {
+    "column_name": "from_address",
+    "data_type": "text"
+  },
+  {
+    "column_name": "to_location",
+    "data_type": "character varying"
+  },
+  {
+    "column_name": "to_address",
+    "data_type": "text"
+  },
+  {
+    "column_name": "odometer_closing",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "km_traveled",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "time_out",
+    "data_type": "character varying"
+  },
+  {
+    "column_name": "time_in",
+    "data_type": "character varying"
+  },
+  {
+    "column_name": "notes",
+    "data_type": "text"
+  },
+  {
+    "column_name": "created_by",
+    "data_type": "character varying"
+  },
+  {
+    "column_name": "created_at",
+    "data_type": "timestamp without time zone"
+  }
+]

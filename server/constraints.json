@@ -1,0 +1,18 @@
+[
+  {
+    "conname": "cases_case_number_key",
+    "pg_get_constraintdef": "UNIQUE (case_number)"
+  },
+  {
+    "conname": "cases_intake_day_check",
+    "pg_get_constraintdef": "CHECK ((EXTRACT(dow FROM intake_day) = (3)::numeric))"
+  },
+  {
+    "conname": "cases_pkey",
+    "pg_get_constraintdef": "PRIMARY KEY (id)"
+  },
+  {
+    "conname": "cases_plan_category_check",
+    "pg_get_constraintdef": "CHECK (((plan_category)::text = ANY ((ARRAY['motjha'::character varying, 'single'::character varying, 'family'::character varying, 'colour_grade'::character varying, 'specials'::character varying])::text[])))"
+  }
+]

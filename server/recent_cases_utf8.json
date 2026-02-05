@@ -1,0 +1,37 @@
+[
+  {
+    "id": 77,
+    "case_number": "THS-2025-117",
+    "policy_number": "0009150753088",
+    "deceased_id": "0009150753088",
+    "deceased_name": "LEKEKELA KARABO GLADYS "
+  },
+  {
+    "id": 76,
+    "case_number": "THS-2025-116",
+    "policy_number": "8501130738080",
+    "deceased_id": "8501130738080",
+    "deceased_name": "LETHAI SELINA MASECHABA "
+  },
+  {
+    "id": 75,
+    "case_number": "THS-2025-115",
+    "policy_number": "7812185814085",
+    "deceased_id": "7812185814085",
+    "deceased_name": "RADEBE MOHALE JACOB"
+  },
+  {
+    "id": 74,
+    "case_number": "THS-2025-114",
+    "policy_number": "9412066089085",
+    "deceased_id": "9412066089085",
+    "deceased_name": "MOLOI KHOTSO MOSALA "
+  },
+  {
+    "id": 73,
+    "case_number": "THS-2025-113",
+    "policy_number": "794053",
+    "deceased_id": "6504125407085",
+    "deceased_name": "SEMELA ZONIE JOSEPH"
+  }
+]

@@ -1,0 +1,30 @@
+
+> client@0.1.0 build
+> react-scripts build
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+(node:28352) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Creating an optimized production build...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Failed to compile.
+
+[eslint] Cannot find module './validation-strategy'
+Require stack:
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\@humanwhocodes\object-schema\src\object-schema.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\@humanwhocodes\object-schema\src\index.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\@humanwhocodes\config-array\api.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\eslint\lib\config\flat-config-array.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\eslint\lib\linter\linter.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\eslint\lib\linter\index.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\eslint\lib\cli-engine\cli-engine.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\eslint\lib\eslint\eslint.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\eslint\lib\eslint\index.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\eslint\lib\api.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\eslint-webpack-plugin\dist\getESLint.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\eslint-webpack-plugin\dist\linter.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\eslint-webpack-plugin\dist\index.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\react-scripts\config\webpack.config.js
+- C:\Users\Bongz\Documents\WORK\SYSTEM\tfs_digital\client\node_modules\react-scripts\scripts\build.js
+
+

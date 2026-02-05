@@ -1,0 +1,58 @@
+[
+  {
+    "tgname": "RI_ConstraintTrigger_a_17501",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_17501\" AFTER DELETE ON public.cases FROM reservations NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_cascade_del\"()"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_17502",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_17502\" AFTER UPDATE ON public.cases FROM reservations NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_17523",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_17523\" AFTER DELETE ON public.cases FROM livestock NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_17524",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_17524\" AFTER UPDATE ON public.cases FROM livestock NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_17539",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_17539\" AFTER DELETE ON public.cases FROM roster NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_17540",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_17540\" AFTER UPDATE ON public.cases FROM roster NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_17557",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_17557\" AFTER DELETE ON public.cases FROM checklist NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_17558",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_17558\" AFTER UPDATE ON public.cases FROM checklist NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_17571",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_17571\" AFTER DELETE ON public.cases FROM sms_log NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_17572",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_17572\" AFTER UPDATE ON public.cases FROM sms_log NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_21821",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_21821\" AFTER DELETE ON public.cases FROM stock_movements NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_setnull_del\"()"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_21822",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_21822\" AFTER UPDATE ON public.cases FROM stock_movements NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_49868",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49868\" AFTER DELETE ON public.cases FROM repatriation_trips NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_del\"()"
+  },
+  {
+    "tgname": "RI_ConstraintTrigger_a_49869",
+    "pg_get_triggerdef": "CREATE CONSTRAINT TRIGGER \"RI_ConstraintTrigger_a_49869\" AFTER UPDATE ON public.cases FROM repatriation_trips NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION \"RI_FKey_noaction_upd\"()"
+  }
+]

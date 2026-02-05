@@ -1,0 +1,111 @@
+id                   | integer         | NO | nextval('cases_id_seq'::regclass)
+case_number          | character varying | NO | null
+deceased_name        | character varying | NO | null
+deceased_id          | character varying | YES | null
+nok_name             | character varying | NO | null
+nok_contact          | character varying | NO | null
+nok_relation         | character varying | YES | null
+plan_category        | character varying | YES | null
+plan_name            | character varying | YES | null
+plan_members         | integer         | YES | null
+plan_age_bracket     | character varying | YES | null
+funeral_date         | date            | YES | null
+funeral_time         | time without time zone | YES | null
+venue_name           | character varying | YES | null
+venue_address        | text            | YES | null
+venue_lat            | numeric         | YES | null
+venue_lng            | numeric         | YES | null
+requires_cow         | boolean         | YES | false
+requires_tombstone   | boolean         | YES | false
+status               | character varying | YES | 'intake'::character varying
+intake_day           | date            | YES | null
+created_at           | timestamp without time zone | YES | now()
+updated_at           | timestamp without time zone | YES | now()
+service_type         | character varying | YES | 'book'::character varying
+total_price          | numeric         | YES | 0
+casket_type          | character varying | YES | null
+casket_colour        | character varying | YES | null
+delivery_date        | date            | YES | null
+delivery_time        | time without time zone | YES | null
+created_by_user_id   | uuid            | YES | null
+updated_by_user_id   | uuid            | YES | null
+requires_catering    | boolean         | YES | false
+requires_grocery     | boolean         | YES | false
+requires_bus         | boolean         | YES | false
+claim_date           | date            | YES | null
+policy_number        | character varying | YES | null
+cleansing_date       | date            | YES | null
+cleansing_time       | time without time zone | YES | null
+service_date         | date            | YES | null
+service_time         | time without time zone | YES | null
+church_date          | date            | YES | null
+church_time          | time without time zone | YES | null
+programs             | integer         | YES | null
+top_up_amount        | numeric         | YES | 0
+airtime              | boolean         | YES | false
+airtime_network      | character varying | YES | null
+airtime_number       | character varying | YES | null
+cover_amount         | numeric         | YES | 0
+cashback_amount      | numeric         | YES | 0
+amount_to_bank       | numeric         | YES | 0
+requires_sheep       | boolean         | YES | false
+legacy_plan_name     | character varying | YES | null
+benefit_mode         | character varying | YES | null
+burial_place         | character varying | YES | null
+branch               | character varying | YES | 'Head Office'::character varying
+id                   | integer         | NO | nextval('roster_id_seq'::regclass)
+case_id              | integer         | YES | null
+vehicle_id           | integer         | YES | null
+driver_name          | character varying | YES | null
+pickup_time          | timestamp without time zone | YES | null
+route_json           | text            | YES | null
+status               | character varying | YES | 'scheduled'::character varying
+sms_sent             | boolean         | YES | false
+assignment_role      | character varying | YES | null
+id                   | integer         | NO | nextval('stock_movements_id_seq'::regclass)
+inventory_id         | integer         | YES | null
+case_id              | integer         | YES | null
+movement_type        | character varying | YES | null
+quantity_change      | integer         | NO | null
+previous_quantity    | integer         | NO | null
+new_quantity         | integer         | NO | null
+reason               | text            | YES | null
+recorded_by          | character varying | YES | null
+movement_date        | timestamp without time zone | YES | now()
+reference_number     | character varying | YES | null
+user_id              | uuid            | YES | null
+created_at           | timestamp without time zone | YES | now()
+id                   | integer         | NO | nextval('purchase_orders_id_seq'::regclass)
+po_number            | character varying | NO | null
+supplier_id          | integer         | YES | null
+order_date           | date            | NO | null
+expected_delivery    | date            | YES | null
+status               | character varying | YES | 'pending'::character varying
+total_amount         | numeric         | YES | null
+created_by           | character varying | YES | null
+created_at           | timestamp without time zone | YES | now()
+manual_supplier_email | character varying | YES | null
+created_by_user_id   | uuid            | YES | null
+updated_by_user_id   | uuid            | YES | null
+id                   | integer         | NO | nextval('inventory_id_seq'::regclass)
+name                 | character varying | NO | null
+category             | character varying | YES | null
+stock_quantity       | integer         | YES | 0
+reserved_quantity    | integer         | YES | 0
+location             | character varying | YES | 'Manekeng'::character varying
+low_stock_threshold  | integer         | YES | 1
+unit_price           | numeric         | YES | null
+sku                  | character varying | YES | null
+barcode              | character varying | YES | null
+supplier             | character varying | YES | null
+expiry_date          | date            | YES | null
+last_stock_count     | date            | YES | null
+image_url            | text            | YES | null
+notes                | text            | YES | null
+created_at           | timestamp without time zone | YES | now()
+updated_at           | timestamp without time zone | YES | now()
+supplier_id          | integer         | YES | null
+created_by_user_id   | uuid            | YES | null
+updated_by_user_id   | uuid            | YES | null
+model                | character varying | YES | null
+color                | character varying | YES | null
